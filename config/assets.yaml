@@ -1,0 +1,158 @@
+# asset list + 每個 asset 嘅 TV layout / TF / session
+# M0: 淨係 XAUUSD（scope 凍結）。M2 先加美股/指數（Q7 到時問 Jones）。
+
+assets:
+  xauusd:
+    enabled: true
+    symbol: XAUUSD
+    description: Gold Spot / U.S. Dollar (primary asset, M0)
+
+    # ⏳ 等 Jones：每張圖係一個 save 好嘅 TV layout，填返各自嘅 URL
+    # （https://www.tradingview.com/chart/XXXXXXXX/ 嗰種）。
+    # 兩條 capture 路都用呢啲 URL：1a Playwright 自己開；1b CDP 用嚟認 tab。
+    tv_layout: ""   # （可選）單一 fallback layout
+
+    # M0 input bundle：9 個 chart。gate TF 乾淨分 2 張：g4=1m+5m、g5=15m+30m（每格帶 MACD）；
+    # g2 還原做純 Renko/WMA 結構圖（2026-06-14 restructure：15m 由 g2 搬去 g5、加埋 MACD）。
+    screenshots:
+      - id: g1_4h_1h
+        url: "https://www.tradingview.com/chart/X8AjBAIW/"
+        charts: ["XAUUSD 4H", "XAUUSD 1H"]
+        purpose: "HTF bias + 主要目標位（帶 MACD、SNR 線）"
+      - id: g2_renko_wma
+        url: "https://www.tradingview.com/chart/paH6jur7/"
+        charts: ["XAUUSD 1s Renko + WMA ribbon (W/D/4H/1H trend panel)"]
+        purpose: "純結構圖：Renko/WMA 確認 + HPA 區（15m 已 restructure 去 g5）"
+      - id: g3_dxy1m_xau15s
+        url: "https://www.tradingview.com/chart/ocVwlz2C/"
+        charts: ["DXY 1m", "XAUUSD 15s"]
+        purpose: "DXY modifier + scalp timing"
+      - id: g4_5m_1m
+        url: "https://www.tradingview.com/chart/cpPWuLlN/"
+        charts: ["XAUUSD 5m (IC Markets)", "XAUUSD 1m (IC Markets)"]
+        purpose: "Gate 投票 + entry 結構（帶 MACD）"
+      - id: g5_15m_30m
+        url: "https://www.tradingview.com/chart/avpCVaw2/"
+        charts: ["XAUUSD 15m (IC Markets, 帶 MACD)", "XAUUSD 30m (IC Markets, 帶 MACD)"]
+        purpose: "MACD 4-TF gate 嘅 15m+30m 兩票（Anti-Failure #16；每格 MACD 讀得清）"
+
+    # marker.py 主圖（畫 SNR/Entry/SL/TP 嗰張）
+    marked_base: g4_5m_1m
+
+    # MACD 4-TF gate 用嘅 TF（SPEC B）；1m/5m 喺 g4、15m/30m 喺 g5，每格都要有讀得清 MACD pane。
+    # 4H/1H 只做開場 bias、冇 veto（唔計入 gate）。
+    gate_timeframes: ["1m", "5m", "15m", "30m"]
+
+    # ── 9333 HTF read（P1 htf_override C，2026-06-20）──────────────────────────────
+    # g6_HTF = 9333-only saved layout，1 tab × 3 pane = H4 + Daily + Weekly，全 ICMARKETS:XAUUSD
+    # candles（唔使 MACD/indicator，方向淨靠 OHLC close）。純讀 closed-bar(off1) → 算方向 →
+    # 餵 gates.htf_override 嘅 htf_4h/htf_daily/htf_weekly（no-vote direction source）。
+    # ⚠️ 特意唔入 screenshots[]：9222 capture（tv_mcp）只 iterate screenshots[]，加入會令佢喺
+    #    9222 搵唔到呢個 tab 而 loud-fail，破壞 /analyze capture。HTF read 只行 9333（tv9333 --htf）。
+    htf_read:
+      id: g6_HTF
+      url: "https://www.tradingview.com/chart/pNqcbOmu/"
+      panes: ["XAUUSD 4H", "XAUUSD Daily", "XAUUSD Weekly"]
+      purpose: "HTF read H4/D/W, no-vote direction source（9333-only）"
+
+    # HTF 方向 knob（close vs SMA(N) ± deadband）；Jones 2026-06-20 拍板 N=20 / band=0.1%。
+    htf_direction:
+      sma_len: 20
+      band: 0.001
+
+    # ── 9333 DXY read（P2a，DXY modifier deterministic 化，2026-06-20）──────────────
+    # g7_DXY = 9333-only saved layout，1 tab × 1 pane = DXY candles（plain chartType 1，唔好
+    # Volume Candles；唔使 MACD/indicator）。純讀 closed-bar(off1) close → 方向 → /analyze 配
+    # trade 方向 map CONFIRM/NEUTRAL/ADVERSE，餵 gates.confluence 個 dxy_state。
+    # ⚠️ 同 g6 一樣唔入 screenshots[]（9222 capture 唔開呢個 tab）。
+    # ⏳ url 等 Jones save 好 g7_DXY 再填（symbol = 同手動 g3 嗰個 DXY ticker 一致）；
+    #    留空時 launch 安全跳過、--dxy 報 tab not found（唔 crash）。
+    dxy_read:
+      id: g7_DXY
+      url: "https://www.tradingview.com/chart/n9qjfufV/"
+      pane: "DXY 15m"
+      purpose: "DXY modifier read（9333-only，no-vote，只封頂 grade）"
+
+    # DXY 方向 knob：TF=15m（殺 1m noise，#20）、N=20、band=0.1%（偏闊 deadband 先係 noise-kill；
+    # eyeball 見太多 CONFIRM 先收窄）。reader 純讀 pane 現有 TF，唔切 TF。
+    dxy_direction:
+      tf: "15m"
+      sma_len: 20
+      band: 0.001
+
+    # ── 9333 verify spec（per-tab expected，data-driven drift guard；2026-06-20 P2a 補 g6/g7）──
+    # _verify 用呢個逐 tab 驗 expected symbol + interval（漂即報 drift）。原本只驗 g4/g5；g6/g7
+    # 之前完全冇 drift-guard，依家正面保護。gate tab=要 MACD；g6 HTF / g7 DXY=冇 MACD。
+    # symbol 唔放闊共用常數 EXPECT_SYMBOL（佢仍做 XAUUSD tab 預設）；DXY 用自己 expected。
+    tv9333_tabs:
+      - frag: cpPWuLlN          # g4 5m+1m
+        symbol: "ICMARKETS:XAUUSD"
+        intervals: ["5", "1"]
+        macd_required: true
+      - frag: avpCVaw2          # g5 30m+15m
+        symbol: "ICMARKETS:XAUUSD"
+        intervals: ["30", "15"]
+        macd_required: true
+      - frag: pNqcbOmu          # g6 H4+D+W（HTF read，冇 MACD）
+        symbol: "ICMARKETS:XAUUSD"
+        intervals: ["240", "1D", "1W"]
+        macd_required: false
+      - frag: n9qjfufV          # g7 DXY 15m（冇 MACD）
+        symbol: "TVC:DXY"
+        intervals: ["15"]
+        macd_required: false
+
+    # pre-check 參數（Step 2 實測後調）
+    precheck:
+      move_threshold_usd: 1.0   # 同上一 cycle 比，價郁少過呢個數 = 冇郁
+      near_level_usd: 1.5       # 距離 key level 入呢個範圍 = 觸發
+    # 關鍵位（人手維護；AI 每 cycle 讀到嘅 key_levels 只寫入 features.json，唔自動改呢度）
+    key_levels: [4057.05, 4073.77, 4028.40]
+
+    # ── SNR 精確價 knob（P2b Tier 1，2026-06-20）──────────────────────────────────
+    # analyze/snr_levels.py 用：round number $50 grid（$100 位標 major；唔用 $25 免垃圾位）、
+    # 現價 ±span 出 round level、同價去重容差。Tier 1 source = PDH/PDL/PWH/PWL（htf_closed.json
+    # readings.d/w high/low）+ round + key_levels pass-through。Tier 2 user-drawn = DEFER；
+    # Tier 3 swing/diagonal/flip = 留 vision（P3）。
+    snr:
+      round_step: 50.0    # $50 grid（gold）
+      round_span: 75.0    # 現價 ±$75 出 round level
+      dedup_tol: 1.0      # 同價合併容差（PDH 撞 round 同一價 = 1 層）
+
+    # ── 自動 swing-pivot 偵測 knob（P2c Tier 3a，2026-06-20）────────────────────────
+    # analyze/swing_pivots.py 用：deterministic fractal 掃 OHLC 歷史揾 swing high/low（S/R），
+    # 餵 assemble_snr 做多一個 SNR source（dedup→1 層）。tier=TF-tiered annotation only，唔改層數。
+    # producer = tv9333 --ohlc 寫 ohlc_history.json（raw bars，replayable）。dedup_tol reuse snr。
+    swing:
+      tfs: ["m5", "m15", "h4", "d", "w"]   # 偵測 TF（g4 m5 / g5 m15 / g6 h4·d·w）
+      history_bars: 300    # 每 TF 取 min(available, 300) 條 closed bar
+      k: 2                 # fractal strength（左右各 k 條確認；升 3 收 noise）
+      strict_pivot: true   # 嚴格 >/<（平頂平底唔當 pivot）保 determinism
+      surface_per_side: 3  # 每 TF 每邊（上/下）surface 距現價最近 3 個
+      max_levels_per_side: null   # 總 cap（預設 null=off；output 按距現價 sort）
+
+    # Session（AEDT/Sydney，SPEC A）
+    sessions:
+      asian:  { time: "08:00-16:00", note: "金低波幅" }
+      london: { time: "18:00-03:00", note: "中高" }
+      ny:     { time: "23:00-08:00", note: "最高" }
+      overlap: { time: "23:00-03:00", note: "London/NY overlap = 最佳 scalp 時段" }
+
+    # 預設交易參數（SPEC A）
+    trade_defaults:
+      style: scalp
+      risk_pct: 1
+      lot: 0.01
+      rr_targets: ["1R", "2R", "3R"]
+      sl_rule: "最近 structure low/high（唔用固定點數）"
+      account_usd: 600
+
+scheduler:
+  interval_seconds: 60   # Q4=A：每 1 分鐘
+
+# 截圖 retention（prune 做 daily job，唔入每分鐘 cycle）。default 保守。
+# 政策：有 push 嘅 bundle 永留（#3 可回放證物）；冇 push/skip 嘅留 N 日；
+# 總容量超硬上限就由最舊「非 push」開始 prune。
+retention:
+  keep_skip_days: 7      # 冇 push 嘅 bundle 留幾多日
+  max_total_gb: 5.0      # screenshots 總容量硬上限（超咗 prune 最舊非 push）

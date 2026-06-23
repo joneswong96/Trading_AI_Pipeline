@@ -1,0 +1,23 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+storage/screenshots/*
+storage/json/*
+storage/calls/*
+!storage/screenshots/.gitkeep
+!storage/json/.gitkeep
+!storage/calls/.gitkeep
+storage/pw_profile/
+storage/*.db
+
+# ── git init hardening（P2c promote 2026-06-20）— runtime/generated artifacts，唔入版控 ──
+# 避免公開市場/帳戶/session 數據；source code（storage/{__init__,db,retention}.py）照 commit。
+# 註解只可獨立行（gitignore 唔支援 trailing comment）。
+# storage/shadow/ = macd_shadow_*.json；tv9333_shots/ = 9333 截圖；*.jsonl = wake_log 等 runtime log；
+# *_closed.json / ohlc_history.json = bundle 內 producer 輸出（defense-in-depth）。
+storage/shadow/
+storage/tv9333_shots/
+storage/*.jsonl
+*_closed.json
+ohlc_history.json
