@@ -131,6 +131,23 @@ assets:
       surface_per_side: 3  # 每 TF 每邊（上/下）surface 距現價最近 3 個
       max_levels_per_side: null   # 總 cap（預設 null=off；output 按距現價 sort）
 
+    # ── P3 structure-gate（methodology-codification，2026-06-26 Jones ratify defaults）────────
+    # ⚠️ 純骨架階段：analyze/structure_state.py 用；結構冇 ground-truth oracle → 唔 wire /analyze、
+    # 唔 promote，只 dump 俾 Jones 人手 eyeball adjudicate。今 cut 只用 min_swing 做 HL/LH primitive；
+    # fib_ref/fib_hold_max/range_cross_min/touch_tol_usd/follow_through_bars/midband_no_trade_pct
+    # 係後續 STEP（breakout / range / touch / pullback）先用，今次只存住唔消費。
+    structure:
+      fib_ref: 0.5
+      fib_hold_max: 0.618
+      range_cross_min: 2
+      touch_tol_usd: 1.5          # reuse near_level_usd
+      min_swing:
+        method: atr               # atr | pct_price | fixed
+        atr_period: 14
+        atr_mult: 1.0
+      follow_through_bars: 3
+      midband_no_trade_pct: 0.60
+
     # Session（AEDT/Sydney，SPEC A）
     sessions:
       asian:  { time: "08:00-16:00", note: "金低波幅" }
