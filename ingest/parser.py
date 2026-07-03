@@ -5,8 +5,9 @@
 - SNR DD30 雙線（pipe 行 + JSON 行）同淨 pipe（SNR|sym|tf|DIR|…）
 - 現有手砌 schema（engine/event/dir）—— 向後兼容，原邏輯不變
 - SR MTF（engine=SR / GRADE_*）；Renko 純文字（方向+box+score）
+- MRF 4 engine（EXP / LIQ / MACD / WMA5S）—— 獨立 passthrough，額外欄位全入 raw
 
-解析優先序：先 "type"（SNR native）→ 再 "event"（legacy engine/event）→ fallback pipe/text。
+解析優先序：先 "type"（SNR native）→ MRF 4 engine → legacy engine/event → fallback pipe/text。
 dir 一律 lower()。SNR 冇 close/price，用 entry 當 price（log 用，唔影響 wake）。原生冇 time
 → 用 server 收到時間。認唔到先至 UNKNOWN。
 """
@@ -33,6 +34,9 @@ class AlertEvent:
 # ENTRY_PIPELINE 唔 wake 嘅 stage（只 log）
 _SNR_LOG_ONLY_STAGES = {"SCANNING", "APPROACHING", "BLOCKED"}
 
+# MRF (Mean-Reversion Fade) 4 個新 engine —— 由 TradingView alert() 直送 JSON
+_MRF_ENGINES = {"EXP", "LIQ", "MACD", "WMA5S"}
+
 
 def parse(body: str) -> AlertEvent:
     """raw body -> AlertEvent。成段 JSON → SNR pipe/DD30 → Renko 文字。"""
@@ -47,12 +51,37 @@ def parse(body: str) -> AlertEvent:
 
 
 def _parse_json(p: dict) -> AlertEvent:
-    """單段 JSON：先試 SNR native（top-level type），認唔到先行 legacy engine/event。"""
+    """單段 JSON：SNR native（top-level type）→ MRF 4 engine → legacy engine/event。"""
     if p.get("type"):
         ev = _parse_snr_native(p)
         if ev is not None:
             return ev
+    mrf = _parse_mrf_json(p)
+    if mrf is not None:
+        return mrf
     return _parse_legacy_json(p)
+
+
+def _parse_mrf_json(p: dict) -> AlertEvent | None:
+    """MRF 4 engine（EXP / LIQ / MACD / WMA5S）獨立 passthrough。
+
+    唔行 SR/Renko 分支，避免撞到既有正規化；額外欄位（rangeHi/rangeLo/grade/side/
+    level/touches/sweeps/exec/htf…）原封不動放喺 raw，交俾 trigger 判 fade。
+    ts 用 server 收到時間（原生 payload 冇自報 time）。認唔到 engine 回 None。
+    """
+    eng = str(p.get("engine") or "").strip()
+    if eng.upper() not in _MRF_ENGINES:
+        return None
+    return AlertEvent(
+        engine=eng,                              # 保留 vendor casing（EXP/LIQ/MACD/WMA5S）
+        event=str(p.get("event") or "").strip() or "UNKNOWN",
+        dir=_norm_dir(p.get("dir")),             # 原始 signal 方向；fade 由 trigger 反推
+        grade=_str_or_none(p.get("grade")),      # EXP "CLEAN" 等，原樣保留
+        tf=_str_or_none(p.get("tf")),
+        time=_now_iso(),                         # ts = server receive time
+        price=_f(p.get("price")),
+        raw=p,                                   # 全部額外欄位原封不動
+    )
 
 
 def _parse_snr_native(p: dict) -> AlertEvent | None:

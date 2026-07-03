@@ -25,6 +25,25 @@ COOLDOWN_MIN = 15
 RESONANCE_WINDOW_MIN = 5
 _INVALIDATION_EVENTS = {"INVALIDATED", "INVALIDATION", "BREAK", "BROKEN"}
 
+# ---- MRF (Mean-Reversion Fade) config（初值未校準，集中一格方便日後 tune）----
+# window   = EXP+LIQ 對齊 lookback（成對就係一次 wake 機會）。
+# cooldown = 同 fade 方向重複 wake 抑制窗（2026-07-03 Jones 批 15→3）。
+# veto     = EXP TOO_LONG 抑制該 fade 方向嘅窗（獨立於 cooldown，唔跟 cooldown 縮）。
+MRF_CONFIG = {
+    "window_min": 30,
+    "cooldown_min": 3,
+    "veto_min": 15,
+}
+MRF_WINDOW_MIN = MRF_CONFIG["window_min"]
+MRF_COOLDOWN_MIN = MRF_CONFIG["cooldown_min"]
+MRF_VETO_MIN = MRF_CONFIG["veto_min"]
+MRF_ENGINES = {"EXP", "LIQ", "MACD", "WMA5S"}
+# MACD strengthener events（同 fade 方向就 confirm；dir 已係 fade 方向，唔反）。永不單獨 wake。
+_MACD_CONFIRM_EVENTS = {"FLOW_FLIP", "WEAKEN"}
+
+# server 回望要覆蓋最闊嗰個窗（MRF 30 分 > 既有 cooldown 15 分）。
+LOOKBACK_MIN = max(COOLDOWN_MIN, MRF_WINDOW_MIN)
+
 
 @dataclass
 class WakeDecision:
@@ -34,6 +53,12 @@ class WakeDecision:
 
 def evaluate(event, recent: list[dict]) -> WakeDecision:
     """event = 當前 AlertEvent；recent = cooldown 窗內較早 alert_events（dict，已剔走當前）。"""
+    # MRF (Mean-Reversion Fade) —— 獨立規則，自己嘅 30 分窗 + 15 分 cooldown。
+    # 只食 EXP/LIQ/MACD/WMA5S；其他 engine 回 None，落既有 SNR/SR/Renko 規則。
+    mrf = _mrf_decision(event, recent)
+    if mrf is not None:
+        return mrf
+
     invalidated = _is_invalidation(event)
     candidate, why = _wake_candidate(event, recent, invalidated)
     if not candidate:
@@ -86,6 +111,172 @@ def _in_cooldown(event, recent):
             continue
         return f"同 engine={eng}+dir={event.dir}" + (f"+line={line}" if line else "")
     return None
+
+
+# ---- MRF (Mean-Reversion Fade) ----
+
+def _mrf_decision(event, recent) -> WakeDecision | None:
+    """MRF 規則。回 WakeDecision（wake 或帶因由嘅唔 wake）；非 MRF engine 回 None。
+
+    WAKE 條件：30 分鐘窗內，同一 fade 方向同時有 (1) EXP_UP/EXP_DOWN 同
+    (2) LIQ TOUCH/SWEEP。fade 對映：EXP_UP→short、EXP_DOWN→long；LIQ ASK→short、
+    BID→long。MACD FLOW_FLIP 同 fade 方向 = strengthener（macd_confirm=true，非必需）。
+    EXP TOO_LONG = veto（抑制該 fade 方向 + 開 cooldown）。WMA5S = 只 log，永不 wake。
+    """
+    eng = _u(event.engine)
+    if eng not in MRF_ENGINES:
+        return None
+
+    if eng == "WMA5S":
+        return WakeDecision(False, "strategy=MRF｜WMA5S：只 log（唔計、永不 wake）")
+
+    if eng == "EXP" and _u(event.event) == "TOO_LONG":
+        vd = _too_long_veto_dir(_u(event.dir))
+        return WakeDecision(
+            False,
+            f"strategy=MRF｜EXP TOO_LONG veto（fade={vd or 'both'}）→ 抑制 + cooldown")
+
+    if eng == "MACD":
+        return WakeDecision(
+            False, "strategy=MRF｜MACD（FLOW_FLIP/WEAKEN）：strengthener only（單獨唔 wake）")
+
+    # 到呢度：EXP_UP/EXP_DOWN 或 LIQ TOUCH/SWEEP
+    fade = _fade_dir(event.engine, event.event, event.dir, event.raw)
+    if fade not in ("long", "short"):
+        return WakeDecision(False, "strategy=MRF｜判唔到 fade 方向 → 只 log")
+
+    win = _within(recent, MRF_WINDOW_MIN)
+    has_exp = (eng == "EXP") or _any_fade(win, "EXP", fade)
+    has_liq = (eng == "LIQ") or _any_fade(win, "LIQ", fade)
+    if not (has_exp and has_liq):
+        return WakeDecision(
+            False, f"strategy=MRF｜fade={fade} 未夠對（EXP={has_exp} LIQ={has_liq}）→ 只 log")
+
+    if _mrf_vetoed(fade, recent):
+        return WakeDecision(False, f"strategy=MRF｜fade={fade} 窗內有 EXP TOO_LONG → veto 抑制")
+
+    if _mrf_in_cooldown(fade, recent):
+        return WakeDecision(
+            False, f"strategy=MRF｜fade={fade} cooldown（{MRF_COOLDOWN_MIN} 分鐘內已 wake）")
+
+    reason = f"strategy=MRF｜EXP+LIQ 同 fade={fade}（{MRF_WINDOW_MIN} 分鐘窗）→ wake"
+    grade, level = _mrf_evidence(event, win, fade)
+    if grade:
+        reason += f"；exp_grade={grade}"
+    if level is not None:
+        reason += f"；liq_level={level}"
+    macd = _macd_confirm(win, fade)      # e.g. "WEAKEN@1" / "FLOW_FLIP@5"
+    if macd:
+        reason += f"；macd_confirm=true（{macd}）"
+    return WakeDecision(True, reason)
+
+
+def _mrf_evidence(event, win, fade):
+    """由當前 event + 窗內配對，抽 wake message 要嘅 EXP grade 同 LIQ level。
+
+    完成配對嘅 event 只帶一邊資料（如 current=LIQ 冇 grade），另一邊要去 win 揾返。
+    """
+    eng = _u(event.engine)
+    raw = event.raw or {}
+    grade = event.grade if eng == "EXP" else _fade_pick(win, "EXP", fade, "grade")
+    level = raw.get("level") if eng == "LIQ" else _fade_pick(win, "LIQ", fade, "level")
+    return grade, level
+
+
+def _fade_pick(win, engine, fade, key):
+    """喺 win 揾第一條同 fade 方向嘅 `engine` row，回其 `key`（先睇 raw 再睇欄）。冇 → None。"""
+    eng = engine.upper()
+    for r in win:
+        if _u(r.get("engine")) == eng and _fade_dir_row(r) == fade:
+            rawd = _loads(r.get("raw"))
+            v = rawd.get(key)
+            if v is None:
+                v = r.get(key)
+            if v is not None:
+                return v
+    return None
+
+
+def _fade_dir(engine, event, dir_, raw) -> str | None:
+    """一個 alert 對應嘅 fade 方向（long/short）。非 MRF-relevant 回 None。"""
+    e, ev = _u(engine), _u(event)
+    if e == "EXP":
+        if ev == "EXP_UP":
+            return "short"
+        if ev == "EXP_DOWN":
+            return "long"
+        return None                       # TOO_LONG 另路處理
+    if e == "LIQ" and ev in ("TOUCH", "SWEEP"):
+        side = _u((raw or {}).get("side"))
+        if side == "ASK":
+            return "short"
+        if side == "BID":
+            return "long"
+        return None
+    if e == "MACD" and ev in _MACD_CONFIRM_EVENTS:
+        d = _u(dir_)                       # MACD FLOW_FLIP/WEAKEN 方向 = fade 方向（順住做，唔反）
+        if d in ("LONG", "SHORT"):
+            return d.lower()
+    return None
+
+
+def _macd_confirm(win, fade) -> str | None:
+    """窗內第一條同 fade 方向嘅 MACD confirm event（FLOW_FLIP/WEAKEN）→ 回 `EVENT@tf` label。冇 → None。"""
+    for r in win:
+        if _u(r.get("engine")) != "MACD":
+            continue
+        ev = _u(r.get("event"))
+        if ev in _MACD_CONFIRM_EVENTS and _fade_dir_row(r) == fade:
+            tf = r.get("tf") or _loads(r.get("raw")).get("tf")
+            return f"{ev}@{tf}" if tf else ev
+    return None
+
+
+def _fade_dir_row(r: dict) -> str | None:
+    return _fade_dir(r.get("engine"), r.get("event"), r.get("dir"), _loads(r.get("raw")))
+
+
+def _any_fade(win, engine, fade) -> bool:
+    eng = engine.upper()
+    return any(_u(r.get("engine")) == eng and _fade_dir_row(r) == fade for r in win)
+
+
+def _too_long_veto_dir(move_dir) -> str | None:
+    """TOO_LONG 由 move 方向反推要 veto 嘅 fade 方向；冇 dir 回 None（veto 兩邊）。"""
+    d = _u(move_dir)
+    if d == "LONG":
+        return "short"
+    if d == "SHORT":
+        return "long"
+    return None
+
+
+def _mrf_vetoed(fade, recent) -> bool:
+    """veto 窗內有 EXP TOO_LONG（同 fade 方向，或無 dir）→ 抑制。窗獨立於 cooldown。"""
+    for r in _within(recent, MRF_VETO_MIN):
+        if _u(r.get("engine")) == "EXP" and _u(r.get("event")) == "TOO_LONG":
+            vd = _too_long_veto_dir((_loads(r.get("raw")).get("dir")) or r.get("dir"))
+            if vd is None or vd == fade:
+                return True
+    return False
+
+
+def _mrf_in_cooldown(fade, recent) -> bool:
+    """任何 MRF wake（唔理 EXP 定 LIQ 觸發）都 arm 該 fade 方向嘅 cooldown。
+
+    schema 冇「wake 過」flag，用 proxy：
+      (1) wake 窗(30m)內曾成過同 fade 嘅 EXP+LIQ 對 → 代表 wake 發生過；
+      (2) cooldown 窗內有較早嘅同 fade 觸發 event（EXP_UP/DOWN 或 LIQ TOUCH/SWEEP）
+          → 就係上次 wake 嗰下，仲喺 cooldown 內。
+    舊 bug：舊 proxy 要求 EXP 同 LIQ 兩邊都喺 cooldown 窗內；當 EXP 老出 cooldown 窗
+    （但仲喺 30m wake 窗）時，LIQ-triggered 嘅重複 wake 就擋唔到。而家只要 cooldown 窗內
+    有任何一邊同 fade 觸發 event 就當上次 wake 未過，唔再漏。
+    """
+    wake_win = _within(recent, MRF_WINDOW_MIN)
+    if not (_any_fade(wake_win, "EXP", fade) and _any_fade(wake_win, "LIQ", fade)):
+        return False                       # 未成過對 → 未 wake 過 → 唔 cooldown
+    cd = _within(recent, MRF_COOLDOWN_MIN)
+    return _any_fade(cd, "EXP", fade) or _any_fade(cd, "LIQ", fade)
 
 
 # ---- helpers ----

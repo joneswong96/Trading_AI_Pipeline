@@ -68,7 +68,9 @@ async def alert(request: Request):
         return JSONResponse({"ok": False, "stage": "insert"}, status_code=200)
 
     # 4) trigger（剔走啱啱寫嗰行，淨低較早嘅做回望）
-    recent = [r for r in _alog.get_recent(trigger.COOLDOWN_MIN) if r["id"] != new_id]
+    #    回望窗用 LOOKBACK_MIN（=max(cooldown 15, MRF 30)），確保 MRF 30 分窗有齊資料；
+    #    既有規則各自喺 evaluate 內再 _within 收窄，行為不變。
+    recent = [r for r in _alog.get_recent(trigger.LOOKBACK_MIN) if r["id"] != new_id]
     decision = trigger.evaluate(event, recent)
     log.info("alert %s %s dir=%s → wake=%s（%s）",
              event.engine, event.event, event.dir, decision.wake, decision.reason)
