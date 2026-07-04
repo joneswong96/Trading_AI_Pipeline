@@ -21,6 +21,8 @@ from capture.base import ROOT
 from ingest.alert_log import AlertLog
 from ingest.parser import parse
 from ingest import trigger
+from ingest import wake_queue
+from ingest.thesis_store import ThesisStore
 from publish.telegram import TelegramPublisher
 from publish.notion_log import NotionLogger
 
@@ -36,6 +38,16 @@ WAKE_TEXT = "✅ 夠料喇，撳 /analyze"
 
 app = FastAPI(title="trading-auto ingest", version="phase1")
 _alog = AlertLog()
+_thesis = ThesisStore()
+
+
+def _load_active_thesis(now):
+    """Phase 1.5：讀最新 active thesis 餵 should_wake。thesis_log 空 / 讀失敗 → None（行為同 Phase 1）。"""
+    try:
+        return _thesis.get_active(now)
+    except Exception:
+        log.exception("get_active thesis failed（fall back None）")
+        return None
 
 
 @app.get("/health")
@@ -71,16 +83,32 @@ async def alert(request: Request):
     #    回望窗用 LOOKBACK_MIN（=max(cooldown 15, MRF 30)），確保 MRF 30 分窗有齊資料；
     #    既有規則各自喺 evaluate 內再 _within 收窄，行為不變。
     recent = [r for r in _alog.get_recent(trigger.LOOKBACK_MIN) if r["id"] != new_id]
-    decision = trigger.evaluate(event, recent)
+    now = datetime.now(timezone.utc)
+    active = _load_active_thesis(now)                     # Phase 1.5 thesis-aware gate
+    wake, reason = trigger.should_wake(recent, active, event, now)
+    decision = trigger.WakeDecision(wake, reason)
     log.info("alert %s %s dir=%s → wake=%s（%s）",
-             event.engine, event.event, event.dir, decision.wake, decision.reason)
+             event.engine, event.event, event.dir, wake, reason)
 
-    # 5) fan-out（淨係 wake 先；每個 downstream 各自容錯）
-    if decision.wake:
+    # 5) fan-out（淨係 wake 先；每個 downstream 各自容錯）+ append wake_queue（Phase 1.5）
+    wake_id = None
+    if wake:
+        wake_id = _append_wake_queue(event, reason, recent, now)
         _fanout(event, decision)
 
-    return {"ok": True, "deduped": False, "wake": decision.wake,
-            "reason": decision.reason}
+    return {"ok": True, "deduped": False, "wake": wake, "reason": reason,
+            "wake_id": wake_id}
+
+
+def _append_wake_queue(event, reason, recent, now):
+    """Phase 1.5：WAKE 時 append storage/wake_queue.jsonl（供 /analyze 消費 + thesis linkage）。"""
+    try:
+        rec = wake_queue.append(wake_queue.build_record(event, reason, recent, now))
+        log.info("wake_queue append → %s", rec["wake_id"])
+        return rec["wake_id"]
+    except Exception:
+        log.exception("wake_queue append failed（continue）")
+        return None
 
 
 def _fanout(event, decision):
