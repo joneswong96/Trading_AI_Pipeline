@@ -15,11 +15,14 @@ import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 
+import logging
+
 from capture.base import ROOT
 from ingest import wake_queue
 from ingest.thesis_store import ThesisStore
 
 THESIS_DIR = ROOT / "storage" / "thesis"
+_log = logging.getLogger("analyze.thesis_emit")
 
 ALLOWED_STATUS = {"ARMED", "IN_TRADE", "WAIT", "NO_TRADE", "INVALIDATED", "EXPIRED", "CLOSED"}
 _ACTIONABLE = {"ARMED", "IN_TRADE"}
@@ -62,10 +65,28 @@ def new_thesis_id(now=None) -> str:
     return f"thesis-{now.strftime('%Y%m%dT%H%M%SZ')}-{secrets.token_hex(2)}"
 
 
+def _backfill_notion_status(wake_id, status, notion=None):
+    """best-effort：query wake_id 對應 Notion Call Log page → PATCH thesis_status。
+    回 True（更新到）/ False（搵唔到 page）/ None（無 wake_id / Notion 未配 / API 錯）。
+    **永不 raise**——thesis_log/wake_queue 已寫，Notion 回填係 best-effort，唔阻主流程。"""
+    if not wake_id:
+        return None
+    try:
+        from publish.notion_log import NotionLogger
+        nl = notion if notion is not None else NotionLogger()
+        if not nl.enabled():
+            return None
+        return nl.backfill_thesis_status(wake_id, status)
+    except Exception:
+        _log.warning("Notion thesis_status 回填失敗（best-effort，唔阻 emit）", exc_info=True)
+        return None
+
+
 def emit(thesis: dict, *, store: ThesisStore | None = None, thesis_dir: Path = THESIS_DIR,
-         wake_path: Path = None, now=None) -> dict:
-    """validate → thesis_id/ts 補齊 → store.append(version+1) → backup → 回填 wake_queue。
-    回 {thesis_id, version, status, backup, wake_consumed}。invalid → raise（唔寫）。"""
+         wake_path: Path = None, now=None, notion=None) -> dict:
+    """validate → thesis_id/ts 補齊 → store.append(version+1) → backup → 回填 wake_queue →
+    best-effort 回填 Notion thesis_status。回 {thesis_id, version, status, backup, wake_consumed,
+    notion_status}。invalid → raise（唔寫）；Notion 錯 → 降級唔阻主流程。"""
     now = now or datetime.now(timezone.utc)
     validate(thesis)                                      # fail-loud 先，未寫任何嘢
 
@@ -91,8 +112,12 @@ def emit(thesis: dict, *, store: ThesisStore | None = None, thesis_dir: Path = T
         wid = latest.get("wake_id") if latest else None
     consumed = wake_queue.mark_consumed(wid, tid, when=now, path=wake_path) if wid else False
 
+    # best-effort：回填 Notion Call Log 該 wake page 個 thesis_status（唔阻主流程）
+    notion_status = _backfill_notion_status(wid, t["status"], notion)
+
     return {"thesis_id": tid, "version": ver, "status": t["status"],
-            "backup": str(backup), "wake_consumed": wid if consumed else None}
+            "backup": str(backup), "wake_consumed": wid if consumed else None,
+            "notion_status": notion_status}
 
 
 def main(argv=None) -> int:
