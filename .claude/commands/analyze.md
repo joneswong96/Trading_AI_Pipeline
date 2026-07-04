@@ -13,6 +13,15 @@ description: 手動 on-demand XAUUSD 分析（食訂閱、唔叫 API、唔使 ke
 
 ## 步驟（照順序）
 
+### 0 — Wake context（Phase 1.5；timing + audit only，**禁餵方向**）
+呢步淨係睇「點解而家跑 /analyze」＋ 為收尾 thesis linkage 記低 `wake_id`。**硬規：wake 嘅 engine / dir / reason 只做 timing 同 audit linkage，唔准餵入分析、唔准影響雙向 scoring（Fresh Eyes / 硬規格 #1）。** 分析方向照由圖 + gates 決定，同 wake 講咩無關。
+PowerShell 跑（純讀，唔改檔）：
+```powershell
+Set-Location C:\Users\jones.w\TradingSys\trading-auto; py -m ingest.wake_queue --latest-unconsumed
+```
+- 出到 `wake_id`（有未消費 wake）→ **記低 `wake_id`**（Step 5 thesis emit 要回填佢做 linkage）；可講一句 timing note：「今次係 `<trigger_reason>` 叫起（engines=…）」。**唔准由 wake 方向/engine 推分析方向或偏 scoring。**
+- `wake: null`（manual run，冇 unconsumed）→ 照跑，Step 5 thesis 嘅 `wake_id` 留空。
+
 ### 1 — Capture 一個新 bundle
 PowerShell 跑（絕對路徑，cwd 唔拘）：
 ```powershell
