@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from ingest.parser import AlertEvent
 from output import invalidation_watch as iw
 from output import mt5_mirror as mm
-from output.telegram_push import ConsolePush, card, dedup_key
+from output.telegram_push import (ConsolePush, TelegramPush, card, dedup_key,
+                                  execution_card)
 
 
 def _th(status="ARMED", version=1, dir="Long", invalidation=4100, tid="thesis-1"):
@@ -44,6 +45,42 @@ def test_push_new_version_pushes():
 def test_card_contains_core_fields():
     c = card(_th(status="ARMED", version=1))
     assert "thesis-1" in c and "ARMED" in c and "4150" in c
+
+
+def test_execution_card_5_lines_notify_only():
+    lines = execution_card(_th(status="ARMED")).split("\n")
+    assert len(lines) == 5
+    assert "notify-only" in lines[4] and "XAUUSD" in lines[0]
+
+
+class _FakePub:
+    def __init__(self, on):
+        self._on, self.sent = on, []
+
+    def enabled(self):
+        return self._on
+
+    def push(self, text, image_path=None):
+        self.sent.append(text)
+
+
+def test_telegram_push_real_channel_and_dedup():
+    pub = _FakePub(on=True)
+    p = TelegramPush(publisher=pub, emit=lambda *_: None)
+    r1 = p.push(_th(status="ARMED", version=1))
+    assert r1["channel"] == "telegram" and len(pub.sent) == 1
+    r2 = p.push(_th(status="ARMED", version=1))               # 同 key → 唔重發
+    assert r2["deduped"] is True and len(pub.sent) == 1
+    r3 = p.push(_th(status="IN_TRADE", version=2))            # 狀態變 → 發
+    assert r3["channel"] == "telegram" and len(pub.sent) == 2
+
+
+def test_telegram_push_console_fallback_no_send():
+    pub = _FakePub(on=False)                                  # 無 token
+    out = []
+    r = TelegramPush(publisher=pub, emit=out.append).push(_th())
+    assert r["channel"] == "console" and pub.sent == []       # 零外發
+    assert "notify-only" in out[0]
 
 
 # ── mt5_mirror：dry-run only ──────────────────────────────────────────────────────
