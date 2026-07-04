@@ -1,0 +1,3 @@
+{"wake_id": "wake-1", "ts": "2026-07-03T12:00:00+00:00", "trigger_reason": "SNR FIRE → 即刻 wake", "engines": ["SNR"], "window_events": [], "consumed_by": "thesis-armed", "consumed_at": "2026-07-03T12:05:00+00:00"}
+{"wake_id": "wake-2", "ts": "2026-07-03T13:30:00+00:00", "trigger_reason": "MRF fade", "engines": ["EXP","LIQ"], "window_events": [], "consumed_by": "thesis-wait", "consumed_at": "2026-07-03T13:35:00+00:00"}
+{"wake_id": "wake-3", "ts": "2026-07-03T22:10:00+00:00", "trigger_reason": "共振", "engines": ["SR","RENKO"], "window_events": [], "consumed_by": null, "consumed_at": null}

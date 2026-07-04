@@ -1,0 +1,4 @@
+{"ts": "2026-07-03T12:00:00+00:00", "engine": "SNR", "event": "FIRE", "dir": "long", "price": 4150.0, "reason": "SNR FIRE → 即刻 wake"}
+{"ts": "2026-07-03T13:30:00+00:00", "engine": "EXP", "event": "EXP_UP", "dir": "short", "price": 4185.0, "reason": "strategy=MRF｜EXP+LIQ 同 fade=short（30 分鐘窗）→ wake"}
+{"ts": "2026-07-03T22:10:00+00:00", "engine": "SR", "event": "GRADE_A", "dir": "long", "price": 4120.0, "reason": "5 分鐘內 SR(grade)+Renko 同向（long）共振 → wake"}
+{"ts": "2026-07-03T14:00:00+00:00", "engine": "SYSTEM", "event": "INVALIDATION", "dir": "long", "price": 4095.0, "reason": "active thesis thesis-x invalidation 被破 → bypass cooldown WAKE"}
