@@ -102,3 +102,88 @@ def poll_once(price_source, post_alert, *, store=None, now=None, emit=print) -> 
     emit(f"[INVAL-WATCH] thesis={tid} price={price} 價穿 invalidation → emit SYSTEM "
          f"INVALIDATION → /alert（{res['reason']}）；只 emit event，唔行動")
     return {"active": tid, "price": price, "invalidated": True, "posted": posted}
+
+
+# ── 常駐 daemon（每 interval 秒 poll 一次）─────────────────────────────────────────
+
+def poll_cycle(store, price_source, post_alert, emitted: set, *, now=None, emit=print) -> dict:
+    """一個 daemon cycle（injectable，unit-testable）。回 {action, ...}。
+
+    action：'idle'（無 active thesis → **唔 poll 價**，慳資源）｜'skip_price_down'（price_source 回 None，
+    9333 down/讀唔到 → skip 唔 crash）｜'intact'（未穿）｜'emitted'（價穿 + 首次 → emit SYSTEM INVALIDATION）
+    ｜'dedup_skip'（同 thesis_id+version breach 已 emit 過 → 唔重轟）。emitted set 記 (thesis_id, version)。
+    """
+    active = store.get_active(now)
+    if not active:
+        return {"action": "idle"}
+    price = price_source()
+    if price is None:
+        emit("[INVAL-WATCH daemon] 價源讀唔到（9333 down？）→ skip 呢輪，唔 mutate")
+        return {"action": "skip_price_down"}
+    res = judge(active, _probe_event(active, price))
+    key = (active.get("thesis_id"), active.get("version"))
+    if not res["would_invalidate"]:
+        return {"action": "intact", "price": price}
+    if key in emitted:
+        return {"action": "dedup_skip", "price": price}
+    emitted.add(key)
+    posted = post_alert(build_invalidation_payload(active, price))
+    emit(f"[INVAL-WATCH daemon] thesis={key[0]} v{key[1]} price={price} 價穿 → emit SYSTEM "
+         f"INVALIDATION → /alert（首次；後續同 version 唔重 emit）")
+    return {"action": "emitted", "price": price, "posted": posted, "key": key}
+
+
+def _default_post_alert(url="http://localhost:8000/alert"):
+    import requests
+    return lambda payload: requests.post(url, json=payload, timeout=5).json()
+
+
+def run_daemon(interval: float = 10, *, price_source=None, post_alert=None, store=None,
+               emit=print, sleep=None, max_cycles=None) -> dict:
+    """常駐 poll loop。price_source 缺 → capture.tv9333.read_price_9333（備路 9333，9222 零掂）；
+    post_alert 缺 → POST localhost:8000/alert。Ctrl-C graceful shutdown。max_cycles = 測試用有限圈。"""
+    import time as _time
+    if price_source is None:
+        from capture.tv9333 import read_price_9333
+        price_source = read_price_9333
+    if post_alert is None:
+        post_alert = _default_post_alert()
+    if store is None:
+        from ingest.thesis_store import ThesisStore
+        store = ThesisStore()
+    sleep = sleep or _time.sleep
+
+    emitted: set = set()
+    cycles = 0
+    emit(f"[INVAL-WATCH daemon] up｜interval={interval}s｜價源=9333 off1（9222 零掂）｜Ctrl-C 停")
+    try:
+        while max_cycles is None or cycles < max_cycles:
+            try:
+                poll_cycle(store, price_source, post_alert, emitted, emit=emit)
+            except Exception:                       # 一輪炒車唔拖冧 daemon
+                emit("[INVAL-WATCH daemon] poll cycle error（continue，唔 crash）")
+            cycles += 1
+            if max_cycles is not None and cycles >= max_cycles:
+                break
+            sleep(interval)
+    except KeyboardInterrupt:
+        emit("[INVAL-WATCH daemon] Ctrl-C → graceful shutdown")
+    return {"cycles": cycles, "emitted": len(emitted)}
+
+
+def main(argv=None) -> int:
+    import argparse
+    import sys
+    sys.stdout.reconfigure(encoding="utf-8")
+    ap = argparse.ArgumentParser(description="invalidation watch daemon（notify-only，9222 零掂）")
+    ap.add_argument("--daemon", action="store_true", help="常駐 poll loop")
+    ap.add_argument("--interval", type=float, default=10, help="poll 間隔（秒，default 10）")
+    args = ap.parse_args(argv)
+    if not args.daemon:
+        ap.error("要 --daemon（唯一模式；一次性 poll 用 poll_once 函數）")
+    run_daemon(interval=args.interval)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

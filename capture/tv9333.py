@@ -639,6 +639,36 @@ def read_ohlc_history(bundle_dir) -> dict:
     return record
 
 
+def read_price_9333() -> float | None:
+    """備路現價（read-only）：連 9333 g4 tab，**reuse `_HTF_OHLC_JS`** 讀 m5 **off1 closed-bar** close。
+
+    用 off1（唔用 forming bar）= 同全系統 closed-bar 紀律一致（殺 live jitter；MACD/HTF/DXY 都 off1）。
+    invalidation_watch daemon 用做價源。9333 down / g4 tab 缺 / 讀唔到 → **None**（caller skip，唔 crash
+    唔 mutate）。**9222 零掂**（PORT 鎖死 + assert）。零 setResolution/setSymbol/setChartType（純讀）。
+    """
+    assert PORT != 9222, "refuse: 9333 helper must never target 9222"
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.connect_over_cdp(f"http://127.0.0.1:{PORT}")
+            pages = [pg for ctx in browser.contexts for pg in ctx.pages
+                     if "tradingview.com/chart" in pg.url]
+            pg = next((x for x in pages if "cpPWuLlN" in x.url), None)   # g4 5m+1m
+            if pg is None:
+                return None
+            res = pg.evaluate(_HTF_OHLC_JS, 1)                          # want=1 支 off1
+            charts = res.get("charts") or []
+            for ch in charts:                                           # 優先 m5 pane
+                if str(ch.get("interval")) == "5" and ch.get("closes"):
+                    return float(ch["closes"][0])
+            for ch in charts:                                           # fallback：任何 pane
+                if ch.get("closes"):
+                    return float(ch["closes"][0])
+            return None
+    except Exception:
+        return None
+
+
 def main() -> int:
     force_utf8_stdout()
     if "--health" in sys.argv:                     # 三態：down / up_no_target / healthy
