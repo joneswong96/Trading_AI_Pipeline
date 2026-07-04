@@ -119,6 +119,52 @@ py -m analyze.snr_levels    storage\screenshots\<cycle_id> <現價>  # 含 swing
 
 ⏳ Step 6 接通 scheduler 先有。到時：`make run` / `python -m scheduler.run`
 
+## 生產起動程序（Phase 1.5 Wake→Analyze Bridge + Phase 3）
+
+> notify-only，永不落單（MT5 mirror 維持 dry-run）。全部絕對路徑，`cd trading-auto` 先。
+
+### ① 起 webhook（ingest /alert）
+```powershell
+Set-Location C:\Users\jones.w\TradingSys\trading-auto
+py -m ingest.webhook_server          # uvicorn 起 :8000（PORT 由 .env 覆寫）；POST /alert
+```
+- ⚠️ **改 code 後要 restart 先生效**：呢個係 `uvicorn.run(app)`，**冇 `--reload`**。改咗 `ingest/` 任何 code → **Ctrl-C 停咗再重跑**，唔會熱更新。
+- dev 想 auto-reload（會自動重載改動）：`py -m uvicorn ingest.webhook_server:app --reload --port 8000`（**生產唔好用 `--reload`**）。
+- 健康檢查：`GET http://localhost:8000/health` → `{"ok":true}`。
+
+### ② 起 invalidation watch（閉環 re-WAKE）
+poll read-only 價源 → 價穿 active thesis 嘅 `invalidation` → emit `SYSTEM INVALIDATION` → POST /alert → break-cooldown 自動 re-WAKE。**只 emit event，唔改單、唔行動。**
+- **poll 邊個價源**：**備路 9333**（read-only quote/OHLC，`config` 現有 `--ohlc`/quote 路）——**9222 零接觸**。
+- **點起（現 MVP＝一次 poll cycle）**：`py -c "from output.invalidation_watch import poll_once; import requests; print(poll_once(lambda: <現價>, lambda p: requests.post('http://localhost:8000/alert', json=p).json()))"`（`<現價>` 由 9333 讀）。
+- **點停**：現 MVP 係**一次性 poll**（跑完即返，冇常駐 daemon）→ 唔使停。
+- ⚠️ **MVP 狀態**：`poll_once` 函數 + 閉環邏輯已就緒並有 test；**standalone 常駐 poller loop + 真 9333 price-feed 自動接線未 wire（Phase 3 promote 待做）**。屆時「起 = 背景常駐、停 = Ctrl-C」。
+
+### ③ 全鏈一句 flow
+```
+TradingView alert → POST /alert → trigger.should_wake
+  → (無 active thesis) 照規則 WAKE ┐
+  → (有 active thesis) engine alert 只 log；INVALIDATION 破 → WAKE
+        ↓ WAKE
+  Telegram「✅ 夠料喇，撳 /analyze」+ append wake_queue.jsonl（consumed_by=null）
+        ↓ Jones
+  /clear（Fresh Eyes 清 context）→ /analyze
+        ↓ Step 0 讀 wake_queue（timing+audit，唔餵方向）… Step 5 thesis emit
+  thesis_log（append-only，version+1）+ storage/thesis/ backup + 回填 wake_queue.consumed_by
+        ↓ push
+  Telegram 5-line Execution Card（notify-only；dedup=thesis_id+status+version）
+        ↓ 持倉期間
+  invalidation_watch poll 價 → 價穿 invalidation → SYSTEM INVALIDATION → POST /alert
+        ↺ 自動 re-WAKE（break cooldown）→ 叫 Jones 再 /analyze
+```
+
+### ④ `wake_queue.jsonl` vs `wake_log.jsonl`（兩個都喺 `storage/`，gitignored）
+| 檔 | 角色 | 寫入 | 有冇被消費 |
+|---|---|---|---|
+| **`wake_queue.jsonl`** | **Phase 1.5 新 bridge 隊列**：機器可消費、帶 thesis linkage（`consumed_by`/`consumed_at`/`wake_id`/`window_events`）。/analyze Step 0 讀最新 `consumed_by=null`、Step 5 thesis emit 回填。 | `ingest.wake_queue.append`（webhook WAKE 時） | ✅ 會被 thesis emit 消費（1:1） |
+| **`wake_log.jsonl`** | **舊 Phase 1 fanout log**：純 append 證物（engine/event/dir/reason），畀人眼/audit 回放，**唔會被消費、無 thesis linkage**。 | webhook `_append_wake`（同 Telegram/Notion fanout 一齊） | ❌ 淨 log，冇 consume 概念 |
+
+> 兩個都喺 WAKE 時各寫一筆：`wake_queue` = 驅動 /analyze 消費同 thesis 閉環嘅**新橋**；`wake_log` = 保留嘅**舊 fanout 流水帳**。
+
 ## 睇 log
 
 ⏳ Step 6 先有。SQLite 喺 `storage/trading.db`；每 cycle 嘅檔案喺 `storage/screenshots|json|calls/<cycle_id>`。
