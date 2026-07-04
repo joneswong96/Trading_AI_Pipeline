@@ -5,7 +5,7 @@ description: 手動 on-demand XAUUSD 分析（食訂閱、唔叫 API、唔使 ke
 # /analyze — XAUUSD 手動分析（manual on-demand 路）
 
 你（Claude Code）係今次嘅**分析大腦**。
-**硬規矩：唔好叫 Anthropic API、唔好用 ANTHROPIC_API_KEY、唔好 push、唔好改任何檔（純讀 + 分析 + 輸出）。** 呢條係手動路，同 API 路（`analyze/claude_client.py`）+ golden regression 平行，唔好掂嗰邊。
+**硬規矩：唔好叫 Anthropic API、唔好用 ANTHROPIC_API_KEY、唔好 push。改檔界線（Phase 1.5，Jones 2026-07-04 修訂）：唔准改 repo 受控檔（code / config / contract / golden — 防 drift），但准寫/append `storage/` runtime artifacts（gitignored；同 Step 1 已寫 PNG / `macd_closed.json` 同一類）——即 Step 5 thesis emitter 寫 `thesis_log` / `storage/thesis/` / 回填 `wake_queue`。** 呢條係手動路，同 API 路（`analyze/claude_client.py`）+ golden regression 平行，唔好掂嗰邊。
 
 ## Rulebook（唯一依據，先 Read 佢哋做規則書，唔好自己亂作）
 - SOP（分析規則 + 輸出 JSON schema + 5 行格式）：Read `C:\Users\jones.w\TradingSys\trading-auto\analyze\sop_prompt.py`，攞 `SOP_SYSTEM_PROMPT`。
@@ -127,9 +127,17 @@ Set-Location C:\Users\jones.w\TradingSys\trading-auto; py -m capture.tv_mcp --on
 4. 點解（一句）
 5. 跟住睇邊度（≤2 個位，一上一下，各帶 alert 價 + trigger）
 
-### 5 — 收尾
+### 5 — 收尾（含 Phase 1.5 thesis emitter）
 - 報一句 bundle 路徑（`...\storage\screenshots\<id>\`，可回放）。
-- **再 confirm：冇 push、冇叫 API、冇改檔。** 想留底由 Jones 自己 copy。
+- **Thesis emit（每次 /analyze 都做，status 含 WAIT/NO_TRADE → wake 消費 ↔ emit 1:1）**：將你 Step 4 出嘅 5 行 call + gates 結果 map 成 Thesis JSON，交 emitter 寫（**你唔准自己手寫 DB**；emitter 做 validate → append → backup → 回填）：
+  - Thesis JSON 欄位：`{thesis_id?(缺自動生), status, dir, entry, sl, tp1, tp2, invalidation, valid_until, rationale, wake_id?(= Step 0 記低嗰個，缺就留空)}`。status map：armed order → `ARMED`；已 IN → `IN_TRADE`；WAIT → `WAIT`；SKIP → `NO_TRADE`。actionable（ARMED/IN_TRADE）必帶 dir(Long/Short)/entry/sl/valid_until，否則 emitter fail-loud。
+  - 跑（`storage/` runtime write，唔改受控檔）：
+    ```powershell
+    Set-Location C:\Users\jones.w\TradingSys\trading-auto
+    '<你砌好的 Thesis JSON 一行>' | py -m analyze.thesis_emit
+    ```
+    出 `{ok:true, thesis_id, version, backup, wake_consumed}` → 報一句：thesis_id / version / 有冇回填到 wake。`ok:false`（validation）→ 照抄 error，**唔准當寫咗**。
+- **再 confirm：冇 push、冇叫 API、冇改 repo 受控檔（只寫咗 storage/ thesis artifacts）。** 想留底由 Jones 自己 copy。
 
 ---
 
