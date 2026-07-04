@@ -94,7 +94,7 @@ async def alert(request: Request):
     wake_id = None
     if wake:
         wake_id = _append_wake_queue(event, reason, recent, now)
-        _fanout(event, decision)
+        _fanout(event, decision, wake_id)
 
     return {"ok": True, "deduped": False, "wake": wake, "reason": reason,
             "wake_id": wake_id}
@@ -111,7 +111,7 @@ def _append_wake_queue(event, reason, recent, now):
         return None
 
 
-def _fanout(event, decision):
+def _fanout(event, decision, wake_id=None):
     text = f"{WAKE_TEXT}\n{event.engine} {event.event} {event.dir or ''}".rstrip()
     text += f"\n理由：{decision.reason}"
 
@@ -134,7 +134,7 @@ def _fanout(event, decision):
             nl.log({"engine": event.engine, "event": event.event,
                     "dir": event.dir, "tf": event.tf, "price": event.price,
                     "time": event.time, "reason": decision.reason,
-                    "wake": decision.wake,
+                    "wake": decision.wake, "wake_id": wake_id,
                     "raw": json.dumps(event.raw, ensure_ascii=False)}, text)
             log.info("notion logged")
         else:
