@@ -187,3 +187,71 @@ def test_closed_loop_via_alert(monkeypatch):
                (r["event"] or "").upper() == "INVALIDATION" for r in rows)
     # wake_queue 出新 wake
     assert wq.latest_unconsumed() is not None
+
+
+# ── invalidation_watch daemon（poll_cycle / run_daemon，injectable）─────────────────
+class _CountingSource:
+    def __init__(self, values):
+        self._it = iter(values)
+        self.calls = 0
+
+    def __call__(self):
+        self.calls += 1
+        return next(self._it)
+
+
+def _active_store(thesis):
+    return _FakeStore(thesis)
+
+
+def test_poll_cycle_idle_does_not_read_price():
+    src = _CountingSource([4095])
+    posted = []
+    r = iw.poll_cycle(_FakeStore(None), src, lambda p: posted.append(p),
+                      set(), emit=lambda *_: None)
+    assert r["action"] == "idle" and src.calls == 0 and posted == []   # idle → 唔 poll 價
+
+
+def test_poll_cycle_price_down_skips():
+    posted = []
+    r = iw.poll_cycle(_active_store(_th(dir="Long", invalidation=4100)),
+                      lambda: None, lambda p: posted.append(p), set(), emit=lambda *_: None)
+    assert r["action"] == "skip_price_down" and posted == []           # 9333 down → skip
+
+
+def test_poll_cycle_breach_emits_once_then_dedup():
+    emitted, posted = set(), []
+    store = _active_store(_th(tid="t1", version=1, dir="Long", invalidation=4100))
+    a = iw.poll_cycle(store, lambda: 4095, lambda p: posted.append(p) or "OK",
+                      emitted, emit=lambda *_: None)
+    assert a["action"] == "emitted" and len(posted) == 1 and ("t1", 1) in emitted
+    b = iw.poll_cycle(store, lambda: 4090, lambda p: posted.append(p),      # 同 key → dedup
+                      emitted, emit=lambda *_: None)
+    assert b["action"] == "dedup_skip" and len(posted) == 1
+
+
+def test_poll_cycle_intact():
+    r = iw.poll_cycle(_active_store(_th(dir="Long", invalidation=4100)),
+                      lambda: 4150, lambda p: None, set(), emit=lambda *_: None)
+    assert r["action"] == "intact"
+
+
+def test_run_daemon_loop_dedups_with_fake_clock():
+    src = _CountingSource([4150, 4095, 4090])           # intact → breach → breach(dedup)
+    posted, ticks = [], []
+    store = _active_store(_th(tid="t1", version=1, dir="Long", invalidation=4100))
+    r = iw.run_daemon(interval=99, price_source=src, post_alert=lambda p: posted.append(p) or "OK",
+                      store=store, emit=lambda *_: None, sleep=lambda s: ticks.append(s),
+                      max_cycles=3)
+    assert r == {"cycles": 3, "emitted": 1} and len(posted) == 1        # breach 一次
+    assert ticks == [99, 99]                                            # sleep 用 injected interval
+
+
+def test_run_daemon_new_version_reemits():
+    # version bump → 新 key → 可再 emit（狀態變後容許）
+    posted = []
+    store = _active_store(_th(tid="t1", version=2, dir="Long", invalidation=4100))
+    iw.run_daemon(interval=0, price_source=lambda: 4095,
+                  post_alert=lambda p: posted.append(p) or "OK", store=store,
+                  emit=lambda *_: None, sleep=lambda s: None, max_cycles=1)
+    assert len(posted) == 1 and posted[0]["thesis_id"] == "t1"
