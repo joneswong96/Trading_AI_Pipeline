@@ -129,3 +129,61 @@ def test_watch_prints_no_action():
     out = []
     iw.watch(_th(), _ev(event="INVALIDATED"), emit=out.append)
     assert "唔行動" in out[0] and "WOULD-INVALIDATE" in out[0]
+
+
+# ── invalidation_watch 閉環 MVP：poll → 價穿 → emit ─────────────────────────────
+class _FakeStore:
+    def __init__(self, active):
+        self._a = active
+
+    def get_active(self, now=None):
+        return self._a
+
+
+def test_poll_once_no_active():
+    r = iw.poll_once(lambda: 4095, lambda p: p, store=_FakeStore(None), emit=lambda *_: None)
+    assert r == {"active": None, "invalidated": False}
+
+
+def test_poll_once_intact_no_emit():
+    posted = []
+    r = iw.poll_once(lambda: 4150, lambda p: posted.append(p),          # 4150 > inval 4100 → intact
+                     store=_FakeStore(_th(dir="Long", invalidation=4100)), emit=lambda *_: None)
+    assert r["invalidated"] is False and posted == []
+
+
+def test_poll_once_emits_on_break():
+    posted = []
+    r = iw.poll_once(lambda: 4095, lambda p: posted.append(p) or "OK",  # 4095 < 4100 → break
+                     store=_FakeStore(_th(dir="Long", invalidation=4100)), emit=lambda *_: None)
+    assert r["invalidated"] is True and len(posted) == 1
+    p = posted[0]
+    assert p["engine"] == "SYSTEM" and p["event"] == "INVALIDATION" and p["source"] == "SYSTEM"
+    assert p["price"] == 4095 and p["thesis_id"] == "thesis-1"
+
+
+def test_closed_loop_via_alert(monkeypatch):
+    """整合：seed active thesis → poll 價穿 → POST /alert → break-cooldown WAKE + event_log + wake_queue。"""
+    from datetime import datetime, timedelta, timezone
+    from fastapi.testclient import TestClient
+    import ingest.webhook_server as srv
+    from ingest import wake_queue as wq
+
+    now = datetime.now(timezone.utc)
+    srv._thesis.append({"thesis_id": "thesis-loop", "status": "ARMED", "dir": "Long",
+                        "entry": 4150, "sl": 4100, "invalidation": 4100,
+                        "valid_until": (now + timedelta(hours=2)).isoformat(),
+                        "rationale": "loop"})
+    client = TestClient(srv.app)
+
+    res = iw.poll_once(lambda: 4095.0,
+                       lambda payload: client.post("/alert", json=payload).json(),
+                       store=srv._thesis, emit=lambda *_: None)
+    assert res["invalidated"] is True
+    assert res["posted"]["wake"] is True                    # break-cooldown WAKE
+    # event_log（alert_events）有筆 INVALIDATION
+    rows = srv._alog.get_recent(60)
+    assert any((r["engine"] or "").upper() == "SYSTEM" and
+               (r["event"] or "").upper() == "INVALIDATION" for r in rows)
+    # wake_queue 出新 wake
+    assert wq.latest_unconsumed() is not None
