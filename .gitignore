@@ -15,9 +15,11 @@ storage/*.db
 # 避免公開市場/帳戶/session 數據；source code（storage/{__init__,db,retention}.py）照 commit。
 # 註解只可獨立行（gitignore 唔支援 trailing comment）。
 # storage/shadow/ = macd_shadow_*.json；tv9333_shots/ = 9333 截圖；*.jsonl = wake_log 等 runtime log；
-# *_closed.json / ohlc_history.json = bundle 內 producer 輸出（defense-in-depth）。
+# *_closed.json / ohlc_history.json = bundle 內 producer 輸出（defense-in-depth）；
+# storage/thesis/ = Phase 1.5 thesis emit backup（同 storage/ runtime 一致，唔入版控）。
 storage/shadow/
 storage/tv9333_shots/
+storage/thesis/
 storage/*.jsonl
 *_closed.json
 ohlc_history.json
