@@ -71,6 +71,70 @@ def evaluate(event, recent: list[dict]) -> WakeDecision:
     return WakeDecision(True, why)
 
 
+# ---- Phase 1.5：thesis-aware wake gate ----
+
+_THESIS_ACTIVE_STATUS = {"ARMED", "IN_TRADE"}
+
+
+def should_wake(recent_events, active_thesis, new_event, now=None):
+    """Phase 1.5 thesis-aware gate → (wake: bool, reason: str)。
+
+    有 active thesis（status∈{ARMED,IN_TRADE}、now<valid_until、未 invalidated）：
+      - new_event 破 thesis invalidation（explicit INVALIDATION event 或價穿 invalidation level）
+        → (True, …bypass cooldown WAKE)；
+      - 其他 engine alert → (False, …active thesis 只 log，唔重複 WAKE)。
+    無 active thesis（或 thesis 已過期/非 ARMED/IN_TRADE/已 invalidated）
+      → 委派現有 `evaluate`（MRF/SNR/共振/cooldown 行為 byte-identical，零 regress）。
+    """
+    now = now or datetime.now(timezone.utc)
+    if _thesis_active(active_thesis, now):
+        tid = active_thesis.get("thesis_id") or "?"
+        st = _u(active_thesis.get("status"))
+        if _event_invalidates(new_event, active_thesis):
+            return True, f"active thesis {tid}（{st}）invalidation 被破 → bypass cooldown WAKE"
+        return False, (f"active thesis {tid}（{st}，未過 valid_until/未破）"
+                       f"→ engine alert 只 log，唔重複 WAKE")
+    d = evaluate(new_event, recent_events)
+    return d.wake, d.reason
+
+
+def _thesis_active(thesis, now) -> bool:
+    """thesis 係咪仍然 active（會 gate 住普通 engine wake）。缺/非 dict → False。"""
+    if not isinstance(thesis, dict):
+        return False
+    if _u(thesis.get("status")) not in _THESIS_ACTIVE_STATUS:
+        return False
+    if thesis.get("invalidated"):
+        return False
+    vu = _parse_ts(thesis.get("valid_until"))
+    if vu is not None and now >= vu:            # 過期 → 唔再 active
+        return False
+    return True
+
+
+def _event_invalidates(new_event, thesis) -> bool:
+    """new_event 係咪推翻緊 active thesis：explicit invalidation event，或價穿 invalidation level。"""
+    if _is_invalidation(new_event):
+        return True
+    lvl = _num(thesis.get("invalidation"))
+    price = _num(getattr(new_event, "price", None))
+    if lvl is None or price is None:
+        return False
+    d = _u(thesis.get("dir"))
+    if d == "LONG" and price <= lvl:            # long thesis 跌穿 invalidation
+        return True
+    if d == "SHORT" and price >= lvl:           # short thesis 升穿 invalidation
+        return True
+    return False
+
+
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def _wake_candidate(event, recent, invalidated):
     eng, ev = _u(event.engine), _u(event.event)
     if eng == "SNR" and ev in SNR_WAKE_EVENTS:
