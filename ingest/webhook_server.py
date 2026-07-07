@@ -50,6 +50,31 @@ def _load_active_thesis(now):
         return None
 
 
+def _load_recent_wakes(minutes):
+    """2026-07-07 fix：讀 wake_log.jsonl（真 wake，wake=True）近 `minutes` 分鐘記錄，餵 cooldown 錨定。
+    restart-safe（讀持久檔）；log-only alert 從不入 wake_log → 唔會續命 cooldown。讀失敗 → []。"""
+    from datetime import timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
+    out = []
+    try:
+        if not WAKE_LOG.exists():
+            return out
+        with open(WAKE_LOG, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (rec.get("ts") or "") >= cutoff:      # 只取窗內（string ISO UTC 可比）
+                    out.append(rec)
+    except OSError:
+        log.exception("wake_log 讀取失敗（fall back []）")
+    return out
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "service": "ingest", "phase": 1}
@@ -85,7 +110,8 @@ async def alert(request: Request):
     recent = [r for r in _alog.get_recent(trigger.LOOKBACK_MIN) if r["id"] != new_id]
     now = datetime.now(timezone.utc)
     active = _load_active_thesis(now)                     # Phase 1.5 thesis-aware gate
-    wake, reason = trigger.should_wake(recent, active, event, now)
+    recent_wakes = _load_recent_wakes(trigger.COOLDOWN_MIN)  # 真 wake 錨定 cooldown（2026-07-07 fix）
+    wake, reason = trigger.should_wake(recent, active, event, now, recent_wakes=recent_wakes)
     decision = trigger.WakeDecision(wake, reason)
     log.info("alert %s %s dir=%s → wake=%s（%s）",
              event.engine, event.event, event.dir, wake, reason)
@@ -156,6 +182,7 @@ def _append_wake(event, decision):
         "ts": datetime.now(timezone.utc).isoformat(),
         "engine": event.engine, "event": event.event, "dir": event.dir,
         "grade": event.grade, "tf": event.tf, "price": event.price,
+        "line": trigger._snr_line(event.raw or {}),   # SNR line（cooldown 細分；無 → None）
         "reason": decision.reason,
     }
     with open(WAKE_LOG, "a", encoding="utf-8") as f:

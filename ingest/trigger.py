@@ -51,9 +51,12 @@ class WakeDecision:
     reason: str
 
 
-def evaluate(event, recent: list[dict]) -> WakeDecision:
-    """event = 當前 AlertEvent；recent = cooldown 窗內較早 alert_events（dict，已剔走當前）。"""
-    # MRF (Mean-Reversion Fade) —— 獨立規則，自己嘅 30 分窗 + 15 分 cooldown。
+def evaluate(event, recent: list[dict], recent_wakes: list[dict] | None = None) -> WakeDecision:
+    """event = 當前 AlertEvent；recent = cooldown 窗內較早 alert_events（dict，已剔走當前）。
+    recent_wakes = 上次**真 wake**（wake_log，wake=True）記錄，SNR/legacy cooldown 用佢錨定
+    （2026-07-07 fix：log-only alert 唔再續命 cooldown）。缺 → []（保守：無真 wake = 唔 cooldown）。"""
+    recent_wakes = recent_wakes or []
+    # MRF (Mean-Reversion Fade) —— 獨立規則，自己嘅 30 分窗 + 15 分 cooldown（自成一路，唔用 recent_wakes）。
     # 只食 EXP/LIQ/MACD/WMA5S；其他 engine 回 None，落既有 SNR/SR/Renko 規則。
     mrf = _mrf_decision(event, recent)
     if mrf is not None:
@@ -65,9 +68,9 @@ def evaluate(event, recent: list[dict]) -> WakeDecision:
         return WakeDecision(False, why)
     if invalidated:
         return WakeDecision(True, f"{why}；invalidation 被破 → bypass cooldown")
-    cd = _in_cooldown(event, recent)
+    cd = _in_cooldown(event, recent_wakes)
     if cd:
-        return WakeDecision(False, f"cooldown：{cd}（15 分鐘內已 wake，無 invalidation）")
+        return WakeDecision(False, f"cooldown：{cd}（{COOLDOWN_MIN} 分鐘內已 wake，無 invalidation）")
     return WakeDecision(True, why)
 
 
@@ -76,8 +79,9 @@ def evaluate(event, recent: list[dict]) -> WakeDecision:
 _THESIS_ACTIVE_STATUS = {"ARMED", "IN_TRADE"}
 
 
-def should_wake(recent_events, active_thesis, new_event, now=None):
-    """Phase 1.5 thesis-aware gate → (wake: bool, reason: str)。
+def should_wake(recent_events, active_thesis, new_event, now=None, recent_wakes=None):
+    """Phase 1.5 thesis-aware gate → (wake: bool, reason: str)。recent_wakes = 真 wake 記錄，
+    傳落 evaluate 做 SNR/legacy cooldown 錨定（2026-07-07 fix）。
 
     有 active thesis（status∈{ARMED,IN_TRADE}、now<valid_until、未 invalidated）：
       - new_event 破 thesis invalidation（explicit INVALIDATION event 或價穿 invalidation level）
@@ -94,7 +98,7 @@ def should_wake(recent_events, active_thesis, new_event, now=None):
             return True, f"active thesis {tid}（{st}）invalidation 被破 → bypass cooldown WAKE"
         return False, (f"active thesis {tid}（{st}，未過 valid_until/未破）"
                        f"→ engine alert 只 log，唔重複 WAKE")
-    d = evaluate(new_event, recent_events)
+    d = evaluate(new_event, recent_events, recent_wakes)
     return d.wake, d.reason
 
 
@@ -162,18 +166,25 @@ def _resonance(event, recent):
     return None
 
 
-def _in_cooldown(event, recent):
+def _in_cooldown(event, recent_wakes):
+    """由上次**真 wake**（wake_log，wake=True）計 COOLDOWN_MIN 分鐘（2026-07-07 fix）。
+
+    舊 proxy「同 engine 15 分鐘內有無較早 alert」會被 SNR log-only（SCANNING/APPROACHING/BLOCKED）
+    不斷續命，實鎖幾個鐘、擋死真 FIRE/PRIMED（2026-07-06 live bug）。改為只認真 wake 記錄——log-only /
+    被擋 event 唔會入 wake_log，自然唔續命。cooldown key = engine+dir（+ SNR line if 兩邊都有）不變。
+    """
     eng, d = _u(event.engine), _u(event.dir)
     line = _snr_line(event.raw or {})
-    for r in _within(recent, COOLDOWN_MIN):
-        if _u(r["engine"]) != eng:
+    for r in _within(recent_wakes, COOLDOWN_MIN):
+        if _u(r.get("engine")) != eng:
             continue
-        if d and _u(r["dir"]) != d:
+        if d and _u(r.get("dir")) != d:
             continue
-        rline = _snr_line(_loads(r.get("raw")))
-        if line and rline and line != rline:   # 兩邊都有線 id 但唔同條 → 唔當重複
+        rline = r.get("line") if r.get("line") is not None else _snr_line(_loads(r.get("raw")))
+        if line and rline and str(line) != str(rline):   # 兩邊都有線 id 但唔同條 → 唔當重複
             continue
-        return f"同 engine={eng}+dir={event.dir}" + (f"+line={line}" if line else "")
+        return (f"上次真 wake @ {str(r.get('ts', ''))[:19]}（engine={eng}"
+                + (f"+dir={event.dir}" if d else "") + (f"+line={line}" if line else "") + "）")
     return None
 
 
