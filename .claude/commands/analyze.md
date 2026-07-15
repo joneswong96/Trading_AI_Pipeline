@@ -34,6 +34,33 @@ Set-Location C:\Users\jones.w\TradingSys\trading-auto; py -m capture.tv_mcp --on
   - `搵唔到 <id> 嘅 tab（want=...）` → 嗰個 layout tab 冇開／冇登入；開返齊 5 個 tab。
   - `搵唔到 TV chart tab` → CDP 連到但一個 chart tab 都冇。
 
+### 1.5 — Live OHLC ingestion barrier（**必須早過讀圖、任何 gate、方向／WAIT、Thesis**）
+Capture成功攞到`<bundle>`後，立即跑9333 OHLC producer嘅strict live mode；呢個係`LIVE_OHLC_INGESTION_BARRIER`，唔准搬落Step 2/3之後：
+```powershell
+Set-Location C:\Users\jones.w\TradingSys\trading-auto
+$ohlcOutput = & py -m capture.tv9333 --ohlc <bundle> --require-fresh 2>&1
+$ohlcExit = $LASTEXITCODE
+$ohlcOutput | ForEach-Object { Write-Output $_ }
+$ohlcText = $ohlcOutput | Out-String
+if ($ohlcExit -eq 0) {
+  Write-Output "OHLC_FRESH_OK"
+} elseif (($ohlcExit -eq 1) -and ($ohlcText -match '"complete"\s*:\s*false')) {
+  Write-Error "DATA_INCOMPLETE — OHLC required TF count/schema incomplete；bundle已保留"; exit 1
+} elseif ($ohlcExit -eq 2) {
+  Write-Error "DATA_STALE — OHLC m5/m15 freshness failed；bundle已保留；檢查上面stale TF/close-time/age/threshold"; exit 2
+} else {
+  Write-Error "OHLC_PRODUCER_ERROR — producer exit=$ohlcExit；bundle已保留"; exit $ohlcExit
+}
+```
+
+Exit contract（逐字執行，**non-zero係terminal abort**）：
+- `0`：`complete=true`兼`freshness.overall.fresh=true`；先可以繼續Step 2。
+- `1`兼producer summary明示`"complete": false`：報`DATA_INCOMPLETE`後**STOP**；若exit 1係exception／無合法summary，必須報`OHLC_PRODUCER_ERROR`，唔准誤標incomplete。
+- `2`：報`DATA_STALE`後**STOP**；由producer output照抄每個stale TF嘅`latest_confirmed_bar_close_time`、`age_since_close_seconds`、`freshness_threshold_seconds`同reason，建議Jones檢查9333；**唔准自動restart／reload／navigate**。
+- 其他non-zero：報`OHLC_PRODUCER_ERROR`＋原exit/error後**STOP**。
+
+任何non-zero都必須保留bundle供audit，並且**唔准進入Step 2/3/4/5**：唔讀圖、唔跑`gates/`、唔作Long/Short/WAIT、唔砌Thesis JSON、唔叫`analyze.thesis_emit`、唔Telegram、唔更新invalidation watch、唔回填`wake_queue`。Step 0只係read-only記低`wake_id`，所以abort後該wake必須保持`consumed_by=null`／`consumed_at=null`，留俾下一次fresh run。`DATA_INCOMPLETE`／`DATA_STALE`／`OHLC_PRODUCER_ERROR`係data-quality terminal result，**絕對唔准轉譯成WAIT Thesis、NO_TRADE、market invalidation、Long/Short或grade downgrade**。
+
 ### 2 — Read 5 張圖（絕對路徑）
 `C:\Users\jones.w\TradingSys\trading-auto\storage\screenshots\<id>\` 入面：
 - `g1_4h_1h.png` — 4H(左)+1H(右)，HTF bias，各帶 MACD
@@ -73,10 +100,9 @@ Set-Location C:\Users\jones.w\TradingSys\trading-auto; py -m capture.tv_mcp --on
     DXY 同金 **inverse**：trade Long → DXY BEARISH=CONFIRM／BULLISH=ADVERSE；trade Short → 反轉。**DXY NEUTRAL，或 action=WAIT／`day_type=NEITHER`／未定方向 → 一律 NEUTRAL（寫死）**。雙向 frame（pullback+breakout 各一張）→ Long/Short **各 map 一次**（CONFIRM/ADVERSE 視方向相反）。
   - 攞返個 state 入 JSON `dxy_modifier`，並餵 `grade_from_layers(..., dxy_state=<state>)`。**只封頂 grade/size（NEUTRAL/ADVERSE→B+），永不調入唔入／入場時機（#18）；deadband 殺 1m noise（#20）。** `confluence.py` 零改。
 - **SNR 精確價（deterministic menu，P2b Tier 1 + P2c swing）+ layer-attribution 契約**：數 confluence layer 前，攞精確 SNR menu 做**價格參考**（**唔改 layer 點數規則**）。
-  - **menu 來源（deterministic）+ call-site**：`<bundle>\htf_closed.json` 嘅 `readings.{d,w}.high/low` = **PDH/PDL/PWH/PWL** ＋ config `key_levels`（pass-through）＋ round numbers（$50 grid、$100 位 major）＋ **P2c 自動 swing pivot**（`swing_high`/`swing_low`，fractal 掃 OHLC 歷史、TF-tiered、no-repaint）。**數 layer 前先跑 producer**（mirror `tv9333 --dxy`；`<現價>` = 你由 chart 讀到嘅 spot）：
+  - **menu 來源（deterministic）+ call-site**：`<bundle>\htf_closed.json` 嘅 `readings.{d,w}.high/low` = **PDH/PDL/PWH/PWL** ＋ config `key_levels`（pass-through）＋ round numbers（$50 grid、$100 位 major）＋ **P2c 自動 swing pivot**（`swing_high`/`swing_low`，fractal 掃 OHLC 歷史、TF-tiered、no-repaint）。OHLC已由Step 1.5 strict producer寫好兼驗fresh；**呢度唔准再用non-strict `--ohlc`重跑或繞過barrier**。`<現價>` = 你由chart讀到嘅spot：
     ```powershell
     Set-Location C:\Users\jones.w\TradingSys\trading-auto
-    py -m capture.tv9333 --ohlc <bundle>      # P2c：寫 ohlc_history.json（swing 偵測 input）
     py -m analyze.snr_levels <bundle> <現價>   # 出含 swing 嘅合併 menu（無 ohlc_history → 退化 P2b）
     ```
     出 `levels[]`（同價去重、標 `sources`，例 `swing_high(W,major)`）＋ `nearest`（距現價最近 + `dist`），餵下面 layer-attribution 契約。`htf_closed.json` 唔見 → menu 退化成淨 round + key_levels（唔 STOP）。
