@@ -98,6 +98,16 @@ py -m capture.tv9333 --dxy storage\screenshots\<cycle_id>  # 寫 dxy_closed.json
 ### P2c swing-pivot read（g4/g5/g6 → ohlc_history.json，餵 swing SNR source）
 `--ohlc` **一條連線純讀** g4 m5 / g5 m15 / g6 h4·d·w 每 TF ~300 條 closed-bar OHLC → 寫 `ohlc_history.json`（chronological、`bars[tf][-1]`=off1）。`analyze/swing_pivots.py` analyze-time 用 fractal（`config swing` k=2、strict `>`/`<`、no-repaint scan i∈[k,len-1-k]）算 swing high/low → 餵 `assemble_snr` 做 SNR source（dedup→1 層；major/minor=annotation only）。**零 setResolution/setSymbol/setChartType（純讀）；`htf_closed.json` 零郁。**
 
+`complete`只代表required TF bar count／schema完整，**唔代表live freshness**。producer會add-only寫入`captured_at`及`freshness`：每TF raw open timestamp、interval、confirmed close-time（`raw open + interval`）、close age、threshold、判定及reason；overall只要求m5 close age≤600s、m15≤1800s。h4/d/w只報age，因未設threshold所以唔會假綠燈（`fresh=false`／`enforced_in_overall=false`／`report_only_no_live_threshold`），亦唔影響overall。missing／invalid／duplicate／non-monotonic timestamp一律fail closed。
+
+```powershell
+# 預設non-strict：stale仍寫bundle（歷史回放可用），stderr warning、exit 0（complete=true時）
+py -m capture.tv9333 --ohlc storage\screenshots\<cycle_id>
+
+# live workflow opt-in：m5/m15 stale會列close-time/age/threshold並exit 2；bundle仍保留供audit
+py -m capture.tv9333 --ohlc storage\screenshots\<cycle_id> --require-fresh
+```
+
 **/analyze 完整接數次序**（HTF/DXY/SNR 全 deterministic）：
 ```powershell
 py -m capture.tv9333 --ensure                              # 確保 9333 四 tab up

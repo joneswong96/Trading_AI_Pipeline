@@ -25,7 +25,8 @@ import subprocess
 import sys
 import time
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
+from math import isfinite
 from pathlib import Path
 
 from .base import ROOT, force_utf8_stdout, load_asset
@@ -554,6 +555,14 @@ OHLC_SOURCES = {
     "pNqcbOmu": {"240": "h4", "1D": "d", "1W": "w"},  # g6：h4/d/w
 }
 
+# OHLC freshness contract（data-quality only；唔係交易 gate）。集中喺 producer，避免 CLI/tests
+# 各自散落 magic numbers。h4/d/w 只報 close-time age，今階段唔設 live threshold、唔影響 overall。
+OHLC_INTERVAL_SECONDS = {"m5": 5 * 60, "m15": 15 * 60,
+                         "h4": 4 * 60 * 60, "d": 24 * 60 * 60,
+                         "w": 7 * 24 * 60 * 60}
+OHLC_LIVE_FRESHNESS_THRESHOLDS = {"m5": 10 * 60, "m15": 30 * 60}
+OHLC_LIVE_REQUIRED_TFS = tuple(OHLC_LIVE_FRESHNESS_THRESHOLDS)
+
 # 純讀 N 條 full OHLC（off1 起回溯、drop volume → len-5/6 一致）。獨立新 JS；read_htf_closed /
 # _HTF_OHLC_JS 零行 diff。係 function expression（唔即時 invoke），page.evaluate(js, want) 傳 want。
 _OHLC_HISTORY_JS = r"""(function(want){
@@ -576,6 +585,146 @@ _OHLC_HISTORY_JS = r"""(function(want){
   }
   return {charts:out};
 })"""
+
+
+def _utc_iso(epoch_seconds: float) -> str:
+    return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).isoformat(
+        timespec="seconds").replace("+00:00", "Z")
+
+
+def _valid_epoch(value) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    value = float(value)
+    return value if isfinite(value) and value > 0 else None
+
+
+def _tf_freshness(tf: str, bars: list, captured_epoch: float) -> dict:
+    """Return one-TF close-time freshness. Invalid chronology fails closed.
+
+    `bars[*][0]` is TradingView's raw bar *open* timestamp. Freshness is always measured from
+    `latest open + interval`, never from the raw open timestamp itself.
+    """
+    interval = OHLC_INTERVAL_SECONDS[tf]
+    threshold = OHLC_LIVE_FRESHNESS_THRESHOLDS.get(tf)
+    base = {
+        "latest_raw_bar_timestamp": None,
+        "latest_raw_bar_time": None,
+        "interval_seconds": interval,
+        "latest_confirmed_bar_close_time": None,
+        "age_since_close_seconds": None,
+        "freshness_threshold_seconds": threshold,
+        "enforced_in_overall": tf in OHLC_LIVE_REQUIRED_TFS,
+        "fresh": False,
+        "reason": None,
+    }
+    if not bars:
+        base["reason"] = "missing_bars"
+        return base
+
+    timestamps = []
+    for bar in bars:
+        if not isinstance(bar, (list, tuple)) or not bar:
+            base["reason"] = "missing_timestamp"
+            return base
+        ts = _valid_epoch(bar[0])
+        if ts is None:
+            base["reason"] = "invalid_timestamp"
+            return base
+        timestamps.append(ts)
+
+    latest_raw = timestamps[-1]
+    close_epoch = latest_raw + interval
+    age = captured_epoch - close_epoch
+    base.update({
+        "latest_raw_bar_timestamp": int(latest_raw) if latest_raw.is_integer() else latest_raw,
+        "latest_raw_bar_time": _utc_iso(latest_raw),
+        "latest_confirmed_bar_close_time": _utc_iso(close_epoch),
+        "age_since_close_seconds": round(age, 3),
+    })
+    if len(timestamps) != len(set(timestamps)):
+        base["reason"] = "duplicate_timestamp"
+        return base
+    if any(current <= previous for previous, current in zip(timestamps, timestamps[1:])):
+        base["reason"] = "non_monotonic_timestamp"
+        return base
+    if age < 0:
+        base["reason"] = "confirmed_close_time_in_future"
+        return base
+    if threshold is None:
+        # No threshold means we cannot certify freshness. Keep the field boolean/fail-closed;
+        # `enforced_in_overall=false` makes clear this report-only result cannot fail m5/m15 live.
+        base["reason"] = "report_only_no_live_threshold"
+        return base
+    if age <= threshold:
+        base.update({"fresh": True, "reason": "within_threshold"})
+    else:
+        base["reason"] = "age_exceeds_threshold"
+    return base
+
+
+def build_ohlc_freshness(bars: dict, *, captured_at: datetime | None = None) -> dict:
+    """Build additive OHLC freshness metadata; overall enforces m5/m15 only."""
+    captured_at = captured_at or datetime.now(timezone.utc)
+    if captured_at.tzinfo is None:
+        captured_at = captured_at.replace(tzinfo=timezone.utc)
+    captured_at = captured_at.astimezone(timezone.utc)
+    captured_epoch = captured_at.timestamp()
+    by_tf = {tf: _tf_freshness(tf, bars.get(tf) or [], captured_epoch)
+             for tf in OHLC_INTERVAL_SECONDS}
+    stale = [tf for tf in OHLC_LIVE_REQUIRED_TFS if by_tf[tf]["fresh"] is not True]
+    fresh = not stale
+    captured_iso = captured_at.isoformat(timespec="seconds").replace("+00:00", "Z")
+    return {
+        "captured_at": captured_iso,
+        "required_timeframes": list(OHLC_LIVE_REQUIRED_TFS),
+        "by_tf": by_tf,
+        "overall": {
+            "fresh": fresh,
+            "status": "fresh" if fresh else "stale",
+            "stale_timeframes": stale,
+            "reason": ("required_timeframes_fresh" if fresh else
+                       f"required_timeframes_not_fresh: {','.join(stale)}"),
+        },
+    }
+
+
+def _write_ohlc_history(bundle_dir, *, bars: dict, discovery: dict, n_bars: int,
+                        min_bars: int, captured_at: datetime | None = None) -> dict:
+    """Write the replayable record. `complete` remains count/schema-only by contract."""
+    captured_at = captured_at or datetime.now(timezone.utc)
+    freshness = build_ohlc_freshness(bars, captured_at=captured_at)
+    captured_iso = freshness["captured_at"]
+    out = Path(bundle_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    record = {
+        "kind": "ohlc_history", "cycle": out.name,
+        "captured_utc": captured_iso,               # backward-compatible existing field
+        "captured_at": captured_iso,                # explicit freshness contract field
+        "history_bars": n_bars,
+        "bars": bars,
+        "count": {k: len(v) for k, v in bars.items()},
+        # IMPORTANT: freshness must never be folded into `complete`.
+        "complete": all(len(v) >= min_bars for v in bars.values()) and bool(bars),
+        "freshness": freshness,
+        "discovery": discovery,
+    }
+    (out / "ohlc_history.json").write_text(
+        json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    return record
+
+
+def _freshness_failure_lines(freshness: dict) -> list[str]:
+    lines = []
+    by_tf = freshness.get("by_tf") or {}
+    for tf in (freshness.get("overall") or {}).get("stale_timeframes") or []:
+        item = by_tf.get(tf) or {}
+        lines.append(
+            f"{tf}: close_time={item.get('latest_confirmed_bar_close_time')} "
+            f"age={item.get('age_since_close_seconds')}s "
+            f"threshold={item.get('freshness_threshold_seconds')}s "
+            f"reason={item.get('reason')}")
+    return lines
 
 
 def read_ohlc_history(bundle_dir) -> dict:
@@ -625,18 +774,8 @@ def read_ohlc_history(bundle_dir) -> dict:
                 raise RuntimeError(
                     f"{frag}: expected interval(s) {sorted(missing_iv)} 配唔到 pane（唔靜靜 drop TF）")
             discovery[frag] = {"log": log}
-    record = {
-        "kind": "ohlc_history", "cycle": out.name,
-        "captured_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "history_bars": n_bars,
-        "bars": bars,
-        "count": {k: len(v) for k, v in bars.items()},
-        "complete": all(len(v) >= min_bars for v in bars.values()) and bool(bars),
-        "discovery": discovery,
-    }
-    (out / "ohlc_history.json").write_text(
-        json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
-    return record
+    return _write_ohlc_history(out, bars=bars, discovery=discovery, n_bars=n_bars,
+                               min_bars=min_bars)
 
 
 def read_price_9333() -> float | None:
@@ -713,8 +852,23 @@ def main() -> int:
         rec = read_ohlc_history(bundle)            # bars 巨大 → 只印摘要
         print(json.dumps({"kind": rec["kind"], "cycle": rec["cycle"],
                           "history_bars": rec["history_bars"], "count": rec["count"],
-                          "complete": rec["complete"]}, ensure_ascii=False, indent=2))
-        return 0 if rec.get("complete") else 1
+                          "complete": rec["complete"],
+                          "freshness": rec["freshness"]}, ensure_ascii=False, indent=2))
+        if not rec.get("complete"):
+            return 1
+        if not rec["freshness"]["overall"]["fresh"]:
+            details = " | ".join(_freshness_failure_lines(rec["freshness"]))
+            if "--require-fresh" in sys.argv:
+                print("OHLC freshness gate failed: " + details, file=sys.stderr)
+                return 2
+            print("OHLC freshness warning (non-strict; bundle retained): " + details,
+                  file=sys.stderr)
+        return 0
+    if "--require-fresh" in sys.argv:
+        print(json.dumps({"ok": False,
+                          "error": "--require-fresh 必須配合 --ohlc <bundle_dir>"},
+                         ensure_ascii=False))
+        return 1
     r = ensure()                                   # default = --ensure
     print(json.dumps(r, ensure_ascii=False, indent=2))
     return 0 if r["ok"] else 1
