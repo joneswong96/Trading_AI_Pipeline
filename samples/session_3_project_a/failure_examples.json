@@ -1,0 +1,12 @@
+{
+  "wrong_tab": {"input": {"pinned_target_url": "https://www.tradingview.com/chart/WrongLayout/"}, "expected_code": "WRONG_TAB"},
+  "wrong_symbol": {"input": {"structured_symbol": "ICMARKETS:XAGUSD"}, "expected_code": "WRONG_SYMBOL"},
+  "wrong_broker_feed": {"input": {"structured_symbol": "OANDA:XAUUSD"}, "expected_code": "WRONG_FEED"},
+  "wrong_base_timeframe": {"input": {"timeframe": "5m"}, "expected_code": "WRONG_TIMEFRAME"},
+  "missing_timeframe_artifact": {"input": {"missing": "15m"}, "expected_code": "MISSING_TIMEFRAME"},
+  "stale_chart": {"input": {"data_status": "stale"}, "expected_code": "STALE_CHART"},
+  "expired_event": {"input": {"observed_at": "2026-07-16T00:10:00Z"}, "expected_code": "SOURCE_EXPIRED"},
+  "hash_mismatch": {"input": {"artifact_mutated_after_hash": true}, "expected_code": "ARTIFACT_HASH_MISMATCH"},
+  "ambiguous_tabs": {"input": {"matching_exact_url_targets": 2}, "expected_code": "TAB_AMBIGUOUS"},
+  "port_mismatch": {"input": {"port": 9222}, "expected_code": "PORT_MISMATCH"}
+}

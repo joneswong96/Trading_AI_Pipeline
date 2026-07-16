@@ -1,0 +1,15 @@
+{
+  "symbol": "XAUUSD",
+  "enabled": true,
+  "aliases": ["ICMARKETS:XAUUSD"],
+  "broker_feed": "ICMARKETS",
+  "host": "127.0.0.1",
+  "port": 4999,
+  "base_timeframe": "1m",
+  "required_timeframes": ["5s", "1m", "5m", "15m", "30m"],
+  "expected_layout_id": "ProjectAXAUFixture",
+  "expected_chart_url": "https://www.tradingview.com/chart/ProjectAXAUFixture/",
+  "expected_chart_count": 1,
+  "process_names": ["chrome.exe"],
+  "profile_marker": "ProjectA-XAUUSD-4999"
+}

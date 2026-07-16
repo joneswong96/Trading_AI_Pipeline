@@ -1,0 +1,23 @@
+{
+  "expires_at": "2026-07-16T00:10:00Z",
+  "bar_time": "2026-07-16T00:00:00Z",
+  "session": "ASIAN",
+  "snr": {"low": 2415.0, "high": 2416.0, "type": "CLASSIC"},
+  "hpa": ["M15_DISCOUNT", "M5_DISCOUNT"],
+  "momentum": {
+    "5s": {"classification": "UNAVAILABLE", "direction": null, "source": "FIXTURE"},
+    "1m": {"classification": "EXHAUSTING", "direction": "SHORT", "source": "FIXTURE"},
+    "5m": {"classification": "WEAK_PUSH", "direction": "SHORT", "source": "FIXTURE"},
+    "15m": {"classification": "WEAK_PUSH", "direction": "SHORT", "source": "FIXTURE"},
+    "30m": {"classification": "RANGE_DRIFT", "direction": "NEUTRAL", "source": "FIXTURE"}
+  },
+  "trigger_price": 2416.5,
+  "spread_points": 8,
+  "entry_candidate": 2416.5,
+  "sl_candidate": 2414.5,
+  "tp_candidate": 2418.5,
+  "source_event_ids": ["evt_xau_20260716_0001"],
+  "snr_evidence": "Frozen fixture M1 reaction at valid SNR.",
+  "hpa_evidence": "Fixture M15 and M5 discount context.",
+  "trigger_reason": "REACTION_CONFIRMED"
+}
