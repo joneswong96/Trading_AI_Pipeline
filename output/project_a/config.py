@@ -58,6 +58,7 @@ class MT5Config:
 class OutputConfig:
     shadow: bool
     dry_run: bool
+    recorded_test_profile: bool
     enabled_renderers: tuple[str, ...]
     retry_limit: int
     retry_seconds: int
@@ -119,6 +120,7 @@ class OutputConfig:
         return cls(
             shadow=True,
             dry_run=True,
+            recorded_test_profile=raw.get("recorded_test_profile") is True,
             enabled_renderers=enabled,
             retry_limit=int(raw.get("retry_limit", 3)),
             retry_seconds=int(raw.get("retry_seconds", 5)),
@@ -163,6 +165,7 @@ def fake_output_config(**overrides: Any) -> OutputConfig:
     raw: dict[str, Any] = {
         "shadow": True,
         "dry_run": True,
+        "recorded_test_profile": True,
         "enabled_renderers": [item.value for item in RendererType],
         "retry_limit": 3,
         "retry_seconds": 0,

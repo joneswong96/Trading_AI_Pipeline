@@ -2,6 +2,7 @@
 # This template intentionally fails validation until exact allowlists are supplied.
 shadow: true
 dry_run: true
+recorded_test_profile: false
 enabled_renderers: [TRADINGVIEW, TELEGRAM, NOTION, MT5_DEMO]
 retry_limit: 3
 retry_seconds: 5

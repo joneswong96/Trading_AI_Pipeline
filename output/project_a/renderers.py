@@ -235,6 +235,11 @@ class NotionRenderer:
             "verdict": context.verdict,
             "thesis": context.thesis,
             "audit_ref": context.audit_ref,
+            "audit_lineage": {
+                "record_hash": context.audit_record_hash,
+                "envelope": context.audit_envelope,
+                "completed_result": context.completed_result,
+            },
             "hashes": {
                 "request": document_hash(context.request),
                 "verdict": document_hash(context.verdict),
@@ -326,6 +331,17 @@ class MT5DemoRenderer:
         if _actionable_expired(context, now):
             return result(context, attempt_id, ResultStatus.BLOCKED_SAFETY, now,
                           error_code="thesis_expired_before_mt5")
+        if (
+            self.config.mt5.demo_mirror_enabled is False
+            and self.config.recorded_test_profile is False
+        ):
+            return result(
+                context,
+                attempt_id,
+                ResultStatus.BLOCKED_SAFETY,
+                now,
+                error_code="mt5_demo_mirror_disabled",
+            )
         attestation = self.transport.attest()
         error = _mt5_attestation_error(self.config, attestation)
         if error:

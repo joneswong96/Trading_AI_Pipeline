@@ -68,7 +68,13 @@ def _delivery(store, setup_id: str, renderer_type: str) -> dict:
 
 def _compile(compiler, request, verdict, now=NOW):
     return compiler.compile(
-        request, verdict, InputAttestation(True, True, "fixture://session-0/verdict-audit"),
+        request,
+        verdict,
+        InputAttestation.recorded_fixture(
+            request,
+            verdict,
+            "fixture://session-0/verdict-audit",
+        ),
         now=now,
     )
 

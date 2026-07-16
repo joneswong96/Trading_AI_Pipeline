@@ -91,6 +91,9 @@ class DeliveryContext:
     verdict: dict[str, Any]
     delivery: dict[str, Any]
     audit_ref: str
+    audit_record_hash: str
+    audit_envelope: dict[str, Any]
+    completed_result: dict[str, Any]
 
 
 def result(

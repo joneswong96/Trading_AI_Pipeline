@@ -1,6 +1,7 @@
 # CI/replay-only config. Every identity is synthetic; no external transport uses it.
 shadow: true
 dry_run: true
+recorded_test_profile: true
 enabled_renderers: [TRADINGVIEW, TELEGRAM, NOTION, MT5_DEMO]
 retry_limit: 3
 retry_seconds: 0

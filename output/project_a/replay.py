@@ -61,7 +61,11 @@ def replay(
     config, store, transports, dispatcher, _ = build_fake_runtime(db_path)
     compiled = ThesisCompiler(store, config).compile(
         request, verdict,
-        InputAttestation(True, True, "fixture://session-0/ai-verdict-approved"),
+        InputAttestation.recorded_fixture(
+            request,
+            verdict,
+            "fixture://session-0/ai-verdict-approved",
+        ),
         now=now,
     )
     results = dispatcher.dispatch_setup(

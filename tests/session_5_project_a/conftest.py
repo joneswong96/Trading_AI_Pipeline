@@ -34,7 +34,11 @@ def runtime(tmp_path):
 def compile_input(runtime, request, verdict, *, now=NOW, attestation=None):
     return ThesisCompiler(runtime["store"], runtime["config"]).compile(
         request, verdict,
-        attestation or InputAttestation(True, True, "fixture://audit/verdict"),
+        attestation or InputAttestation.recorded_fixture(
+            request,
+            verdict,
+            "fixture://audit/verdict",
+        ),
         now=now,
     )
 

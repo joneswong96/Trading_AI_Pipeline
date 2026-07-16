@@ -5,11 +5,17 @@ from datetime import timedelta
 
 import pytest
 
+from output.project_a.compiler import InputAttestation, ThesisCompiler
 from output.project_a.config import OutputConfig, fake_output_config
 from output.project_a.dispatcher import Dispatcher
 from output.project_a.fakes import FakeNotionTransport
 from output.project_a.models import ResultStatus, Session5Error, parse_utc
-from output.project_a.renderers import NotionRenderer, telegram_message, tradingview_specs
+from output.project_a.renderers import (
+    MT5DemoRenderer,
+    NotionRenderer,
+    telegram_message,
+    tradingview_specs,
+)
 
 from .conftest import NOW, compile_input, delivery, non_actionable
 
@@ -203,6 +209,27 @@ def test_mt5_defaults_to_dry_run_and_demo_flag_disabled(runtime, request_doc, ve
     assert rendered.status is ResultStatus.DRY_RUN_SUCCESS
     assert request["dry_run"] is True and request["order_placed"] is False
     assert request["demo_mirror_enabled"] is False
+
+
+def test_mt5_fake_submission_is_blocked_outside_recorded_test_profile(
+    runtime, request_doc, verdict_doc
+):
+    config = replace(runtime["config"], recorded_test_profile=False)
+    made = ThesisCompiler(runtime["store"], config).compile(
+        request_doc,
+        verdict_doc,
+        InputAttestation.recorded_fixture(
+            request_doc, verdict_doc, "fixture://audit/verdict"
+        ),
+        now=NOW,
+    )
+    renderer = MT5DemoRenderer(config, runtime["transports"]["mt5"])
+    dispatcher = Dispatcher(runtime["store"], config, [renderer])
+    item = delivery(runtime["store"], made["thesis"]["setup_id"], "MT5_DEMO")
+    rendered = dispatcher.dispatch(item["delivery_id"], now=NOW)
+    assert rendered.status is ResultStatus.BLOCKED_SAFETY
+    assert rendered.error_code == "mt5_demo_mirror_disabled"
+    assert runtime["transports"]["mt5"].submit_calls == 0
 
 
 def test_duplicate_mt5_request_creates_no_second_fake_order(runtime, request_doc, verdict_doc):

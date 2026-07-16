@@ -1,7 +1,10 @@
 """Durable SQLite canonical Thesis store, renderer outbox, attempts, and outcomes."""
 from __future__ import annotations
 
+import hashlib
 import json
+import math
+import re
 import sqlite3
 from contextlib import closing
 from datetime import datetime, timedelta
@@ -17,6 +20,7 @@ from .models import (
     ResultStatus,
     Session5Error,
     document_hash,
+    parse_utc,
     stable_id,
     utc_z,
 )
@@ -26,8 +30,9 @@ class ConflictError(Session5Error):
     pass
 
 
-SCHEMA = """
-PRAGMA foreign_keys = ON;
+MIGRATION_VERSION = 1
+MIGRATION_NAME = "session5_outputs_v1"
+MIGRATION_SQL = """
 CREATE TABLE IF NOT EXISTS canonical_theses (
   setup_id TEXT PRIMARY KEY,
   thesis_id TEXT NOT NULL UNIQUE,
@@ -38,6 +43,9 @@ CREATE TABLE IF NOT EXISTS canonical_theses (
   verdict_json TEXT NOT NULL,
   thesis_json TEXT NOT NULL,
   audit_ref TEXT NOT NULL,
+  audit_record_hash TEXT NOT NULL,
+  audit_envelope_json TEXT NOT NULL,
+  completed_result_json TEXT NOT NULL,
   finalized_at TEXT NOT NULL
 );
 CREATE TRIGGER IF NOT EXISTS canonical_theses_immutable_update
@@ -107,6 +115,129 @@ CREATE TABLE IF NOT EXISTS mt5_outcome_history (
 CREATE INDEX IF NOT EXISTS idx_mt5_outcome_thesis
 ON mt5_outcome_history(thesis_id, recorded_at);
 """
+MIGRATION_CHECKSUM = hashlib.sha256(MIGRATION_SQL.encode("utf-8")).hexdigest()
+SCHEMA = MIGRATION_SQL
+EXPECTED_OBJECTS = {
+    ("table", "schema_migrations"),
+    ("table", "canonical_theses"),
+    ("trigger", "canonical_theses_immutable_update"),
+    ("trigger", "canonical_theses_immutable_delete"),
+    ("table", "renderer_deliveries"),
+    ("index", "idx_renderer_deliveries_status"),
+    ("table", "renderer_attempts"),
+    ("table", "audit_operations"),
+    ("table", "mt5_outcome_history"),
+    ("index", "idx_mt5_outcome_thesis"),
+}
+EXPECTED_COLUMNS = {
+    "schema_migrations": {
+        "version",
+        "name",
+        "checksum",
+        "applied_at",
+    },
+    "canonical_theses": {
+        "setup_id",
+        "thesis_id",
+        "thesis_hash",
+        "request_hash",
+        "verdict_hash",
+        "request_json",
+        "verdict_json",
+        "thesis_json",
+        "audit_ref",
+        "audit_record_hash",
+        "audit_envelope_json",
+        "completed_result_json",
+        "finalized_at",
+    },
+    "renderer_deliveries": {
+        "delivery_id",
+        "thesis_id",
+        "setup_id",
+        "renderer_type",
+        "thesis_hash",
+        "idempotency_key",
+        "status",
+        "attempt_count",
+        "first_attempt_at",
+        "latest_attempt_at",
+        "next_retry_at",
+        "last_error_code",
+        "external_reference",
+        "completion_at",
+        "replay_parent_delivery_id",
+        "shadow",
+        "dry_run",
+        "claim_owner",
+        "claim_token",
+        "claimed_at",
+        "result_json",
+    },
+    "renderer_attempts": {
+        "attempt_id",
+        "delivery_id",
+        "attempt_number",
+        "started_at",
+        "finished_at",
+        "status",
+        "error_code",
+        "external_reference",
+        "result_json",
+    },
+    "audit_operations": {
+        "operation_id",
+        "operation_type",
+        "delivery_id",
+        "actor",
+        "reason",
+        "created_at",
+        "detail_json",
+    },
+    "mt5_outcome_history": {
+        "event_id",
+        "event_hash",
+        "setup_id",
+        "thesis_id",
+        "recorded_at",
+        "final_status",
+        "payload_json",
+    },
+}
+OUTCOME_FIELDS = {
+    "event_id",
+    "setup_id",
+    "thesis_id",
+    "recorded_at",
+    "final_status",
+    "ticket_ref",
+    "requested_price",
+    "fill_price",
+    "spread_points",
+    "slippage",
+    "open_time",
+    "close_time",
+    "exit_price",
+    "exit_reason",
+    "initial_risk",
+    "mae",
+    "mfe",
+    "realised_pl",
+    "realised_r",
+}
+OUTCOME_NUMERIC_FIELDS = {
+    "requested_price",
+    "fill_price",
+    "spread_points",
+    "slippage",
+    "exit_price",
+    "initial_risk",
+    "mae",
+    "mfe",
+    "realised_pl",
+    "realised_r",
+}
+SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,119}$")
 
 
 class OutboxStore:
@@ -114,7 +245,61 @@ class OutboxStore:
         self.path = str(path)
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with closing(self._conn()) as conn:
-            conn.executescript(SCHEMA)
+            self._initialize_schema(conn)
+
+    @staticmethod
+    def _schema_objects(conn: sqlite3.Connection) -> set[tuple[str, str]]:
+        return {
+            (row["type"], row["name"])
+            for row in conn.execute(
+                """SELECT type,name FROM sqlite_master
+                WHERE name NOT LIKE 'sqlite_%' AND type IN ('table','index','trigger')"""
+            ).fetchall()
+        }
+
+    @classmethod
+    def _initialize_schema(cls, conn: sqlite3.Connection) -> None:
+        objects = cls._schema_objects(conn)
+        if not objects:
+            checksum = MIGRATION_CHECKSUM.replace("'", "''")
+            name = MIGRATION_NAME.replace("'", "''")
+            conn.executescript(
+                "BEGIN IMMEDIATE;\n"
+                "CREATE TABLE schema_migrations ("
+                "version INTEGER PRIMARY KEY,name TEXT NOT NULL,"
+                "checksum TEXT NOT NULL,applied_at TEXT NOT NULL);\n"
+                + MIGRATION_SQL
+                + "\nINSERT INTO schema_migrations(version,name,checksum,applied_at) "
+                f"VALUES ({MIGRATION_VERSION},'{name}','{checksum}',"
+                "strftime('%Y-%m-%dT%H:%M:%fZ','now'));\nCOMMIT;"
+            )
+            objects = cls._schema_objects(conn)
+        if objects != EXPECTED_OBJECTS:
+            missing = sorted(EXPECTED_OBJECTS - objects)
+            unknown = sorted(objects - EXPECTED_OBJECTS)
+            raise Session5Error(
+                "schema_state_unknown",
+                f"missing={missing}; unknown={unknown}",
+            )
+        migrations = conn.execute(
+            "SELECT version,name,checksum FROM schema_migrations ORDER BY version"
+        ).fetchall()
+        expected = [(MIGRATION_VERSION, MIGRATION_NAME, MIGRATION_CHECKSUM)]
+        actual = [(row["version"], row["name"], row["checksum"]) for row in migrations]
+        if actual != expected:
+            raise Session5Error(
+                "migration_checksum_mismatch",
+                f"expected={expected}; actual={actual}",
+            )
+        for table, expected_columns in EXPECTED_COLUMNS.items():
+            actual_columns = {
+                row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+            }
+            if actual_columns != expected_columns:
+                raise Session5Error(
+                    "schema_columns_mismatch",
+                    f"{table}: expected={sorted(expected_columns)}; actual={sorted(actual_columns)}",
+                )
 
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path, timeout=10)
@@ -124,6 +309,7 @@ class OutboxStore:
 
     def create_thesis_and_deliveries(
         self, *, thesis: dict, request: dict, verdict: dict, audit_ref: str,
+        audit_record_hash: str, audit_envelope: dict, completed_result: dict,
         renderer_types: list[str], now: datetime,
     ) -> dict[str, Any]:
         thesis_hash = document_hash(thesis)
@@ -138,7 +324,10 @@ class OutboxStore:
                 same = (existing["thesis_hash"] == thesis_hash
                         and existing["request_hash"] == request_hash
                         and existing["verdict_hash"] == verdict_hash
-                        and existing["audit_ref"] == audit_ref)
+                        and existing["audit_ref"] == audit_ref
+                        and existing["audit_record_hash"] == audit_record_hash
+                        and json.loads(existing["audit_envelope_json"]) == audit_envelope
+                        and json.loads(existing["completed_result_json"]) == completed_result)
                 if not same:
                     raise ConflictError("canonical_conflict", "same setup_id has conflicting content")
                 deliveries = self._deliveries_for_setup_conn(conn, thesis["setup_id"])
@@ -147,10 +336,12 @@ class OutboxStore:
                         "thesis_hash": thesis_hash, "deliveries": deliveries}
 
             conn.execute(
-                "INSERT INTO canonical_theses VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO canonical_theses VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (thesis["setup_id"], thesis["thesis_id"], thesis_hash, request_hash,
                  verdict_hash, canonical_json(request), canonical_json(verdict),
-                 canonical_json(thesis), audit_ref, utc_z(now)),
+                 canonical_json(thesis), audit_ref, audit_record_hash,
+                 canonical_json(audit_envelope), canonical_json(completed_result),
+                 utc_z(now)),
             )
             for renderer_type in renderer_types:
                 delivery_id = stable_id("delivery", thesis["thesis_id"], renderer_type)
@@ -171,6 +362,7 @@ class OutboxStore:
         with closing(self._conn()) as conn:
             row = conn.execute(
                 """SELECT d.*, t.request_json, t.verdict_json, t.thesis_json, t.audit_ref
+                , t.audit_record_hash, t.audit_envelope_json, t.completed_result_json
                 FROM renderer_deliveries d JOIN canonical_theses t ON t.thesis_id=d.thesis_id
                 WHERE d.delivery_id=?""", (delivery_id,),
             ).fetchone()
@@ -179,6 +371,9 @@ class OutboxStore:
         return DeliveryContext(
             thesis=json.loads(row["thesis_json"]), request=json.loads(row["request_json"]),
             verdict=json.loads(row["verdict_json"]), delivery=dict(row), audit_ref=row["audit_ref"],
+            audit_record_hash=row["audit_record_hash"],
+            audit_envelope=json.loads(row["audit_envelope_json"]),
+            completed_result=json.loads(row["completed_result_json"]),
         )
 
     def get_thesis(self, setup_id: str) -> dict[str, Any] | None:
@@ -228,19 +423,26 @@ class OutboxStore:
             if row["next_retry_at"] and row["next_retry_at"] > utc_z(now):
                 conn.commit()
                 return None
-            number = row["attempt_count"] + 1
-            attempt_id = stable_id("attempt", delivery_id, str(number))
-            claim_token = stable_id("claim", delivery_id, str(number), worker, utc_z(now))
+            window_number = row["attempt_count"] + 1
+            lifetime_number = conn.execute(
+                """SELECT COALESCE(MAX(attempt_number),0)+1
+                FROM renderer_attempts WHERE delivery_id=?""",
+                (delivery_id,),
+            ).fetchone()[0]
+            attempt_id = stable_id("attempt", delivery_id, str(lifetime_number))
+            claim_token = stable_id(
+                "claim", delivery_id, str(lifetime_number), worker, utc_z(now)
+            )
             stamp = utc_z(now)
             conn.execute(
                 """UPDATE renderer_deliveries SET status='CLAIMED',attempt_count=?,
                 first_attempt_at=COALESCE(first_attempt_at,?),latest_attempt_at=?,next_retry_at=NULL,
                 claim_owner=?,claim_token=?,claimed_at=? WHERE delivery_id=?""",
-                (number, stamp, stamp, worker, claim_token, stamp, delivery_id),
+                (window_number, stamp, stamp, worker, claim_token, stamp, delivery_id),
             )
             conn.execute(
                 "INSERT INTO renderer_attempts(attempt_id,delivery_id,attempt_number,started_at,status) VALUES (?,?,?,?,?)",
-                (attempt_id, delivery_id, number, stamp, "CLAIMED"),
+                (attempt_id, delivery_id, lifetime_number, stamp, "CLAIMED"),
             )
             conn.commit()
             return attempt_id, claim_token
@@ -313,21 +515,26 @@ class OutboxStore:
             raise Session5Error("audit_required", "manual reset needs actor and reason")
         with closing(self._conn()) as conn:
             conn.execute("BEGIN IMMEDIATE")
-            row = conn.execute("SELECT status FROM renderer_deliveries WHERE delivery_id=?",
+            row = conn.execute(
+                "SELECT status,attempt_count FROM renderer_deliveries WHERE delivery_id=?",
                                (delivery_id,)).fetchone()
             if not row:
                 raise Session5Error("delivery_missing", delivery_id)
             if row["status"] in COMPLETED_DELIVERY_STATUSES:
                 raise Session5Error("completed_reset_forbidden", "completed side effects cannot be reset")
             conn.execute(
-                """UPDATE renderer_deliveries SET status='PENDING',next_retry_at=NULL,
+                """UPDATE renderer_deliveries SET status='PENDING',attempt_count=0,
+                next_retry_at=NULL,
                 last_error_code=NULL,claim_owner=NULL,claim_token=NULL,claimed_at=NULL
                 WHERE delivery_id=?""", (delivery_id,),
             )
             op_id = stable_id("operation", delivery_id, actor, reason, utc_z(now))
+            detail = canonical_json(
+                {"previous_status": row["status"], "previous_attempt_count": row["attempt_count"]}
+            )
             conn.execute(
                 "INSERT INTO audit_operations VALUES (?,?,?,?,?,?,?)",
-                (op_id, "MANUAL_RESET", delivery_id, actor, reason, utc_z(now), "{}"),
+                (op_id, "MANUAL_RESET", delivery_id, actor, reason, utc_z(now), detail),
             )
             conn.commit()
 
@@ -367,36 +574,79 @@ class OutboxStore:
     def record_operation(self, operation_type: str, *, actor: str, reason: str,
                          now: datetime, delivery_id: str | None = None,
                          detail: dict[str, Any] | None = None) -> str:
+        if not operation_type.strip() or not actor.strip() or not reason.strip():
+            raise Session5Error(
+                "audit_required",
+                "operation type, actor, and reason are required",
+            )
         op_id = stable_id("operation", operation_type, actor, reason, utc_z(now), delivery_id or "")
         with closing(self._conn()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 "INSERT INTO audit_operations VALUES (?,?,?,?,?,?,?)",
                 (op_id, operation_type, delivery_id, actor, reason, utc_z(now),
                  canonical_json(detail or {})),
             )
+            conn.commit()
         return op_id
 
     def append_outcome(self, payload: dict[str, Any]) -> bool:
-        required = {
-            "event_id", "setup_id", "thesis_id", "recorded_at", "final_status",
-            "ticket_ref", "requested_price", "fill_price", "spread_points", "slippage",
-            "open_time", "close_time", "exit_price", "exit_reason", "initial_risk",
-            "mae", "mfe", "realised_pl", "realised_r",
-        }
-        missing = sorted(required - payload.keys())
+        if not isinstance(payload, dict):
+            raise Session5Error("outcome_type", "outcome payload must be an object")
+        missing = sorted(OUTCOME_FIELDS - payload.keys())
         if missing:
             raise Session5Error("outcome_fields_missing", ", ".join(missing))
+        unknown = sorted(payload.keys() - OUTCOME_FIELDS)
+        if unknown:
+            raise Session5Error("outcome_fields_unknown", ", ".join(unknown))
+        for field in ("event_id", "setup_id", "thesis_id"):
+            if not isinstance(payload[field], str) or not SAFE_ID.fullmatch(payload[field]):
+                raise Session5Error("outcome_identity_type", field)
+        for field in ("ticket_ref", "exit_reason"):
+            if payload[field] is not None and not isinstance(payload[field], str):
+                raise Session5Error("outcome_field_type", field)
+        for field in OUTCOME_NUMERIC_FIELDS:
+            value = payload[field]
+            if (
+                value is not None
+                and (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(value)
+                )
+            ):
+                raise Session5Error("outcome_numeric_invalid", field)
+        if payload["spread_points"] is not None and payload["spread_points"] < 0:
+            raise Session5Error("outcome_spread_negative", "spread_points")
         allowed = {"PARTIAL", "CLOSED", "CANCELLED", "REJECTED", "UNKNOWN"}
-        if payload["final_status"] not in allowed:
+        if not isinstance(payload["final_status"], str) or payload["final_status"] not in allowed:
             raise Session5Error("outcome_status", str(payload["final_status"]))
+        recorded_at = parse_utc(payload["recorded_at"])
+        open_at = parse_utc(payload["open_time"]) if payload["open_time"] is not None else None
+        close_at = parse_utc(payload["close_time"]) if payload["close_time"] is not None else None
+        if close_at is not None and open_at is None:
+            raise Session5Error("outcome_chronology", "close_time requires open_time")
+        if open_at is not None and close_at is not None and close_at < open_at:
+            raise Session5Error("outcome_chronology", "close_time precedes open_time")
+        if open_at is not None and open_at > recorded_at:
+            raise Session5Error("outcome_chronology", "open_time follows recorded_at")
+        if close_at is not None and close_at > recorded_at:
+            raise Session5Error("outcome_chronology", "close_time follows recorded_at")
         event_hash = document_hash(payload)
         with closing(self._conn()) as conn:
             conn.execute("BEGIN IMMEDIATE")
             thesis = conn.execute(
-                "SELECT setup_id FROM canonical_theses WHERE thesis_id=?", (payload["thesis_id"],)
+                "SELECT setup_id,thesis_json FROM canonical_theses WHERE thesis_id=?",
+                (payload["thesis_id"],),
             ).fetchone()
             if not thesis or thesis["setup_id"] != payload["setup_id"]:
                 raise Session5Error("outcome_identity_mismatch", "setup/thesis does not match")
+            thesis_document = json.loads(thesis["thesis_json"])
+            if recorded_at < parse_utc(thesis_document["created_at"]):
+                raise Session5Error(
+                    "outcome_chronology",
+                    "recorded_at precedes canonical Thesis creation",
+                )
             existing = conn.execute(
                 "SELECT event_hash FROM mt5_outcome_history WHERE event_id=?", (payload["event_id"],)
             ).fetchone()
@@ -405,6 +655,16 @@ class OutboxStore:
                     raise ConflictError("outcome_conflict", "same event_id has conflicting content")
                 conn.commit()
                 return False
+            latest = conn.execute(
+                """SELECT recorded_at FROM mt5_outcome_history
+                WHERE thesis_id=? ORDER BY recorded_at DESC,event_id DESC LIMIT 1""",
+                (payload["thesis_id"],),
+            ).fetchone()
+            if latest and recorded_at < parse_utc(latest["recorded_at"]):
+                raise Session5Error(
+                    "outcome_out_of_order",
+                    "recorded_at precedes the latest persisted outcome",
+                )
             conn.execute(
                 "INSERT INTO mt5_outcome_history VALUES (?,?,?,?,?,?,?)",
                 (payload["event_id"], event_hash, payload["setup_id"], payload["thesis_id"],
@@ -424,3 +684,12 @@ class OutboxStore:
     def integrity_check(self) -> str:
         with closing(self._conn()) as conn:
             return conn.execute("PRAGMA integrity_check").fetchone()[0]
+
+    def migration_status(self) -> list[dict[str, Any]]:
+        with closing(self._conn()) as conn:
+            return [
+                dict(row)
+                for row in conn.execute(
+                    "SELECT version,name,checksum,applied_at FROM schema_migrations ORDER BY version"
+                ).fetchall()
+            ]

@@ -17,19 +17,119 @@ from .models import RendererType, Session5Error, document_hash, parse_utc, stabl
 
 @dataclass(frozen=True)
 class InputAttestation:
-    """Narrow Session 4 boundary; no queue/table/filesystem assumption is embedded."""
+    """Verifiable Session 4 handoff bound to request, verdict, and final audit."""
 
-    post_gates_passed: bool
-    audit_persisted: bool
     audit_ref: str
+    request_hash: str
+    verdict_hash: str
+    final_audit_envelope: dict
+    completed_result: dict
 
-    def validate(self) -> None:
-        if not self.post_gates_passed:
-            raise Session5Error("post_gates_required", "Session 4 deterministic post-gates did not pass")
-        if not self.audit_persisted or not self.audit_ref.strip():
-            raise Session5Error("audit_reference_required", "a persisted verdict audit reference is required")
+    @property
+    def audit_record_hash(self) -> str:
+        return str(self.final_audit_envelope.get("record_hash") or "")
+
+    @classmethod
+    def recorded_fixture(cls, request: dict, verdict: dict, audit_ref: str) -> "InputAttestation":
+        request_hash = document_hash(request)
+        verdict_hash = document_hash(verdict)
+        attempt_id = stable_id("attempt", request["request_id"], verdict["verdict_id"])
+        record = {
+            "attempt_id": attempt_id,
+            "request_id": request["request_id"],
+            "setup_id": request["setup_id"],
+            "outcome": "VERDICT",
+            "validated_verdict": verdict["verdict"],
+            "request_hash": request_hash,
+            "verdict_hash": verdict_hash,
+            "source_profile": "RECORDED_FIXTURE",
+        }
+        previous_hash = "0" * 64
+        record_hash = document_hash({"previous_hash": previous_hash, "record": record})
+        envelope = {
+            "previous_hash": previous_hash,
+            "record": record,
+            "record_hash": record_hash,
+        }
+        completed = {
+            "status": "VERDICT",
+            "request_id": request["request_id"],
+            "attempt_id": attempt_id,
+            "verdict": verdict,
+            "audit_record_hash": record_hash,
+        }
+        return cls(
+            audit_ref=audit_ref,
+            request_hash=request_hash,
+            verdict_hash=verdict_hash,
+            final_audit_envelope=envelope,
+            completed_result=completed,
+        )
+
+    def validate(self, request: dict, verdict: dict) -> None:
+        if not self.audit_ref.strip():
+            raise Session5Error(
+                "audit_reference_required",
+                "a persisted verdict audit reference is required",
+            )
         if len(self.audit_ref) > 500:
             raise Session5Error("audit_reference_invalid", "audit reference is too long")
+        actual_request_hash = document_hash(request)
+        actual_verdict_hash = document_hash(verdict)
+        if self.request_hash != actual_request_hash or self.verdict_hash != actual_verdict_hash:
+            raise Session5Error(
+                "attestation_hash_mismatch",
+                "request or verdict hash does not match the attested handoff",
+            )
+        envelope = self.final_audit_envelope
+        if not isinstance(envelope, dict) or set(envelope) != {
+            "previous_hash",
+            "record",
+            "record_hash",
+        }:
+            raise Session5Error("audit_envelope_invalid", "final audit envelope is malformed")
+        previous_hash = envelope["previous_hash"]
+        record = envelope["record"]
+        record_hash = envelope["record_hash"]
+        if (
+            not isinstance(previous_hash, str)
+            or len(previous_hash) != 64
+            or not isinstance(record_hash, str)
+            or len(record_hash) != 64
+            or not isinstance(record, dict)
+            or document_hash({"previous_hash": previous_hash, "record": record}) != record_hash
+        ):
+            raise Session5Error("audit_hash_invalid", "final audit envelope hash is invalid")
+        expected_record = {
+            "request_id": request["request_id"],
+            "setup_id": request["setup_id"],
+            "outcome": "VERDICT",
+            "validated_verdict": verdict["verdict"],
+            "request_hash": actual_request_hash,
+            "verdict_hash": actual_verdict_hash,
+        }
+        failed = [
+            field for field, expected in expected_record.items()
+            if record.get(field) != expected
+        ]
+        if failed or not isinstance(record.get("attempt_id"), str):
+            raise Session5Error(
+                "audit_identity_mismatch",
+                "final audit record mismatch: " + ", ".join(failed or ["attempt_id"]),
+            )
+        completed = self.completed_result
+        if (
+            not isinstance(completed, dict)
+            or completed.get("status") != "VERDICT"
+            or completed.get("request_id") != request["request_id"]
+            or completed.get("attempt_id") != record["attempt_id"]
+            or completed.get("verdict") != verdict
+            or completed.get("audit_record_hash") != record_hash
+        ):
+            raise Session5Error(
+                "completed_result_mismatch",
+                "completed verdict does not bind to the final audit record",
+            )
 
 
 class ThesisCompiler:
@@ -45,9 +145,9 @@ class ThesisCompiler:
         *,
         now: datetime,
     ) -> dict:
-        attestation.validate()
         validate_contract(ANALYSIS_REQUEST_SCHEMA_V1, request)
         validate_contract(AI_VERDICT_SCHEMA_V1, verdict)
+        attestation.validate(request, verdict)
         self._validate_pair(request, verdict, now)
 
         request_hash = document_hash(request)
@@ -97,6 +197,9 @@ class ThesisCompiler:
             request=request,
             verdict=verdict,
             audit_ref=attestation.audit_ref,
+            audit_record_hash=attestation.audit_record_hash,
+            audit_envelope=attestation.final_audit_envelope,
+            completed_result=attestation.completed_result,
             renderer_types=renderers,
             now=now,
         )
