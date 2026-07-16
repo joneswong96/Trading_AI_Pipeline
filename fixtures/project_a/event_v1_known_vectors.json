@@ -1,0 +1,187 @@
+{
+  "documents": {
+    "minimal_valid": {
+      "contract_family": "PROJECT_A_WIRE_EVENT",
+      "schema_version": "1.0",
+      "producer_event_id": "wevt_xau_20260716_1000",
+      "correlation_id": null,
+      "causation_id": null,
+      "occurred_at": "2026-07-16T01:00:00Z",
+      "source": {"producer": "fixture", "profile": "project-a-shadow", "version": "1.0.0", "producer_checksum": null, "diagnostics": {}},
+      "symbol": "XAUUSD",
+      "base_tf": "1m",
+      "mode": "SHADOW",
+      "execution_environment": "MT5_DEMO",
+      "live_execution": false,
+      "event_class": "TELEMETRY",
+      "event_type": "SNR_UPDATE",
+      "hypothesis": null,
+      "path": null,
+      "setup_origin": null,
+      "evidence": {"snr": null, "hpa": [], "momentum": [], "trigger": null, "rejection": null, "break": null, "invalidation": null, "expiry": null, "entry_window": null, "geometry": null},
+      "extensions": {}
+    },
+    "rejection_ready": {
+      "contract_family": "PROJECT_A_WIRE_EVENT",
+      "schema_version": "1.0",
+      "producer_event_id": "wevt_xau_20260716_1001",
+      "correlation_id": "corr_xau_20260716_1001",
+      "causation_id": "wevt_xau_20260716_0999",
+      "occurred_at": "2026-07-16T01:01:00Z",
+      "emitted_at": "2026-07-16T01:01:01Z",
+      "source": {"producer": "fixture", "profile": "project-a-shadow", "version": "1.0.0", "producer_checksum": null, "diagnostics": {"build_note": "known-vector"}},
+      "symbol": "XAUUSD",
+      "base_tf": "1m",
+      "mode": "SHADOW",
+      "execution_environment": "MT5_DEMO",
+      "live_execution": false,
+      "event_class": "ANALYSIS_READY",
+      "event_type": "SNR_REJECTION_READY",
+      "hypothesis": "LONG",
+      "path": "SNR_REJECTION",
+      "setup_origin": {"origin_id": "origin_xau_asian_1001", "aoi_id": "aoi_xau_support_1001"},
+      "evidence": {
+        "snr": {"identity": "snr_xau_support_1001", "type": "CLASSIC", "low": 2415.0, "high": 2416.0, "side": "SUPPORT"},
+        "hpa": [
+          {"timeframe": "5m", "classification": "DISCOUNT", "bar_id": "bar_xau_5m_0100", "bar_close": "2026-07-16T01:00:00Z", "confirmation_state": "CONFIRMED"},
+          {"timeframe": "15m", "classification": "DISCOUNT", "bar_id": "bar_xau_15m_0100", "bar_close": "2026-07-16T01:00:00Z", "confirmation_state": "CONFIRMED"},
+          {"timeframe": "30m", "classification": "MIDDLE", "bar_id": "bar_xau_30m_0100", "bar_close": "2026-07-16T01:00:00Z", "confirmation_state": "CONFIRMED"}
+        ],
+        "momentum": [
+          {"timeframe": "1m", "classification": "POSITIVE", "direction": "UP", "bar_id": "bar_xau_1m_0101", "bar_close": "2026-07-16T01:01:00Z", "confirmation_state": "CONFIRMED"},
+          {"timeframe": "5m", "classification": "POSITIVE", "direction": "UP", "bar_id": "bar_xau_5m_0100", "bar_close": "2026-07-16T01:00:00Z", "confirmation_state": "CONFIRMED"},
+          {"timeframe": "15m", "classification": "NEUTRAL", "direction": "NEUTRAL", "bar_id": "bar_xau_15m_0100", "bar_close": "2026-07-16T01:00:00Z", "confirmation_state": "CONFIRMED"},
+          {"timeframe": "30m", "classification": "NEUTRAL", "direction": "NEUTRAL", "bar_id": "bar_xau_30m_0100", "bar_close": "2026-07-16T01:00:00Z", "confirmation_state": "CONFIRMED"}
+        ],
+        "trigger": {"identity": "trigger_reclaim_1001", "price": 2416.5, "evidence_time": "2026-07-16T01:01:00Z"},
+        "rejection": {"reaction_id": "reaction_xau_1001", "classification": "PRODUCER_CLASSIFIED_REJECTION", "bar_id": "bar_xau_1m_0101", "evidence_time": "2026-07-16T01:01:00Z", "measurements": {"body": 0.4, "lower_wick": 0.7}},
+        "break": null,
+        "invalidation": null,
+        "expiry": null,
+        "entry_window": null,
+        "geometry": {"direction": "LONG", "entry": 2416.5, "sl": 2414.5, "tp": 2418.5, "rr": 1.0}
+      },
+      "extensions": {"fixture_note": "baseline"}
+    },
+    "rejection_metadata_changed": {
+      "contract_family": "PROJECT_A_WIRE_EVENT",
+      "schema_version": "1.0",
+      "producer_event_id": "wevt_xau_20260716_1002",
+      "correlation_id": "corr_xau_20260716_1001",
+      "causation_id": "wevt_xau_20260716_0999",
+      "occurred_at": "2026-07-16T01:01:00Z",
+      "emitted_at": "2026-07-16T01:01:02Z",
+      "source": {"producer": "fixture", "profile": "project-a-shadow", "version": "1.0.1", "producer_checksum": null, "diagnostics": {"build_note": "metadata-changed"}},
+      "symbol": "XAUUSD",
+      "base_tf": "1m",
+      "mode": "SHADOW",
+      "execution_environment": "MT5_DEMO",
+      "live_execution": false,
+      "event_class": "ANALYSIS_READY",
+      "event_type": "SNR_REJECTION_READY",
+      "hypothesis": "LONG",
+      "path": "SNR_REJECTION",
+      "setup_origin": {"origin_id": "origin_xau_asian_1001", "aoi_id": "aoi_xau_support_1001"},
+      "evidence": {
+        "snr": {"identity": "snr_xau_support_1001", "type": "CLASSIC", "low": 2415, "high": 2416, "side": "SUPPORT"},
+        "hpa": [
+          {"timeframe": "30m", "classification": "MIDDLE", "bar_id": "bar_xau_30m_0100", "bar_close": "2026-07-16T01:00:00Z", "confirmation_state": "CONFIRMED"},
+          {"timeframe": "5m", "classification": "DISCOUNT", "bar_id": "bar_xau_5m_0100", "bar_close": "2026-07-16T01:00:00Z", "confirmation_state": "CONFIRMED"},
+          {"timeframe": "15m", "classification": "DISCOUNT", "bar_id": "bar_xau_15m_0100", "bar_close": "2026-07-16T01:00:00Z", "confirmation_state": "CONFIRMED"}
+        ],
+        "momentum": [
+          {"timeframe": "30m", "classification": "NEUTRAL", "direction": "NEUTRAL", "bar_id": "bar_xau_30m_0100", "bar_close": "2026-07-16T01:00:00Z", "confirmation_state": "CONFIRMED"},
+          {"timeframe": "15m", "classification": "NEUTRAL", "direction": "NEUTRAL", "bar_id": "bar_xau_15m_0100", "bar_close": "2026-07-16T01:00:00Z", "confirmation_state": "CONFIRMED"},
+          {"timeframe": "5m", "classification": "POSITIVE", "direction": "UP", "bar_id": "bar_xau_5m_0100", "bar_close": "2026-07-16T01:00:00Z", "confirmation_state": "CONFIRMED"},
+          {"timeframe": "1m", "classification": "POSITIVE", "direction": "UP", "bar_id": "bar_xau_1m_0101", "bar_close": "2026-07-16T01:01:00Z", "confirmation_state": "CONFIRMED"}
+        ],
+        "trigger": {"identity": "trigger_reclaim_1001", "price": 2416.50, "evidence_time": "2026-07-16T01:01:00Z"},
+        "rejection": {"reaction_id": "reaction_xau_1001", "classification": "PRODUCER_CLASSIFIED_REJECTION", "bar_id": "bar_xau_1m_0101", "evidence_time": "2026-07-16T01:01:00Z", "measurements": {"lower_wick": 0.70, "body": 0.40}},
+        "break": null,
+        "invalidation": null,
+        "expiry": null,
+        "entry_window": null,
+        "geometry": {"direction": "LONG", "entry": 2416.50, "sl": 2414.50, "tp": 2418.50, "rr": 1}
+      },
+      "extensions": {"fixture_note": "noise-only", "optional_5s_arrow": "UP"}
+    },
+    "rejection_new_reaction": {
+      "contract_family": "PROJECT_A_WIRE_EVENT",
+      "schema_version": "1.0",
+      "producer_event_id": "wevt_xau_20260716_1003",
+      "correlation_id": "corr_xau_20260716_1001",
+      "causation_id": "wevt_xau_20260716_1001",
+      "occurred_at": "2026-07-16T01:02:00Z",
+      "emitted_at": "2026-07-16T01:02:01Z",
+      "source": {"producer": "fixture", "profile": "project-a-shadow", "version": "1.0.0", "producer_checksum": null, "diagnostics": {}},
+      "symbol": "XAUUSD", "base_tf": "1m", "mode": "SHADOW", "execution_environment": "MT5_DEMO", "live_execution": false,
+      "event_class": "ANALYSIS_READY", "event_type": "SNR_REJECTION_READY", "hypothesis": "LONG", "path": "SNR_REJECTION",
+      "setup_origin": {"origin_id": "origin_xau_asian_1001", "aoi_id": "aoi_xau_support_1001"},
+      "evidence": {
+        "snr": {"identity": "snr_xau_support_1001", "type": "CLASSIC", "low": 2415.0, "high": 2416.0, "side": "SUPPORT"},
+        "hpa": [], "momentum": [],
+        "trigger": {"identity": "trigger_reclaim_1003", "price": 2416.7, "evidence_time": "2026-07-16T01:02:00Z"},
+        "rejection": {"reaction_id": "reaction_xau_1003", "classification": "PRODUCER_CLASSIFIED_REJECTION", "bar_id": "bar_xau_1m_0102", "evidence_time": "2026-07-16T01:02:00Z", "measurements": {}},
+        "break": null, "invalidation": null, "expiry": null, "entry_window": null, "geometry": null
+      },
+      "extensions": {}
+    },
+    "strong_break": {
+      "contract_family": "PROJECT_A_WIRE_EVENT", "schema_version": "1.0", "producer_event_id": "wevt_xau_20260716_1010", "correlation_id": "corr_xau_20260716_1010", "causation_id": null,
+      "occurred_at": "2026-07-16T01:10:00Z", "emitted_at": "2026-07-16T01:10:01Z",
+      "source": {"producer": "fixture", "profile": "project-a-shadow", "version": "1.0.0", "producer_checksum": null, "diagnostics": {}},
+      "symbol": "XAUUSD", "base_tf": "1m", "mode": "SHADOW", "execution_environment": "MT5_DEMO", "live_execution": false,
+      "event_class": "ANALYSIS_READY", "event_type": "SNR_BREAK_READY", "hypothesis": "LONG", "path": "SNR_STRONG_BREAK",
+      "setup_origin": {"origin_id": "origin_xau_asian_1010", "aoi_id": "aoi_xau_resistance_1010"},
+      "evidence": {
+        "snr": {"identity": "snr_xau_resistance_1010", "type": "CLASSIC", "low": 2420.0, "high": 2421.0, "side": "RESISTANCE"}, "hpa": [], "momentum": [],
+        "trigger": {"identity": "trigger_break_1010", "price": 2421.5, "evidence_time": "2026-07-16T01:10:00Z"}, "rejection": null,
+        "break": {"break_id": "break_xau_1010", "direction": "UP", "level": 2421.0, "observed_price": 2421.5, "bar_id": "bar_xau_1m_0110", "evidence_time": "2026-07-16T01:10:00Z", "measurements": {"body": 0.8, "range": 1.1}},
+        "invalidation": null, "expiry": null, "entry_window": null, "geometry": null
+      }, "extensions": {}
+    },
+    "setup_invalidation": {
+      "contract_family": "PROJECT_A_WIRE_EVENT", "schema_version": "1.0", "producer_event_id": "wevt_xau_20260716_1020", "correlation_id": "corr_xau_20260716_1001", "causation_id": "wevt_xau_20260716_1001",
+      "occurred_at": "2026-07-16T01:20:00Z", "emitted_at": "2026-07-16T01:20:01Z",
+      "source": {"producer": "fixture", "profile": "project-a-shadow", "version": "1.0.0", "producer_checksum": null, "diagnostics": {}},
+      "symbol": "XAUUSD", "base_tf": "1m", "mode": "SHADOW", "execution_environment": "MT5_DEMO", "live_execution": false,
+      "event_class": "LIFECYCLE", "event_type": "SETUP_INVALIDATED", "hypothesis": "LONG", "path": "SNR_REJECTION",
+      "setup_origin": {"origin_id": "origin_xau_asian_1001", "aoi_id": "aoi_xau_support_1001"},
+      "evidence": {"snr": {"identity": "snr_xau_support_1001", "type": "CLASSIC", "low": 2415.0, "high": 2416.0, "side": "SUPPORT"}, "hpa": [], "momentum": [], "trigger": null, "rejection": null, "break": null,
+        "invalidation": {"rule_id": "rule_structural_1001", "level": 2414.5, "observed_price": 2414.0, "bar_id": "bar_xau_1m_0120", "evidence_time": "2026-07-16T01:20:00Z", "reason_code": "M1_STRUCTURE_BROKEN"},
+        "expiry": null, "entry_window": null, "geometry": null}, "extensions": {}
+    },
+    "setup_expiry": {
+      "contract_family": "PROJECT_A_WIRE_EVENT", "schema_version": "1.0", "producer_event_id": "wevt_xau_20260716_1030", "correlation_id": "corr_xau_20260716_1030", "causation_id": null,
+      "occurred_at": "2026-07-16T01:30:00Z", "emitted_at": "2026-07-16T01:30:01Z",
+      "source": {"producer": "fixture", "profile": "project-a-shadow", "version": "1.0.0", "producer_checksum": null, "diagnostics": {}},
+      "symbol": "XAUUSD", "base_tf": "1m", "mode": "SHADOW", "execution_environment": "MT5_DEMO", "live_execution": false,
+      "event_class": "LIFECYCLE", "event_type": "SETUP_EXPIRED", "hypothesis": "SHORT", "path": "SNR_STRONG_BREAK",
+      "setup_origin": {"origin_id": "origin_xau_asian_1030", "aoi_id": "aoi_xau_resistance_1030"},
+      "evidence": {"snr": {"identity": "snr_xau_resistance_1030", "type": "CLASSIC", "low": 2425.0, "high": 2426.0, "side": "RESISTANCE"}, "hpa": [], "momentum": [], "trigger": null, "rejection": null, "break": null, "invalidation": null,
+        "expiry": {"window_id": "window_xau_1030", "basis": "WALL_CLOCK", "started_at": "2026-07-16T01:00:00Z", "ended_at": "2026-07-16T01:30:00Z", "reason_code": "SETUP_WINDOW_ELAPSED"},
+        "entry_window": null, "geometry": null}, "extensions": {}
+    }
+  },
+  "hash_vectors": {
+    "minimal_valid": {"canonical_content_hash": "sha256:2ac48df498a8131e4c5b3eec71ed981998547da00a65cc7c660e01c3228fa5ed", "semantic_evidence_hash": "sha256:bfd057455954bacfa6de552fbca567296b0a37ae77b5590c678034660ceb8f50"},
+    "rejection_ready": {"canonical_content_hash": "sha256:67c3556eddc3222572af93986361ba1db1c41ef1db168d863d3d1f55f94abd38", "semantic_evidence_hash": "sha256:b9092c1e82e0bda8f83aef2bad0c566a8adc658958410c40403636bd93ed2517"},
+    "strong_break": {"canonical_content_hash": "sha256:d9f64bf97e5c124f85a31499461ca990bebb7dd1501cf85c31f7ad8e72a55509", "semantic_evidence_hash": "sha256:3d71f434a8a07468576f905b459b86df28cb486d11a2efc7f65607b5375ec2a1"},
+    "setup_invalidation": {"canonical_content_hash": "sha256:f4aa39038cd82121e56400da8ab50a29f0dc855e32253b6942c2416f649397b8", "semantic_evidence_hash": "sha256:492354bbd9a3feaab8350d1268b6c9868ae9d615093bbf0bc3a3ae19df950a87"},
+    "setup_expiry": {"canonical_content_hash": "sha256:cb83fd8dde08d1bab1d60862270984991b7b8b42c33e84bfda2e4212ed001e87", "semantic_evidence_hash": "sha256:f76a75b20eea006a5b3d2ca11c1a17524de0d2dd78d895f105a30505b1811703"}
+  },
+  "negative_vectors": [
+    {"name": "invalid_symbol", "base": "minimal_valid", "set": {"symbol": "EURUSD"}, "error_code": "schema_const"},
+    {"name": "invalid_timeframe", "base": "minimal_valid", "set": {"base_tf": "5m"}, "error_code": "schema_const"},
+    {"name": "invalid_mode", "base": "minimal_valid", "set": {"mode": "LIVE"}, "error_code": "schema_const"},
+    {"name": "live_execution_true", "base": "minimal_valid", "set": {"live_execution": true}, "error_code": "schema_const"},
+    {"name": "missing_occurred_at", "base": "minimal_valid", "remove": "occurred_at", "error_code": "schema_required"},
+    {"name": "producer_received_at", "base": "minimal_valid", "set": {"received_at": "2026-07-16T01:00:01Z"}, "error_code": "schema_additionalProperties"},
+    {"name": "producer_canonical_hash", "base": "minimal_valid", "set": {"canonical_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "error_code": "schema_additionalProperties"},
+    {"name": "nan", "base": "rejection_ready", "special": "nan_trigger_price", "error_code": "non_finite_number"},
+    {"name": "infinity", "base": "rejection_ready", "special": "infinity_trigger_price", "error_code": "non_finite_number"},
+    {"name": "oversized_extension", "base": "minimal_valid", "special": "oversized_extension", "error_code": "schema_additionalProperties"},
+    {"name": "unknown_version", "base": "minimal_valid", "set": {"schema_version": "2.0"}, "error_code": "unknown_event_contract"},
+    {"name": "ambiguous_v1", "base": "minimal_valid", "remove": "contract_family", "error_code": "unknown_event_contract"}
+  ]
+}
