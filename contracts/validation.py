@@ -5,8 +5,11 @@ import json
 import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 from functools import lru_cache
-from typing import Any
+from typing import Any, Mapping
+
+from referencing import Registry, Resource
 
 from jsonschema import Draft202012Validator, FormatChecker
 
@@ -14,11 +17,17 @@ from .registry import (
     AI_VERDICT_SCHEMA_V1,
     ANALYSIS_REQUEST_SCHEMA_V1,
     EVENT_SCHEMA_V0_2,
+    PROJECT_A_CANONICAL_EVENT_V1,
+    PROJECT_A_WIRE_EVENT_V1,
+    SCHEMA_FILES,
     THESIS_SCHEMA_V1,
     schema_path,
 )
 
 MAX_DOCUMENT_BYTES = 262_144
+MAX_CANONICAL_SIGNIFICANT_DIGITS = 64
+MAX_CANONICAL_ABS_EXPONENT = 10_000
+MAX_CANONICAL_NUMBER_CHARS = 2_048
 _SENSITIVE_KEYS = {"api_key", "apikey", "password", "secret", "token", "private_key"}
 
 
@@ -37,10 +46,105 @@ def _schema(contract: str) -> dict:
     return json.loads(schema_path(contract).read_text(encoding="utf-8"))
 
 
-def canonical_json(document: dict) -> str:
-    """UTF-8-safe RFC-8259 JSON with sorted keys and no insignificant space."""
-    return json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
-                      allow_nan=False)
+def canonical_json(document: Any) -> str:
+    """Return Project A deterministic JSON (deliberately not RFC 8785).
+
+    Object keys are Unicode-code-point sorted, strings are UTF-8/JSON escaped
+    without NFC normalization, arrays retain order, and all finite numeric
+    values use a normalized base-10 representation.  ``1``, ``1.0``, ``1e0``
+    and negative zero therefore serialize identically.  Binary floats first
+    pass through their stable shortest decimal spelling; trusted Wire V1 byte
+    parsing uses :class:`Decimal` directly.
+    """
+
+    def render(value: Any) -> str:
+        if value is None:
+            return "null"
+        if value is True:
+            return "true"
+        if value is False:
+            return "false"
+        if isinstance(value, str):
+            return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        if isinstance(value, int):
+            if value and abs(value).bit_length() > 220:
+                raise ContractError(
+                    "canonical_number_significant_digits",
+                    f"maximum is {MAX_CANONICAL_SIGNIFICANT_DIGITS}",
+                )
+            rendered = str(value)
+            if len(rendered.removeprefix("-")) > MAX_CANONICAL_SIGNIFICANT_DIGITS:
+                raise ContractError(
+                    "canonical_number_significant_digits",
+                    f"maximum is {MAX_CANONICAL_SIGNIFICANT_DIGITS}",
+                )
+            return rendered
+        if isinstance(value, (float, Decimal)):
+            decimal = Decimal(str(value)) if isinstance(value, float) else value
+            if not decimal.is_finite():
+                raise ContractError("non_finite_number", "number must be finite")
+            if decimal.is_zero():
+                return "0"
+            sign, digits, exponent = decimal.as_tuple()
+            if len(digits) > MAX_CANONICAL_SIGNIFICANT_DIGITS:
+                raise ContractError(
+                    "canonical_number_significant_digits",
+                    f"maximum is {MAX_CANONICAL_SIGNIFICANT_DIGITS}",
+                )
+            adjusted = exponent + len(digits) - 1
+            if abs(exponent) > MAX_CANONICAL_ABS_EXPONENT or abs(adjusted) > MAX_CANONICAL_ABS_EXPONENT:
+                raise ContractError(
+                    "canonical_number_exponent",
+                    f"absolute exponent/adjusted exponent maximum is {MAX_CANONICAL_ABS_EXPONENT}",
+                )
+            if adjusted >= 0 and exponent < 0:
+                estimated_length = sign + adjusted + 1 + 1 + (-exponent)
+            elif adjusted >= 0:
+                estimated_length = sign + adjusted + 1
+            else:
+                estimated_length = sign + 2 + (-adjusted - 1) + len(digits)
+            if estimated_length > MAX_CANONICAL_NUMBER_CHARS:
+                raise ContractError(
+                    "canonical_number_rendered_length",
+                    f"maximum is {MAX_CANONICAL_NUMBER_CHARS} characters",
+                )
+            # Decimal.normalize() applies the ambient decimal context and can
+            # silently round values with more than its default 28 digits.
+            # Fixed formatting is exact and is safe after the bounds above.
+            rendered = format(decimal, "f")
+            if "." in rendered:
+                rendered = rendered.rstrip("0").rstrip(".")
+            if len(rendered) > MAX_CANONICAL_NUMBER_CHARS:
+                raise ContractError(
+                    "canonical_number_rendered_length",
+                    f"maximum is {MAX_CANONICAL_NUMBER_CHARS} characters",
+                )
+            return rendered
+        if isinstance(value, Mapping):
+            if not all(isinstance(key, str) for key in value):
+                raise TypeError("JSON object keys must be strings")
+            return "{" + ",".join(
+                f"{render(key)}:{render(value[key])}" for key in sorted(value)
+            ) + "}"
+        if isinstance(value, (list, tuple)):
+            return "[" + ",".join(render(item) for item in value) + "]"
+        raise TypeError(f"unsupported JSON value: {type(value).__name__}")
+
+    return render(document)
+
+
+def canonical_json_bytes(document: Any) -> bytes:
+    """Return the one canonical JSON representation encoded as exact UTF-8 bytes."""
+    return canonical_json(document).encode("utf-8")
+
+
+@lru_cache(maxsize=1)
+def _schema_registry() -> Registry:
+    resources = []
+    for path in SCHEMA_FILES.values():
+        schema = json.loads(path.read_text(encoding="utf-8"))
+        resources.append((schema["$id"], Resource.from_contents(schema)))
+    return Registry().with_resources(resources)
 
 
 def validate_contract(contract: str, document: dict) -> dict:
@@ -48,14 +152,20 @@ def validate_contract(contract: str, document: dict) -> dict:
     if not isinstance(document, dict):
         raise ContractError("document_type", "document must be a JSON object")
     try:
-        encoded = canonical_json(document).encode("utf-8")
+        encoded = canonical_json_bytes(document)
+    except ContractError:
+        raise
     except (TypeError, ValueError) as exc:
         raise ContractError("serialization", str(exc)) from exc
     if len(encoded) > MAX_DOCUMENT_BYTES:
         raise ContractError("document_too_large", f"maximum is {MAX_DOCUMENT_BYTES} bytes")
 
     errors = sorted(
-        Draft202012Validator(_schema(contract), format_checker=FormatChecker()).iter_errors(document),
+        Draft202012Validator(
+            _schema(contract),
+            format_checker=FormatChecker(),
+            registry=_schema_registry(),
+        ).iter_errors(document),
         key=lambda e: (list(e.absolute_path), e.validator or ""),
     )
     if errors:
@@ -66,6 +176,10 @@ def validate_contract(contract: str, document: dict) -> dict:
     _reject_sensitive_values(document)
     if contract == EVENT_SCHEMA_V0_2:
         _validate_event(document)
+    elif contract in {PROJECT_A_WIRE_EVENT_V1, PROJECT_A_CANONICAL_EVENT_V1}:
+        # Family-specific semantic validation lives in contracts.event_v1 to
+        # keep the frozen Event 0.2 path unchanged and independently callable.
+        pass
     elif contract == ANALYSIS_REQUEST_SCHEMA_V1:
         _validate_request(document)
     elif contract == AI_VERDICT_SCHEMA_V1:
