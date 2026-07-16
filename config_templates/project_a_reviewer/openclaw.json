@@ -1,0 +1,112 @@
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": {
+        "source": "env",
+        "provider": "default",
+        "id": "PROJECT_A_OPENCLAW_GATEWAY_TOKEN"
+      },
+      "rateLimit": {
+        "maxAttempts": 5,
+        "windowMs": 60000,
+        "lockoutMs": 300000,
+        "exemptLoopback": false
+      }
+    },
+    "controlUi": {
+      "enabled": false,
+      "allowInsecureAuth": false,
+      "dangerouslyDisableDeviceAuth": false
+    },
+    "terminal": {"enabled": false}
+  },
+  "logging": {"redactSensitive": "tools"},
+  "session": {
+    "dmScope": "per-account-channel-peer",
+    "reset": {"idleMinutes": 5},
+    "maintenance": {"mode": "enforce", "pruneAfter": "7d", "maxEntries": 500}
+  },
+  "agents": {
+    "defaults": {"timeoutSeconds": 90},
+    "list": [
+      {
+        "id": "project-a-reviewer",
+        "name": "Project A Reviewer",
+        "workspace": "${PROJECT_A_REVIEWER_WORKSPACE}",
+        "agentDir": "${PROJECT_A_REVIEWER_AGENT_DIR}",
+        "model": {"primary": "${PROJECT_A_REVIEWER_MODEL}", "fallbacks": []},
+        "imageModel": {"primary": "${PROJECT_A_REVIEWER_MODEL}", "fallbacks": []},
+        "utilityModel": "",
+        "sandbox": {
+          "mode": "all",
+          "scope": "session",
+          "backend": "docker",
+          "workspaceAccess": "ro",
+          "docker": {
+            "network": "none",
+            "readOnlyRoot": true,
+            "capDrop": ["ALL"],
+            "binds": []
+          },
+          "browser": {"enabled": false, "allowHostControl": false}
+        },
+        "tools": {
+          "allow": [],
+          "deny": [
+            "group:runtime", "group:fs", "group:web", "group:ui",
+            "group:automation", "group:messaging", "group:nodes",
+            "group:sessions", "group:plugins", "group:agents", "group:media",
+            "group:openclaw", "exec", "process", "read",
+            "write", "edit", "apply_patch", "browser", "canvas", "nodes",
+            "computer", "cron", "gateway", "message", "sessions_list",
+            "sessions_history", "sessions_send", "sessions_spawn"
+          ],
+          "elevated": {"enabled": false},
+          "fs": {"workspaceOnly": true},
+          "exec": {"applyPatch": {"workspaceOnly": true}}
+        }
+      }
+    ]
+  },
+  "bindings": [
+    {"agentId": "project-a-reviewer", "match": {"channel": "telegram", "accountId": "project-a-reviewer"}}
+  ],
+  "channels": {
+    "telegram": {
+      "enabled": false,
+      "accounts": {
+        "project-a-reviewer": {
+          "name": "Project A Reviewer",
+          "botToken": {
+            "source": "env",
+            "provider": "default",
+            "id": "PROJECT_A_TELEGRAM_BOT_TOKEN"
+          }
+        }
+      },
+      "dmPolicy": "pairing",
+      "allowFrom": ["${PROJECT_A_TELEGRAM_USER_ID}"],
+      "groupPolicy": "disabled",
+      "groupAllowFrom": [],
+      "groups": {},
+      "configWrites": false,
+      "customCommands": [
+        {"command": "review", "description": "Review a known request ID"},
+        {"command": "status", "description": "Check a known request ID"},
+        {"command": "retry", "description": "Retry a technical failure"},
+        {"command": "cancel", "description": "Cancel a pending review"},
+        {"command": "health", "description": "Show non-sensitive health"}
+      ],
+      "historyLimit": 0,
+      "linkPreview": false,
+      "streamMode": "off",
+      "mediaMaxMb": 20,
+      "retry": {"attempts": 2, "minDelayMs": 400, "maxDelayMs": 5000, "jitter": 0.1}
+    }
+  },
+  "tools": {"agentToAgent": {"enabled": false}},
+  "models": {"pricing": {"enabled": false}}
+}
