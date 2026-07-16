@@ -1,0 +1,585 @@
+{
+  "external_side_effects": false,
+  "failed": 0,
+  "kind": "RECORDED_FAKE_ACCEPTANCE",
+  "passed": 28,
+  "real_shadow_samples_completed": 0,
+  "sample_count": 28,
+  "samples": [
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "DRY_RUN_SUCCEEDED",
+        "NOTION": "DRY_RUN_SUCCEEDED",
+        "TELEGRAM": "DRY_RUN_SUCCEEDED",
+        "TRADINGVIEW": "DRY_RUN_SUCCEEDED"
+      },
+      "call_log_consistency": "PASS",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Four fake/dry-run outputs",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "Recorded fixture executed with deterministic historical clock.",
+      "safety_gate_result": "PASS",
+      "sample_id": "S01",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "DRY_RUN_SUCCEEDED",
+        "NOTION": "DRY_RUN_SUCCEEDED",
+        "TELEGRAM": "DRY_RUN_SUCCEEDED",
+        "TRADINGVIEW": "DRY_RUN_SUCCEEDED"
+      },
+      "call_log_consistency": "PASS",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Four outputs use validated modified geometry",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "Recorded fixture executed with deterministic historical clock.",
+      "safety_gate_result": "PASS",
+      "sample_id": "S02",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "MODIFY"
+    },
+    {
+      "actual_output_statuses": {
+        "NOTION": "DRY_RUN_SUCCEEDED",
+        "TELEGRAM": "DRY_RUN_SUCCEEDED"
+      },
+      "call_log_consistency": "PASS",
+      "entry_sl_tp_consistency": "NOT_APPLICABLE",
+      "error_retry_evidence": [],
+      "expected_outputs": "Telegram rejection and Notion only",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "Recorded fixture executed with deterministic historical clock.",
+      "safety_gate_result": "PASS",
+      "sample_id": "S03",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "REJECT"
+    },
+    {
+      "actual_output_statuses": {
+        "NOTION": "DRY_RUN_SUCCEEDED",
+        "TELEGRAM": "DRY_RUN_SUCCEEDED"
+      },
+      "call_log_consistency": "PASS",
+      "entry_sl_tp_consistency": "NOT_APPLICABLE",
+      "error_retry_evidence": [],
+      "expected_outputs": "Telegram expiry and Notion only",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "Recorded fixture executed with deterministic historical clock.",
+      "safety_gate_result": "PASS",
+      "sample_id": "S04",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "EXPIRED"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "DRY_RUN_SUCCEEDED",
+        "NOTION": "DRY_RUN_SUCCEEDED",
+        "TELEGRAM": "DRY_RUN_SUCCEEDED",
+        "TRADINGVIEW": "DRY_RUN_SUCCEEDED"
+      },
+      "call_log_consistency": "PASS",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Strong-break path consistent",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "Recorded fixture executed with deterministic historical clock.",
+      "safety_gate_result": "PASS",
+      "sample_id": "S05",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "DRY_RUN_SUCCEEDED",
+        "NOTION": "DRY_RUN_SUCCEEDED",
+        "TELEGRAM": "DRY_RUN_SUCCEEDED",
+        "TRADINGVIEW": "DRY_RUN_SUCCEEDED"
+      },
+      "call_log_consistency": "PASS",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Duplicate replay creates no duplicate outputs",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "Recorded fixture executed with deterministic historical clock.",
+      "safety_gate_result": "PASS",
+      "sample_id": "S06",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "DRY_RUN_SUCCEEDED",
+        "TRADINGVIEW": "DRY_RUN_SUCCEEDED"
+      },
+      "call_log_consistency": "NOT_APPLICABLE",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "TradingView succeeds; Telegram retries independently",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS",
+      "sample_id": "S07",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "DRY_RUN_SUCCEEDED",
+        "TELEGRAM": "DRY_RUN_SUCCEEDED",
+        "TRADINGVIEW": "PENDING"
+      },
+      "call_log_consistency": "NOT_APPLICABLE",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Telegram succeeds; Notion retries independently",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS",
+      "sample_id": "S08",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "DRY_RUN_SUCCEEDED",
+        "NOTION": "DRY_RUN_SUCCEEDED",
+        "TELEGRAM": "PENDING",
+        "TRADINGVIEW": "PENDING"
+      },
+      "call_log_consistency": "PASS",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Notion succeeds; MT5 dry-run retries independently",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS",
+      "sample_id": "S09",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "PENDING",
+        "TRADINGVIEW": "DRY_RUN_SUCCEEDED"
+      },
+      "call_log_consistency": "NOT_APPLICABLE",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Partial TradingView objects cleaned, then retry succeeds",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS",
+      "sample_id": "S10",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "SUCCEEDED",
+        "NOTION": "PENDING",
+        "TELEGRAM": "PENDING",
+        "TRADINGVIEW": "PENDING"
+      },
+      "call_log_consistency": "NOT_APPLICABLE",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Uncertain MT5 result reconciled before retry",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS",
+      "sample_id": "S11",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "SUCCEEDED",
+        "TRADINGVIEW": "PENDING"
+      },
+      "call_log_consistency": "NOT_APPLICABLE",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Uncertain Telegram result reconciled before retry",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS",
+      "sample_id": "S12",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "SUCCEEDED",
+        "TRADINGVIEW": "PENDING"
+      },
+      "call_log_consistency": "NOT_APPLICABLE",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Crash after external fake success; restart recognizes same effect",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS",
+      "sample_id": "S13",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "PENDING",
+        "TRADINGVIEW": "DRY_RUN_SUCCEEDED"
+      },
+      "call_log_consistency": "NOT_APPLICABLE",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Abandoned claim recovered after timeout",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS",
+      "sample_id": "S14",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "PENDING",
+        "TRADINGVIEW": "TERMINAL_FAILED"
+      },
+      "call_log_consistency": "NOT_APPLICABLE",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "TradingView cleanup failure is terminal and inspectable",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS",
+      "sample_id": "S15",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "BLOCKED_SAFETY",
+        "NOTION": "DRY_RUN_SUCCEEDED",
+        "TELEGRAM": "BLOCKED_SAFETY",
+        "TRADINGVIEW": "BLOCKED_SAFETY"
+      },
+      "call_log_consistency": "PASS",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Expiry blocks remaining actionable outputs; Notion remains auditable",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS",
+      "sample_id": "S16",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "DRY_RUN_SUCCEEDED",
+        "TELEGRAM": "DRY_RUN_SUCCEEDED",
+        "TRADINGVIEW": "PENDING"
+      },
+      "call_log_consistency": "PASS",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Existing Notion record survives supplemental status update failure",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS",
+      "sample_id": "S17",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {},
+      "call_log_consistency": "NO_RECORD",
+      "entry_sl_tp_consistency": "NOT_APPLICABLE",
+      "error_retry_evidence": [
+        "schema_const at $['instrument']['symbol']: 'XAUUSD' was expected"
+      ],
+      "expected_outputs": "No Thesis and no renderer delivery",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "NOT_APPLICABLE",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS:schema_const",
+      "sample_id": "S18",
+      "setup_id": null,
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "INVALID_INPUT"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "PENDING",
+        "TRADINGVIEW": "BLOCKED_SAFETY"
+      },
+      "call_log_consistency": "PENDING_NOTION",
+      "entry_sl_tp_consistency": "NOT_APPLICABLE",
+      "error_retry_evidence": [],
+      "expected_outputs": "TradingView blocked with tv_wrong_port; other tasks independent",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS:tv_wrong_port",
+      "sample_id": "S19",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "PENDING",
+        "TRADINGVIEW": "BLOCKED_SAFETY"
+      },
+      "call_log_consistency": "PENDING_NOTION",
+      "entry_sl_tp_consistency": "NOT_APPLICABLE",
+      "error_retry_evidence": [],
+      "expected_outputs": "TradingView blocked with tv_wrong_tab; other tasks independent",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS:tv_wrong_tab",
+      "sample_id": "S20",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "PENDING",
+        "TRADINGVIEW": "BLOCKED_SAFETY"
+      },
+      "call_log_consistency": "PENDING_NOTION",
+      "entry_sl_tp_consistency": "NOT_APPLICABLE",
+      "error_retry_evidence": [],
+      "expected_outputs": "TradingView blocked with tv_wrong_timeframe; other tasks independent",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS:tv_wrong_timeframe",
+      "sample_id": "S21",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "PENDING",
+        "TRADINGVIEW": "BLOCKED_SAFETY"
+      },
+      "call_log_consistency": "PENDING_NOTION",
+      "entry_sl_tp_consistency": "NOT_APPLICABLE",
+      "error_retry_evidence": [],
+      "expected_outputs": "TradingView blocked with tv_wrong_feed; other tasks independent",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS:tv_wrong_feed",
+      "sample_id": "S22",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "PENDING",
+        "TRADINGVIEW": "BLOCKED_SAFETY"
+      },
+      "call_log_consistency": "PENDING_NOTION",
+      "entry_sl_tp_consistency": "NOT_APPLICABLE",
+      "error_retry_evidence": [],
+      "expected_outputs": "TradingView blocked with tv_wrong_symbol; other tasks independent",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS:tv_wrong_symbol",
+      "sample_id": "S23",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {},
+      "call_log_consistency": "NO_RECORD",
+      "entry_sl_tp_consistency": "NOT_APPLICABLE",
+      "error_retry_evidence": [
+        "spread_gate at $: spread exceeds the pinned maximum"
+      ],
+      "expected_outputs": "No Thesis and no renderer delivery",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "NOT_APPLICABLE",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS:spread_gate",
+      "sample_id": "S24",
+      "setup_id": null,
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "INVALID_INPUT"
+    },
+    {
+      "actual_output_statuses": {},
+      "call_log_consistency": "NO_RECORD",
+      "entry_sl_tp_consistency": "NOT_APPLICABLE",
+      "error_retry_evidence": [
+        "rr_not_one_to_one at $: TP distance must equal SL distance"
+      ],
+      "expected_outputs": "No Thesis and no renderer delivery",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "NOT_APPLICABLE",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS:rr_not_one_to_one",
+      "sample_id": "S25",
+      "setup_id": null,
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "INVALID_INPUT"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "PENDING",
+        "TRADINGVIEW": "BLOCKED_SAFETY"
+      },
+      "call_log_consistency": "PENDING_NOTION",
+      "entry_sl_tp_consistency": "NOT_APPLICABLE",
+      "error_retry_evidence": [],
+      "expected_outputs": "TradingView blocked with tv_wrong_process; other tasks independent",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS:tv_wrong_process",
+      "sample_id": "S26",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "PENDING",
+        "NOTION": "PENDING",
+        "TELEGRAM": "PENDING",
+        "TRADINGVIEW": "BLOCKED_SAFETY"
+      },
+      "call_log_consistency": "PENDING_NOTION",
+      "entry_sl_tp_consistency": "NOT_APPLICABLE",
+      "error_retry_evidence": [],
+      "expected_outputs": "TradingView blocked with tv_wrong_layout; other tasks independent",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS:tv_wrong_layout",
+      "sample_id": "S27",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    },
+    {
+      "actual_output_statuses": {
+        "MT5_DEMO": "DRY_RUN_SUCCEEDED",
+        "NOTION": "DRY_RUN_SUCCEEDED",
+        "TELEGRAM": "DRY_RUN_SUCCEEDED",
+        "TRADINGVIEW": "DRY_RUN_SUCCEEDED"
+      },
+      "call_log_consistency": "PASS",
+      "entry_sl_tp_consistency": "PASS",
+      "error_retry_evidence": [],
+      "expected_outputs": "Outcome history updates same setup/Thesis/Call Log idempotently",
+      "external_side_effects_used_or_mocked": "FAKE_ONLY; no network, chart, Notion, Telegram, or broker side effect",
+      "idempotency_result": "PASS",
+      "pass": true,
+      "reviewer_notes": "",
+      "safety_gate_result": "PASS",
+      "sample_id": "S28",
+      "setup_id": "setup_xau_20260716_0001",
+      "source_fixture": "Session 0 analysis_request_accepted.json + ai_verdict_approved.json",
+      "verdict": "APPROVE"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+# CI/replay-only config. Every identity is synthetic; no external transport uses it.
+shadow: true
+dry_run: true
+enabled_renderers: [TRADINGVIEW, TELEGRAM, NOTION, MT5_DEMO]
+retry_limit: 3
+retry_seconds: 0
+claim_timeout_seconds: 30
+storage_path: storage/project_a_outputs.db
+audit_output_path: storage/project_a_audit
+tradingview:
+  port: 4999
+  expected_process_identity: FAKE_TRADINGVIEW_MCP
+  expected_symbol: XAUUSD
+  feed_allowlist: [ICMARKETS]
+  expected_timeframe: 1m
+  expected_layout_id: PROJECT_A_XAUUSD_1M
+  expected_tab_id: tv-tab-xauusd
+telegram:
+  destination_id: "100000001"
+  owner_user_id: "100000001"
+  direct_message_only: true
+  max_message_length: 1500
+notion:
+  database_id: fake-project-a-call-log
+  schema_fields: [setup_id, content_hash, thesis_id, renderer_statuses]
+mt5:
+  demo_mirror_enabled: false
+  account_allowlist: [FAKE-DEMO-1001]
+  server_allowlist: [FAKE-BROKER-DEMO]
+  terminal_path_allowlist: ['C:\FAKE\MT5-DEMO\terminal64.exe']
+  symbol_mapping: XAUUSD
+  precision: 2
