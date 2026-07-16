@@ -16,8 +16,14 @@ from contracts import (
     THESIS_SCHEMA_V1,
     ContractError,
     canonical_json,
+    canonical_json_bytes,
+    InMemoryDedupeAuthority,
+    process_wire_event_v1_receipt,
+    read_project_a_event,
+    semantic_evidence_projection,
     validate_contract,
 )
+from contracts._trusted_ingress import issue_replay_receipt_context
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "fixtures" / "project_a"
@@ -134,6 +140,82 @@ def replay_accepted_pipeline() -> dict:
     }
 
 
+def replay_event_v1_reader_foundation() -> dict:
+    """Exercise V1 readers and dedupe using recorded data; enable no writer."""
+    vectors = _load_json("event_v1_known_vectors.json")
+    migration = _load_json("event_v1_migration_cases.json")
+    if migration.get("writer_enablement") != "DISABLED":
+        raise ReplayFailure("Event V1 writer must remain disabled")
+
+    authority = InMemoryDedupeAuthority()
+
+    def processed(name, receipt_id, received_at, transport_identity, canonicalized_at):
+        wire = vectors["documents"][name]
+        raw = canonical_json_bytes(wire)
+        context = issue_replay_receipt_context(
+            raw,
+            receipt_id=receipt_id,
+            received_at=received_at,
+            transport_identity=transport_identity,
+            source_adapter_identity="offline_replay_adapter_v1",
+            immutable_raw_reference=receipt_id + "_raw",
+            canonicalized_at=canonicalized_at,
+            replay_clock="2026-07-16T02:00:00Z",
+        )
+        result = process_wire_event_v1_receipt(raw, context, authority)
+        if result.canonical_document is None:
+            raise ReplayFailure(f"{name}: receipt processing failed: {result.reason_code}")
+        return result.canonical_document.document
+
+    baseline_wire = vectors["documents"]["rejection_ready"]
+    baseline = processed(
+        "rejection_ready", "rcpt_replay_20260716_1001", "2026-07-16T01:01:01.250Z",
+        "offline_replay_request_1001", "2026-07-16T01:01:01.300Z",
+    )
+    exact = processed(
+        "rejection_ready", "rcpt_replay_20260716_1002", "2026-07-16T01:01:02Z",
+        "offline_replay_request_1001", "2026-07-16T01:01:02.100Z",
+    )
+    noisy_wire = vectors["documents"]["rejection_metadata_changed"]
+    noisy = processed(
+        "rejection_metadata_changed", "rcpt_replay_20260716_1003", "2026-07-16T01:01:02.250Z",
+        "offline_replay_request_1003", "2026-07-16T01:01:02.300Z",
+    )
+    new_wire = vectors["documents"]["rejection_new_reaction"]
+    new_evidence = processed(
+        "rejection_new_reaction", "rcpt_replay_20260716_1004", "2026-07-16T01:02:01.250Z",
+        "offline_replay_request_1004", "2026-07-16T01:02:01.300Z",
+    )
+    legacy = _load_json("event_cases.json")["accepted_alert"]["payload"]
+    legacy_result = read_project_a_event(legacy)
+    checks = [
+        baseline["validation"]["status"] == "ACCEPTED",
+        exact["dedupe"]["exact_receipt_duplicate"] is True,
+        noisy["dedupe"]["semantic_evidence_duplicate"] is True,
+        baseline["semantic_evidence_hash"] == noisy["semantic_evidence_hash"],
+        semantic_evidence_projection(baseline_wire) == semantic_evidence_projection(noisy_wire),
+        new_evidence["validation"]["status"] == "ACCEPTED",
+        new_evidence["semantic_evidence_hash"] != baseline["semantic_evidence_hash"],
+        legacy_result["trusted_received_at"] is None,
+        legacy_result["legacy_declared_received_at"] == legacy["received_at"],
+    ]
+    if not all(checks):
+        raise ReplayFailure("Event V1 reader foundation invariant failed")
+    return {
+        "status": "PASS",
+        "writer_enablement": "DISABLED",
+        "wire_reader": "PROJECT_A_WIRE_EVENT_V1",
+        "canonical_reader": "PROJECT_A_CANONICAL_EVENT_V1",
+        "legacy_reader": EVENT_SCHEMA_V0_2,
+        "canonical_content_hash": baseline["canonical_content_hash"],
+        "semantic_evidence_hash": baseline["semantic_evidence_hash"],
+        "exact_duplicate": exact["validation"]["status"],
+        "metadata_only_duplicate": noisy["validation"]["status"],
+        "new_evidence": new_evidence["validation"]["status"],
+        "legacy_receipt_provenance": legacy_result["receipt_provenance"],
+    }
+
+
 def run_all() -> dict:
     cases = replay_event_cases()
     return {
@@ -142,6 +224,7 @@ def run_all() -> dict:
         "environment": "MT5_DEMO",
         "live_execution": False,
         "event_cases": cases,
+        "event_v1_reader_foundation": replay_event_v1_reader_foundation(),
         "accepted_pipeline": replay_accepted_pipeline(),
     }
 

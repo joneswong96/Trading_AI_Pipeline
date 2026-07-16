@@ -1,0 +1,53 @@
+{
+  "frozen_event_cases_sha256": "sha256:cc751d83d5648c167c663ec2a449ddb1650ae5f7507912303bd66253a7e8d6a4",
+  "frozen_event_schema_v0_2_sha256": "sha256:2b9f9ec23fbfaecd7bf161a5f29a2aa4f0ab2b4c128223d8fe3122402f1579ca",
+  "writer_enablement": "DISABLED",
+  "cases": [
+    {
+      "name": "valid_v02_legacy_read",
+      "source": "frozen:event_cases.json#accepted_alert.payload",
+      "receipt_metadata": null,
+      "expected": {"contract": "EVENT_SCHEMA_V0_2", "status": "SHAPE_VALID", "receipt_provenance": "LEGACY_UNVERIFIED", "trusted_received_at": null}
+    },
+    {
+      "name": "v02_without_trustworthy_receipt_provenance",
+      "source": "frozen:event_cases.json#accepted_alert.payload",
+      "receipt_metadata": null,
+      "expected": {"contract": "EVENT_SCHEMA_V0_2", "status": "SHAPE_VALID", "receipt_provenance": "LEGACY_UNVERIFIED", "trusted_received_at": null, "legacy_declared_received_at": "2026-07-16T00:00:01Z"}
+    },
+    {
+      "name": "wire_v1_to_canonical_v1",
+      "source": "known:event_v1_known_vectors.json#documents.rejection_ready",
+      "receipt": {"receipt_id": "rcpt_wire_20260716_1001", "received_at": "2026-07-16T01:01:01.250Z", "transport_identity": "webhook_request_1001", "canonicalized_at": "2026-07-16T01:01:01.300Z"},
+      "expected": {"status": "ACCEPTED", "exact_receipt_duplicate": false, "semantic_evidence_duplicate": false, "dispatch_allowed": true}
+    },
+    {
+      "name": "duplicate_wire_v1_receipt",
+      "source": "known:event_v1_known_vectors.json#documents.rejection_ready",
+      "receipt": {"receipt_id": "rcpt_wire_20260716_1002", "received_at": "2026-07-16T01:01:02Z", "transport_identity": "webhook_request_1001", "canonicalized_at": "2026-07-16T01:01:02.100Z"},
+      "prior": {"receipt_source": "known:event_v1_known_vectors.json#documents.rejection_ready"},
+      "expected": {"status": "DUPLICATE", "reason_code": "EXACT_RECEIPT_DUPLICATE", "exact_receipt_duplicate": true, "dispatch_allowed": false}
+    },
+    {
+      "name": "metadata_only_change",
+      "source": "known:event_v1_known_vectors.json#documents.rejection_metadata_changed",
+      "receipt": {"receipt_id": "rcpt_wire_20260716_1003", "received_at": "2026-07-16T01:01:02.250Z", "transport_identity": "webhook_request_1003", "canonicalized_at": "2026-07-16T01:01:02.300Z"},
+      "prior": {"semantic_source": "known:event_v1_known_vectors.json#documents.rejection_ready"},
+      "expected": {"status": "DUPLICATE", "reason_code": "SEMANTIC_EVIDENCE_DUPLICATE", "exact_receipt_duplicate": false, "semantic_evidence_duplicate": true, "dispatch_allowed": false}
+    },
+    {
+      "name": "genuine_evidence_transition",
+      "source": "known:event_v1_known_vectors.json#documents.rejection_new_reaction",
+      "receipt": {"receipt_id": "rcpt_wire_20260716_1004", "received_at": "2026-07-16T01:02:01.250Z", "transport_identity": "webhook_request_1004", "canonicalized_at": "2026-07-16T01:02:01.300Z"},
+      "prior": {"semantic_source": "known:event_v1_known_vectors.json#documents.rejection_ready"},
+      "expected": {"status": "ACCEPTED", "exact_receipt_duplicate": false, "semantic_evidence_duplicate": false, "dispatch_allowed": true}
+    },
+    {
+      "name": "unsupported_v02_lifecycle_retained",
+      "source": "frozen:event_cases.json#structural_break.payload",
+      "mutate": {"event_type": "ENTRY_WINDOW_OPEN", "disposition": {"status": "INVALID", "reason_code": "UNSUPPORTED_TRANSITION", "detail": "V0.2 cannot apply entry-window transitions."}},
+      "receipt_metadata": null,
+      "expected": {"contract": "EVENT_SCHEMA_V0_2", "status": "UNSUPPORTED", "reason_code": "UNSUPPORTED_LIFECYCLE_V02", "state_mutation_allowed": false, "dispatch_allowed": false}
+    }
+  ]
+}
