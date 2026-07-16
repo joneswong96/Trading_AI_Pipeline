@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -23,6 +22,8 @@ from ingest.parser import parse
 from ingest import trigger
 from ingest import wake_queue
 from ingest.thesis_store import ThesisStore
+from ingest.project_a.api import router as project_a_router
+from ingest.project_a.config import ProjectAConfig
 from publish.telegram import TelegramPublisher
 from publish.notion_log import NotionLogger
 
@@ -37,6 +38,7 @@ WAKE_LOG = ROOT / "storage" / "wake_log.jsonl"
 WAKE_TEXT = "✅ 夠料喇，撳 /analyze"
 
 app = FastAPI(title="trading-auto ingest", version="phase1")
+app.include_router(project_a_router)
 _alog = AlertLog()
 _thesis = ThesisStore()
 
@@ -191,6 +193,9 @@ def _append_wake(event, decision):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", "8000"))
-    log.info("ingest webhook server up on :%d（POST /alert）", port)
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    project_a_config = ProjectAConfig.from_env()
+    project_a_config.assert_safe()
+    port = project_a_config.ingest_port
+    log.info("ingest webhook server up on :%d（POST /alert；POST %s）",
+             port, project_a_config.endpoint)
+    uvicorn.run(app, host=project_a_config.ingest_host, port=port)
