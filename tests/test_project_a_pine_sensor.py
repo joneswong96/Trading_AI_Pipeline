@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from hashlib import sha256
+from hashlib import sha1, sha256
+import json
 from pathlib import Path
+import subprocess
 
-import pytest
-
-from contracts import EVENT_SCHEMA_V0_2, ContractError, validate_contract
+from contracts import validate_wire_event_v1_shape
 from indicators.validation.project_a_sensor_reference import (
     Evidence,
     ProjectASensor,
+    SOURCE_BLOB,
+    SOURCE_COMMIT,
+    SOURCE_LEGACY_SHA256,
     sample_sequence,
 )
 from indicators.validation.validate_session_1_artifacts import validate_file
@@ -17,176 +20,255 @@ from indicators.validation.validate_session_1_artifacts import validate_file
 ROOT = Path(__file__).resolve().parents[1]
 PINE = ROOT / "indicators" / "pine" / "snr_dashboard_project_a_v1.pine"
 PAYLOADS = ROOT / "docs" / "project_a" / "session_1" / "artifacts" / "candidate_payloads.json"
-RANGE_MIDDLE_EVIDENCE = (
-    ROOT / "docs" / "project_a" / "session_1" / "artifacts"
-    / "range_middle_negative_evidence.json"
-)
-SESSION_B_SHA256 = "4840f60cb1b4b034304e23d92ba3c40df4e45fbf2abc4b6f51adc2a250b1ca78"
+PINE_PATH = "indicators/pine/snr_dashboard_project_a_v1.pine"
 
 
-def _candidate(**changes) -> Evidence:
+def _evidence(**changes) -> Evidence:
     base = Evidence(
-        bar_time="2026-07-16T01:00:00Z",
-        created_time="2026-07-16T01:00:01Z",
-        setup_started_at="2026-07-16T01:00:00Z",
+        occurred_at="2026-07-16T01:00:00Z",
+        emitted_at="2026-07-16T01:00:01Z",
         close=2420.1,
+        expansion_new_down=True,
         snr_low=2419.5,
         snr_high=2420.0,
         target_side="SUPPORT",
-        expansion="DOWN",
-        momentum_1m="DOWN",
-        momentum_5m="DOWN",
+        level_eligible=True,
     )
     return replace(base, **changes)
 
 
-def test_six_candidates_validate_against_frozen_event_contract():
-    samples = sample_sequence()
-    assert set(samples) == {
-        "telemetry", "setup_candidate", "snr_rejection_ready",
-        "snr_strong_break_ready", "invalidated_lifecycle", "expired_lifecycle",
-    }
-    for document in samples.values():
-        assert validate_contract(EVENT_SCHEMA_V0_2, document) is document
+def _strip_project_a(source: str, *, corrected: bool) -> str:
+    source = source.replace("\r\n", "\n")
+    if corrected:
+        source = source.replace(
+            "//  Version: v1.0.0-project-a-wire-shadow",
+            "//  Version: v0.3.0",
+        )
+        source = source.replace(
+            "//  Legacy Phase 2/3 behavior remains alert-silent. The isolated Project A\n"
+            "//  Wire Event V1 surface added below can call alert() only when its default-off\n"
+            "//  shadow feature flag is explicitly enabled on XAUUSD 1m.",
+            "//  Phase 2/3 ALERT-SILENT: table and telemetry variables only. This script has\n"
+            "//  no alert(), alertcondition(), webhook call, strategy order, or active\n"
+            "//  VERDICT JSON serialization. Phase 4 is the first activation point.",
+        )
+        marker = "//  RETIRED PROJECT A EVENT 0.2 MODEL"
+    else:
+        source = source.replace(
+            "//  Version: v0.4.0-project-a-shadow",
+            "//  Version: v0.3.0",
+        )
+        source = source.replace(
+            "//  Legacy Phase 2/3 behavior remains alert-silent. The isolated Project A\n"
+            "//  Event 0.2 surface added below can call alert() only when its default-off\n"
+            "//  shadow feature flag is explicitly enabled on XAUUSD 1m.",
+            "//  Phase 2/3 ALERT-SILENT: table and telemetry variables only. This script has\n"
+            "//  no alert(), alertcondition(), webhook call, strategy order, or active\n"
+            "//  VERDICT JSON serialization. Phase 4 is the first activation point.",
+        )
+        marker = "//  PROJECT A EVENT 0.2"
 
-
-def test_committed_candidate_artifact_is_generated_and_hash_verified():
-    committed = __import__("json").loads(PAYLOADS.read_text(encoding="utf-8"))
-    assert committed == sample_sequence()
-    result = validate_file(PAYLOADS)
-    assert result["count"] == 6
-    assert {item["status"] for item in result["results"]} == {"PASS"}
-
-
-def test_malformed_candidate_is_rejected_without_weakening_schema():
-    malformed = sample_sequence()["snr_rejection_ready"] | {"schema_version": "0.1"}
-    with pytest.raises(ContractError, match="schema_const"):
-        validate_contract(EVENT_SCHEMA_V0_2, malformed)
-
-
-def test_range_middle_never_becomes_analysis_ready():
-    sensor = ProjectASensor()
-    event = sensor.observe(_candidate(range_middle=True, reaction="SWEEP_RECLAIM"))
-    assert event is not None
-    assert event["event_class"] == "TELEMETRY"
-    assert event["disposition"]["reason_code"] == "RANGE_MIDDLE"
-    assert event["setup_id"] is None
-
-
-def test_committed_range_middle_evidence_records_the_negative_outcome():
-    artifact = __import__("json").loads(RANGE_MIDDLE_EVIDENCE.read_text(encoding="utf-8"))
-    assert artifact["expected_analysis_ready"] is False
-    assert set(artifact["assertions"].values()) == {True}
-    observed = artifact["observed_event"]
-    assert observed["event_class"] == "TELEMETRY"
-    assert validate_contract(EVENT_SCHEMA_V0_2, observed) is observed
-
-
-def test_same_bar_same_semantic_evidence_is_deduplicated():
-    sensor = ProjectASensor()
-    evidence = _candidate()
-    assert sensor.observe(evidence) is not None
-    assert sensor.observe(evidence) is None
-
-
-def test_new_reaction_can_emit_immediately_without_cooldown():
-    sensor = ProjectASensor()
-    evidence = _candidate()
-    candidate = sensor.observe(evidence)
-    ready = sensor.observe(replace(evidence, reaction="SWEEP_RECLAIM", close=2420.3))
-    assert candidate and ready
-    assert ready["event_type"] == "SNR_REJECTION_READY"
-    assert ready["setup_id"] == candidate["setup_id"]
-
-
-def test_new_strong_break_can_emit_immediately_without_arrow_gate():
-    sensor = ProjectASensor()
-    evidence = _candidate(
-        target_side="RESISTANCE", snr_low=2424.5, snr_high=2425.0,
-        close=2424.8, expansion="UP", momentum_1m="UP", momentum_5m="UP",
-        hpa_1m="PREMIUM", hpa_5m="PREMIUM",
-    )
-    candidate = sensor.observe(evidence)
-    ready = sensor.observe(replace(evidence, strong_break=True, close=2425.4, arrow_5s=None))
-    assert candidate and ready
-    assert ready["event_type"] == "SNR_BREAK_READY"
-    assert ready["payload"]["optional_5s_arrow"] is None
-
-
-@pytest.mark.parametrize(
-    ("change", "event_type"),
-    [(dict(invalidated=True), "SETUP_INVALIDATED"), (dict(expired=True), "SETUP_EXPIRED")],
-)
-def test_lifecycle_changes_emit_immediately_and_keep_setup_id(change, event_type):
-    sensor = ProjectASensor()
-    candidate = sensor.observe(_candidate())
-    lifecycle = sensor.observe(replace(_candidate(), **change))
-    assert candidate and lifecycle
-    assert lifecycle["event_type"] == event_type
-    assert lifecycle["setup_id"] == candidate["setup_id"]
-    assert lifecycle["causation_id"] == candidate["event_id"]
-
-
-def test_fingerprint_uses_semantics_not_json_member_order():
-    sensor = ProjectASensor()
-    event = sensor.observe(_candidate())
-    assert event is not None
-    assert event["source"]["payload_hash"].startswith("sha256:")
-    assert len(event["source"]["payload_hash"]) == 71
-
-
-def test_project_a_source_preserves_legacy_session_b_bytes_outside_owned_blocks():
-    source = PINE.read_text(encoding="utf-8").replace("\r\n", "\n")
-    source = source.replace("//  Version: v0.4.0-project-a-shadow", "//  Version: v0.3.0")
-    source = source.replace(
-        "//  Legacy Phase 2/3 behavior remains alert-silent. The isolated Project A\n"
-        "//  Event 0.2 surface added below can call alert() only when its default-off\n"
-        "//  shadow feature flag is explicitly enabled on XAUUSD 1m.",
-        "//  Phase 2/3 ALERT-SILENT: table and telemetry variables only. This script has\n"
-        "//  no alert(), alertcondition(), webhook call, strategy order, or active\n"
-        "//  VERDICT JSON serialization. Phase 4 is the first activation point.",
-    )
     input_start = source.index("// Project A does not alter any legacy plot")
     l1_marker = source.index("//  L1", input_start)
     input_end = source.rfind("// ", input_start, l1_marker)
     source = source[:input_start] + source[input_end:]
-    project_marker = source.index("//  PROJECT A EVENT 0.2")
+
+    project_marker = source.index(marker)
     block_start = source.rfind("// ", 0, project_marker)
     block_end = source.index("// ─── Diagnostic rendering", block_start)
-    source = source[:block_start] + source[block_end:]
-    assert sha256(source.encode("utf-8")).hexdigest() == SESSION_B_SHA256
+    return source[:block_start] + source[block_end:]
 
 
-def test_pine_surface_is_default_off_shadow_safe_and_state_change_driven():
+def _git_blob_sha(data: bytes) -> str:
+    return sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+
+
+def test_immutable_export_provenance_is_a_real_committed_git_blob():
+    original = subprocess.check_output(
+        ["git", "show", f"{SOURCE_COMMIT}:{PINE_PATH}"],
+        cwd=ROOT,
+    )
+    assert _git_blob_sha(original) == SOURCE_BLOB
+    legacy = _strip_project_a(original.decode("utf-8"), corrected=False)
+    assert sha256(legacy.encode("utf-8")).hexdigest() == SOURCE_LEGACY_SHA256
+
+
+def test_corrected_source_preserves_the_same_immutable_legacy_surface():
+    legacy = _strip_project_a(PINE.read_text(encoding="utf-8"), corrected=True)
+    assert sha256(legacy.encode("utf-8")).hexdigest() == SOURCE_LEGACY_SHA256
+
+
+def test_committed_wire_v1_artifacts_are_generated_and_shape_valid():
+    committed = json.loads(PAYLOADS.read_text(encoding="utf-8"))
+    assert committed == sample_sequence()
+    result = validate_file(PAYLOADS)
+    assert result["count"] == 4
+    assert {item["status"] for item in result["results"]} == {"PASS"}
+    for document in committed.values():
+        assert validate_wire_event_v1_shape(document) is document
+
+
+def test_default_off_emits_nothing_and_does_not_build_hidden_lifecycle():
+    sensor = ProjectASensor()
+    assert sensor.observe(_evidence()) is None
+    assert sensor.observe(
+        replace(
+            _evidence(),
+            occurred_at="2026-07-16T01:01:00Z",
+            emitted_at="2026-07-16T01:01:01Z",
+        )
+    ) is None
+
+
+def test_unambiguous_new_expansion_can_emit_only_setup_candidate():
+    event = ProjectASensor(enabled=True).observe(_evidence())
+    assert event is not None
+    assert event["event_class"] == "SETUP_CANDIDATE"
+    assert event["event_type"] == "SETUP_CANDIDATE"
+    assert event["hypothesis"] is None
+    assert event["path"] is None
+    assert event["setup_origin"] is not None
+    assert event["evidence"]["snr"]["side"] == "SUPPORT"
+    assert event["evidence"]["hpa"] == []
+    assert event["evidence"]["momentum"] == []
+    assert event["evidence"]["rejection"] is None
+    assert event["evidence"]["break"] is None
+    assert event["evidence"]["expiry"] is None
+
+
+def test_ambiguous_expansion_fails_closed_to_telemetry_without_setup_origin():
+    event = ProjectASensor(enabled=True).observe(
+        _evidence(expansion_new_up=True, expansion_new_down=True)
+    )
+    assert event is not None
+    assert event["event_class"] == "TELEMETRY"
+    assert event["event_type"] == "EXPANSION_UPDATE"
+    assert event["setup_origin"] is None
+    assert event["evidence"]["snr"] is None
+
+
+def test_no_fabricated_analysis_ready_or_lifecycle_path_exists():
+    sensor = ProjectASensor(enabled=True)
+    cases = [
+        _evidence(),
+        _evidence(
+            occurred_at="2026-07-16T01:01:00Z",
+            emitted_at="2026-07-16T01:01:01Z",
+            expansion_new_up=True,
+            expansion_new_down=True,
+        ),
+        _evidence(
+            occurred_at="2026-07-16T01:02:00Z",
+            emitted_at="2026-07-16T01:02:01Z",
+            expansion_new_up=False,
+            expansion_new_down=False,
+            level_changed=True,
+        ),
+    ]
+    events = [sensor.observe(case) for case in cases]
+    assert all(event is not None for event in events)
+    assert {event["event_class"] for event in events if event} <= {
+        "TELEMETRY",
+        "SETUP_CANDIDATE",
+    }
+
+
+def test_wire_producer_owns_no_receipt_or_canonical_hash_fields():
+    event = ProjectASensor(enabled=True).observe(_evidence())
+    assert event is not None
+    assert "received_at" not in event
+    assert "canonical_content_hash" not in event
+    assert "raw_bytes_hash" not in event
+    assert "receipt_id" not in event
+    assert event["source"]["producer_checksum"] is None
+    assert event["emitted_at"] == "2026-07-16T01:00:01Z"
+
+
+def test_same_closed_bar_and_evidence_is_suppressed_without_cooldown():
+    sensor = ProjectASensor(enabled=True)
+    evidence = _evidence()
+    assert sensor.observe(evidence) is not None
+    assert sensor.observe(evidence) is None
+    assert sensor.observe(
+        replace(
+            evidence,
+            occurred_at="2026-07-16T01:01:00Z",
+            emitted_at="2026-07-16T01:01:01Z",
+        )
+    ) is not None
+
+
+def test_pine_active_surface_is_wire_v1_default_off_and_fact_only():
     source = PINE.read_text(encoding="utf-8")
+    active = source[source.index("//  ACTIVE PROJECT A WIRE EVENT V1"):]
+    active = active[:active.index("// ─── Diagnostic rendering")]
+
     assert 'input.bool(false, "Enable Project A shadow alerts"' in source
-    assert "projectAEnabled and paSafetyOk and barstate.isconfirmed and barstate.isrealtime" in source
+    assert (
+        "projectAEnabled and paSafetyOk and barstate.isconfirmed and "
+        "barstate.isrealtime"
+    ) in active
     assert 'syminfo.ticker == "XAUUSD"' in source
     assert 'timeframe.period == "1"' in source
-    assert '\\"live_execution\\":false' in source
-    assert '\\"environment\\":\\"MT5_DEMO\\"' in source
-    assert '\\"mode\\":\\"SHADOW\\"' in source
-    assert "paSemanticFingerprint != paLastFingerprint" in source
-    assert "cooldown" not in source.lower()
+    assert '\\"contract_family\\":\\"PROJECT_A_WIRE_EVENT\\"' in active
+    assert '\\"schema_version\\":\\"1.0\\"' in active
+    assert '\\"mode\\":\\"SHADOW\\"' in active
+    assert '\\"execution_environment\\":\\"MT5_DEMO\\"' in active
+    assert '\\"live_execution\\":false' in active
+    assert "alert(paV1WireEvent, alert.freq_once_per_bar_close)" in active
+    assert "alert(paEnvelope" not in source
 
 
-def test_pine_ready_paths_do_not_gate_on_optional_5s_arrow():
+def test_pine_active_surface_excludes_unowned_and_unratified_semantics():
     source = PINE.read_text(encoding="utf-8")
-    ready_start = source.index("bool paReactionReady")
-    ready_end = source.index("bool paInvalidated", ready_start)
-    ready_logic = source[ready_start:ready_end]
-    assert "rekoState" not in ready_logic
-    assert "arrow" not in ready_logic.lower()
-    assert 'string paArrowJson = "null"' in source
-    assert 'paEventType := "SNR_REJECTION_READY"' in source
-    assert 'paEventType := "SNR_BREAK_READY"' in source
+    active = source[source.index("//  ACTIVE PROJECT A WIRE EVENT V1"):]
+    active = active[:active.index("// ─── Diagnostic rendering")]
+
+    for forbidden in (
+        "received_at",
+        "canonical_content_hash",
+        "raw_bytes_hash",
+        "payload_hash",
+        "f_paSha256",
+        "request.security",
+        "ANALYSIS_READY",
+        "SNR_REJECTION_READY",
+        "SNR_BREAK_READY",
+        "SETUP_EXPIRED",
+        "projectAExpiryBars",
+        "paNearTarget",
+        "paBreakBuffer",
+        "paBody",
+        "paWick",
+        "paValidHpa",
+    ):
+        assert forbidden not in active
+    assert '\\"hpa\\":[]' in active
+    assert '\\"momentum\\":[]' in active
+    assert '\\"hypothesis\\":null' in active
+    assert '\\"path\\":null' in active
 
 
-def test_pine_uses_exact_frozen_lifecycle_values_and_real_sha256_shape():
+def test_retired_v02_semantics_and_output_are_explicitly_disabled():
     source = PINE.read_text(encoding="utf-8")
-    assert 'paEventType := "SETUP_INVALIDATED"' in source
-    assert 'paDisposition := "STRUCTURAL_BREAK"' in source
-    assert 'paEventType := "SETUP_EXPIRED"' in source
-    assert 'paDisposition := "EXPIRED"' in source
-    assert '"sha256:" + paPayloadHash' in source
-    assert "f_paSha256(paPayload)" in source
+    retired = source[source.index("//  RETIRED PROJECT A EVENT 0.2 MODEL"):]
+    retired = retired[:retired.index("//  ACTIVE PROJECT A WIRE EVENT V1")]
+    assert "bool paValidHpa = false" in retired
+    assert 'string paHpa5m = "UNAVAILABLE"' in retired
+    assert 'string paHpa15m = "UNAVAILABLE"' in retired
+    assert 'string paHpa30m = "UNAVAILABLE"' in retired
+    assert retired.count("f_paHpa()") == 1
+    assert retired.count("f_paMomentum()") == 1
+    assert "bool paNewEncounter = false" in retired
+    assert "bool paNearTarget = false" in retired
+    assert "bool paContextValid = false" in retired
+    assert "bool paReactionReady = false" in retired
+    assert "float paBreakBuffer = na" in retired
+    assert "bool paStrongBreakUp = false" in retired
+    assert "bool paStrongBreakDown = false" in retired
+    assert "bool paBreakReady = false" in retired
+    assert "bool paInvalidated = false" in retired
+    assert "bool paExpired = false" in retired
+    assert "bool paShouldEmit = false" in retired
+    assert "f_paSha256(paPayload)" not in retired
+    assert "alert(paEnvelope" not in retired

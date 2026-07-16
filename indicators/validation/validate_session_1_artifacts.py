@@ -1,4 +1,4 @@
-"""Validate Session 1 candidate payloads against frozen Event 0.2.
+"""Validate corrected Session 1 engineering fixtures as Wire Event V1.
 
 This is a read-only Pine artifact utility. It does not ingest, persist, route,
 or send events.
@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from hashlib import sha256
 from pathlib import Path
 
-from contracts import EVENT_SCHEMA_V0_2, canonical_json, validate_contract
+from contracts import PROJECT_A_WIRE_EVENT_V1, validate_wire_event_v1_shape
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PAYLOADS = (
@@ -22,22 +21,21 @@ def validate_file(path: Path) -> dict:
     documents = json.loads(path.read_text(encoding="utf-8"))
     outcomes = []
     for name, document in documents.items():
-        validate_contract(EVENT_SCHEMA_V0_2, document)
-        actual_hash = "sha256:" + sha256(
-            canonical_json(document["payload"]).encode("utf-8")
-        ).hexdigest()
-        if document["source"]["payload_hash"] != actual_hash:
-            raise ValueError(f"{name}: source.payload_hash does not match canonical payload")
+        validate_wire_event_v1_shape(document)
         outcomes.append(
             {
                 "name": name,
                 "event_class": document["event_class"],
                 "event_type": document["event_type"],
-                "setup_id": document["setup_id"],
+                "setup_origin": document["setup_origin"],
                 "status": "PASS",
             }
         )
-    return {"contract": EVENT_SCHEMA_V0_2, "count": len(outcomes), "results": outcomes}
+    return {
+        "contract": PROJECT_A_WIRE_EVENT_V1,
+        "count": len(outcomes),
+        "results": outcomes,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:

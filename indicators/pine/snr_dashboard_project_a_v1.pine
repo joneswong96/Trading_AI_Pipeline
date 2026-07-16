@@ -1,7 +1,7 @@
 //@version=6
 // ============================================================================
 //  snrDashboard — SNR Rebuild Engine · Phase 2 Dashboard Session B
-//  Version: v0.4.0-project-a-shadow
+//  Version: v1.0.0-project-a-wire-shadow
 //  ---------------------------------------------------------------------------
 //  One decision engine, wired only from the six signed-off Phase-1 libraries.
 //  L1 Sensors, L2 State, L3 Decision, and L4 Telemetry are separated below.
@@ -11,7 +11,7 @@
 //  pass, the verdict fails loud to WAIT + CONFLICT (PQ5).
 //
 //  Legacy Phase 2/3 behavior remains alert-silent. The isolated Project A
-//  Event 0.2 surface added below can call alert() only when its default-off
+//  Wire Event V1 surface added below can call alert() only when its default-off
 //  shadow feature flag is explicitly enabled on XAUUSD 1m.
 // ============================================================================
 indicator("SNR Dashboard [P2 Session B]", overlay = true, max_lines_count = 4)
@@ -28,9 +28,8 @@ int vWin = 24
 
 // Project A does not alter any legacy plot, drawing, table, gate, or default.
 // It is an evidence sensor, not the legacy VERDICT and not trade authority.
-string projectAGroup = "Project A — Event 0.2 shadow sensor"
+string projectAGroup = "Project A — Wire Event V1 shadow sensor"
 bool projectAEnabled = input.bool(false, "Enable Project A shadow alerts", group = projectAGroup)
-int projectAExpiryBars = input.int(30, "Setup expiry (closed 1m bars)", minval = 1, group = projectAGroup)
 
 // ════════════════════════════════════════════════════════════════════════════
 //  L1 — SENSORS: facts only, supplied by Phase-1 libraries
@@ -225,9 +224,9 @@ bool telemetryJsonEmitted = false
 string telemetryOutputMode = "VARIABLES_ONLY_SILENT_NOT_EMITTED"
 
 // ════════════════════════════════════════════════════════════════════════════
-//  PROJECT A EVENT 0.2 — default-off XAUUSD 1m evidence sensor
-//  This block owns no plots or decision authority. It does not read or change
-//  the legacy VERDICT. Every event is SHADOW / MT5_DEMO / live_execution=false.
+//  RETIRED PROJECT A EVENT 0.2 MODEL — retained only as inert engineering history
+//  All semantic gates and the output call are disabled below. The active Wire
+//  Event V1 producer follows this block and owns no trusted-ingress fields.
 // ════════════════════════════════════════════════════════════════════════════
 f_paBool(bool value) => value ? "true" : "false"
 f_paNullable(string value) => str.length(value) == 0 ? "null" : "\"" + value + "\""
@@ -394,34 +393,34 @@ f_paSha256(string message) =>
         h7 := f_paU32(h7 + h)
     f_paHex8(h0) + f_paHex8(h1) + f_paHex8(h2) + f_paHex8(h3) + f_paHex8(h4) + f_paHex8(h5) + f_paHex8(h6) + f_paHex8(h7)
 
-string paHpa1m = request.security(syminfo.tickerid, "1", f_paHpa(), barmerge.gaps_off, barmerge.lookahead_off)
-string paHpa5m = request.security(syminfo.tickerid, "5", f_paHpa(), barmerge.gaps_off, barmerge.lookahead_off)
-string paHpa15m = request.security(syminfo.tickerid, "15", f_paHpa(), barmerge.gaps_off, barmerge.lookahead_off)
-string paHpa30m = request.security(syminfo.tickerid, "30", f_paHpa(), barmerge.gaps_off, barmerge.lookahead_off)
-int paMomentum5sValue = request.security(syminfo.tickerid, "5S", f_paMomentum(), barmerge.gaps_off, barmerge.lookahead_off)
-int paMomentum30mValue = request.security(syminfo.tickerid, "30", f_paMomentum(), barmerge.gaps_off, barmerge.lookahead_off)
-int paLowerEvidenceTime = request.security(syminfo.tickerid, "5S", time_close, barmerge.gaps_off, barmerge.lookahead_off)
+string paHpa1m = "UNAVAILABLE"
+string paHpa5m = "UNAVAILABLE"
+string paHpa15m = "UNAVAILABLE"
+string paHpa30m = "UNAVAILABLE"
+int paMomentum5sValue = 0
+int paMomentum30mValue = 0
+int paLowerEvidenceTime = na
 string paMomentum5s = f_paDirection(paMomentum5sValue)
 string paMomentum1m = f_paDirection(volumeState.m1.dir)
 string paMomentum5m = f_paDirection(volumeState.m5.dir)
 string paMomentum15m = f_paDirection(volumeState.m15.dir)
 string paMomentum30m = f_paDirection(paMomentum30mValue)
 int paHpaEdgeCount = (paHpa1m != "MIDDLE" ? 1 : 0) + (paHpa5m != "MIDDLE" ? 1 : 0) + (paHpa15m != "MIDDLE" ? 1 : 0) + (paHpa30m != "MIDDLE" ? 1 : 0)
-bool paValidHpa = paHpaEdgeCount >= 2
+bool paValidHpa = false // Unratified HPA proxy/concurrence cannot grant readiness.
 bool paSymbolOk = syminfo.ticker == "XAUUSD"
 bool paTimeframeOk = timeframe.period == "1"
 bool paSafetyOk = paSymbolOk and paTimeframeOk
 bool paRangeMiddle = structureState == ss.Struct.ranging and not atSupportEdge and not atResistanceEdge and not supportInsideBand and not resistanceInsideBand
 
-bool paUpIsLatest = expLongFresh and (not expShortFresh or expansion.upAgo <= expansion.dnAgo)
-bool paDownIsLatest = expShortFresh and (not expLongFresh or expansion.dnAgo < expansion.upAgo)
-string paTargetSide = paUpIsLatest and resistanceEligible ? "RESISTANCE" : paDownIsLatest and supportEligible ? "SUPPORT" : "NONE"
-float paTargetLow = paTargetSide == "RESISTANCE" ? telemetryShortLevelBandLow : paTargetSide == "SUPPORT" ? telemetryLongLevelBandLow : na
-float paTargetHigh = paTargetSide == "RESISTANCE" ? telemetryShortLevelBandHigh : paTargetSide == "SUPPORT" ? telemetryLongLevelBandHigh : na
-float paTargetCentre = na(paTargetLow) or na(paTargetHigh) ? na : (paTargetLow + paTargetHigh) / 2
-float paTargetDistance = na(paTargetCentre) ? na : math.abs(close - paTargetCentre)
-bool paNearTarget = not na(paTargetDistance) and not na(atr5) and paTargetDistance <= atr5
-bool paContextValid = paSafetyOk and paTargetSide != "NONE" and paNearTarget and paValidHpa and not paRangeMiddle
+bool paUpIsLatest = false
+bool paDownIsLatest = false
+string paTargetSide = "NONE"
+float paTargetLow = na
+float paTargetHigh = na
+float paTargetCentre = na
+float paTargetDistance = na
+bool paNearTarget = false
+bool paContextValid = false // One-ATR proximity and HPA assumptions are retired.
 
 var bool paSetupActive = false
 var bool paSetupClosed = false
@@ -437,8 +436,8 @@ var string paPath = ""
 var string paLastEventId = ""
 var string paLastFingerprint = ""
 
-bool paDifferentTarget = not paSetupActive or paActiveSide != paTargetSide or na(paActiveLow) or na(paTargetLow) or math.abs(paActiveLow - paTargetLow) > syminfo.mintick or math.abs(paActiveHigh - paTargetHigh) > syminfo.mintick
-bool paNewEncounter = paContextValid and paDifferentTarget
+bool paDifferentTarget = false
+bool paNewEncounter = false
 if paNewEncounter
     paSetupActive := true
     paSetupClosed := false
@@ -455,29 +454,29 @@ if paNewEncounter
     paSetupId := "setup_" + setupSuffix
     paCorrelationId := "corr_" + setupSuffix
 
-float paBarRange = high - low
-float paBody = math.abs(close - open)
-float paLowerWick = math.min(open, close) - low
-float paUpperWick = high - math.max(open, close)
-bool paTouchesActive = paSetupActive and high >= paActiveLow and low <= paActiveHigh
-bool paLongSweep = paTouchesActive and paActiveSide == "SUPPORT" and low < paActiveLow and close > paActiveHigh
-bool paShortSweep = paTouchesActive and paActiveSide == "RESISTANCE" and high > paActiveHigh and close < paActiveLow
-bool paLongEngulf = paTouchesActive and paActiveSide == "SUPPORT" and close > open and close > high[1]
-bool paShortEngulf = paTouchesActive and paActiveSide == "RESISTANCE" and close < open and close < low[1]
-bool paLongReject = paTouchesActive and paActiveSide == "SUPPORT" and close > open and close >= paActiveHigh and paLowerWick >= paBody
-bool paShortReject = paTouchesActive and paActiveSide == "RESISTANCE" and close < open and close <= paActiveLow and paUpperWick >= paBody
-string paReaction = paLongSweep or paShortSweep ? "SWEEP_RECLAIM" : paLongEngulf or paShortEngulf ? "ENGULF" : paLongReject or paShortReject ? "REJECT" : ""
-bool paReactionReady = paSetupActive and not paSetupClosed and str.length(paHypothesis) == 0 and str.length(paReaction) > 0 and paValidHpa and not paRangeMiddle
+float paBarRange = na
+float paBody = na
+float paLowerWick = na
+float paUpperWick = na
+bool paTouchesActive = false
+bool paLongSweep = false
+bool paShortSweep = false
+bool paLongEngulf = false
+bool paShortEngulf = false
+bool paLongReject = false
+bool paShortReject = false
+string paReaction = ""
+bool paReactionReady = false // Unratified wick/body rejection formulas are retired.
 
-int paUpMomentumCount = (paMomentum1m == "UP" ? 1 : 0) + (paMomentum5m == "UP" ? 1 : 0) + (paMomentum15m == "UP" ? 1 : 0) + (paMomentum30m == "UP" ? 1 : 0)
-int paDownMomentumCount = (paMomentum1m == "DOWN" ? 1 : 0) + (paMomentum5m == "DOWN" ? 1 : 0) + (paMomentum15m == "DOWN" ? 1 : 0) + (paMomentum30m == "DOWN" ? 1 : 0)
-float paBreakBuffer = atr5 * 0.3
-bool paStrongBreakUp = paSetupActive and paActiveSide == "RESISTANCE" and close > paActiveHigh + paBreakBuffer and close[1] <= paActiveHigh + paBreakBuffer and close > open and paBarRange > 0 and paBody / paBarRange >= 0.55 and paUpMomentumCount >= 2
-bool paStrongBreakDown = paSetupActive and paActiveSide == "SUPPORT" and close < paActiveLow - paBreakBuffer and close[1] >= paActiveLow - paBreakBuffer and close < open and paBarRange > 0 and paBody / paBarRange >= 0.55 and paDownMomentumCount >= 2
-bool paBreakReady = not paSetupClosed and str.length(paHypothesis) == 0 and (paStrongBreakUp or paStrongBreakDown) and paValidHpa and not paRangeMiddle
+int paUpMomentumCount = 0
+int paDownMomentumCount = 0
+float paBreakBuffer = na
+bool paStrongBreakUp = false
+bool paStrongBreakDown = false
+bool paBreakReady = false // Buffer/body/momentum break rules are retired.
 
-bool paInvalidated = paSetupActive and not paSetupClosed and str.length(paHypothesis) > 0 and (paHypothesis == "LONG" ? close < paActiveLow - paBreakBuffer : close > paActiveHigh + paBreakBuffer)
-bool paExpired = paSetupActive and not paSetupClosed and not na(paSetupStartBar) and bar_index - paSetupStartBar >= projectAExpiryBars
+bool paInvalidated = false // No unratified structural threshold owns lifecycle.
+bool paExpired = false // No unratified thirty-bar expiry owns lifecycle.
 string paLevelState = paTargetSide + "|" + str.tostring(paTargetLow) + "|" + str.tostring(paTargetHigh)
 bool paTelemetryChanged = expansion.newUp or expansion.newDn or paLevelState != paLevelState[1]
 
@@ -541,24 +540,66 @@ else
 bool paHasEvent = str.length(paEventType) > 0
 string paOccurredAt = f_paIso(time_close)
 string paSemanticFingerprint = paEventType + "|" + (paSetupOptional ? "NONE" : paSetupId) + "|" + paOccurredAt + "|" + paTrigger + "|" + paReasonCode + "|" + str.tostring(paActiveLow) + "|" + str.tostring(paActiveHigh) + "|" + paHpa1m + "|" + paHpa5m + "|" + paHpa15m + "|" + paHpa30m + "|" + paMomentum1m + "|" + paMomentum5m + "|" + paMomentum15m + "|" + paMomentum30m + "|" + paLifecycleState
-bool paShouldEmit = projectAEnabled and paSafetyOk and barstate.isconfirmed and barstate.isrealtime and paHasEvent and paSemanticFingerprint != paLastFingerprint
+bool paShouldEmit = false // Event 0.2 producer is permanently retired.
 
 if paShouldEmit
     string paCreatedAt = f_paIso(timenow)
     string paLowerTimeJson = na(paLowerEvidenceTime) ? "null" : "\"" + f_paIso(paLowerEvidenceTime) + "\""
     string paArrowJson = "null" // No reliable lower-TF Arrow series is exposed by the current libraries.
     string paPayload = "{\"bar_time\":\"" + paOccurredAt + "\",\"created_time\":\"" + paCreatedAt + "\",\"hpa\":{\"15m\":\"" + paHpa15m + "\",\"1m\":\"" + paHpa1m + "\",\"30m\":\"" + paHpa30m + "\",\"5m\":\"" + paHpa5m + "\",\"valid\":" + f_paBool(paValidHpa) + "},\"lifecycle_state\":\"" + paLifecycleState + "\",\"live_execution\":false,\"lower_timeframe_evidence_time\":" + paLowerTimeJson + ",\"momentum\":{\"15m\":\"" + paMomentum15m + "\",\"1m\":\"" + paMomentum1m + "\",\"30m\":\"" + paMomentum30m + "\",\"5m\":\"" + paMomentum5m + "\",\"5s\":\"" + paMomentum5s + "\",\"expansion\":\"CLEAN_PUSH\"},\"optional_5s_arrow\":" + paArrowJson + ",\"reason\":\"" + paReasonCode + "\",\"risk_constraints\":{\"environment\":\"MT5_DEMO\",\"max_spread_points\":10,\"mode\":\"SHADOW\",\"rr\":1},\"snr\":{\"high\":" + f_paNumber(paActiveHigh) + ",\"low\":" + f_paNumber(paActiveLow) + ",\"side\":\"" + paActiveSide + "\",\"type\":\"CLASSIC\",\"valid\":" + f_paBool(not na(paActiveLow) and not na(paActiveHigh)) + "},\"structure\":\"" + structureText + "\",\"trigger\":\"" + paTrigger + "\",\"trigger_price\":" + str.tostring(close) + "}"
-    string paPayloadHash = f_paSha256(paPayload)
+    string paPayloadHash = "" // Trusted Python ingress owns canonical SHA-256.
     string paSetupJson = paSetupOptional ? "null" : "\"" + paSetupId + "\""
     string paHypothesisJson = str.length(paHypothesis) == 0 or paEventClass == "SETUP_CANDIDATE" or paEventClass == "TELEMETRY" ? "null" : "\"" + paHypothesis + "\""
     string paPathJson = str.length(paPath) == 0 or paEventClass == "SETUP_CANDIDATE" or paEventClass == "TELEMETRY" ? "null" : "\"" + paPath + "\""
     string paCorrelation = paSetupOptional ? "corr_XAUUSD_1m_" + f_paCompact(time_close) + "_" + paEventType : paCorrelationId
     string paEventId = "evt_XAUUSD_1m_" + f_paCompact(time_close) + "_" + paEventType + "_" + paTrigger
     string paCausationJson = str.length(paLastEventId) == 0 ? "null" : "\"" + paLastEventId + "\""
-    string paEnvelope = "{\"schema_version\":\"0.2\",\"event_id\":\"" + paEventId + "\",\"correlation_id\":\"" + paCorrelation + "\",\"causation_id\":" + paCausationJson + ",\"occurred_at\":\"" + paOccurredAt + "\",\"received_at\":\"" + paCreatedAt + "\",\"source\":{\"producer\":\"snr-dashboard-project-a-v1\",\"engine\":\"MASTER_DASHBOARD\",\"provenance\":\"TRADINGVIEW\",\"payload_hash\":\"sha256:" + paPayloadHash + "\",\"sensitive_fields_redacted\":true},\"instrument\":{\"symbol\":\"XAUUSD\",\"venue\":\"" + syminfo.prefix + "\",\"point_size\":" + str.tostring(syminfo.mintick) + "},\"timeframe\":\"1m\",\"event_class\":\"" + paEventClass + "\",\"event_type\":\"" + paEventType + "\",\"setup_id\":" + paSetupJson + ",\"hypothesis\":" + paHypothesisJson + ",\"path\":" + paPathJson + ",\"disposition\":{\"status\":\"" + paDisposition + "\",\"reason_code\":\"" + paReasonCode + "\",\"detail\":\"" + paDetail + "\"},\"payload\":" + paPayload + "}"
-    alert(paEnvelope, alert.freq_once_per_bar_close)
+    string paEnvelope = "" // Retired producer constructs no wire envelope.
+    // No alert call: Event 0.2 output is permanently disabled.
     paLastFingerprint := paSemanticFingerprint
     paLastEventId := paEventId
+
+// ════════════════════════════════════════════════════════════════════════════
+//  ACTIVE PROJECT A WIRE EVENT V1 — producer-owned facts only
+//  No HPA authority exists in the immutable source snapshot, so HPA is empty.
+//  No provisional HTF evidence is used for Setup Candidate eligibility, and no
+//  rejection, break, lifecycle, geometry, or Analysis Ready event is invented.
+// ════════════════════════════════════════════════════════════════════════════
+bool paV1SupportCandidate = expansion.newDn and not expansion.newUp and supportEligible
+bool paV1ResistanceCandidate = expansion.newUp and not expansion.newDn and resistanceEligible
+bool paV1Candidate = paV1SupportCandidate or paV1ResistanceCandidate
+string paV1Side = paV1SupportCandidate ? "SUPPORT" : paV1ResistanceCandidate ? "RESISTANCE" : "NONE"
+float paV1Low = paV1SupportCandidate ? telemetryLongLevelBandLow : paV1ResistanceCandidate ? telemetryShortLevelBandLow : na
+float paV1High = paV1SupportCandidate ? telemetryLongLevelBandHigh : paV1ResistanceCandidate ? telemetryShortLevelBandHigh : na
+string paV1SideCode = paV1Side == "SUPPORT" ? "S" : "R"
+int paV1LowTicks = na(paV1Low) ? 0 : int(math.round(paV1Low / syminfo.mintick))
+int paV1HighTicks = na(paV1High) ? 0 : int(math.round(paV1High / syminfo.mintick))
+string paV1EvidenceSuffix = "XAUUSD_1m_" + paV1SideCode + "_" + str.tostring(paV1LowTicks) + "_" + str.tostring(paV1HighTicks)
+string paV1SnrId = "snr_" + paV1EvidenceSuffix
+string paV1OriginId = "origin_" + paV1EvidenceSuffix
+string paV1AoiId = "aoi_" + paV1EvidenceSuffix
+string paV1CorrelationId = "corr_" + paV1EvidenceSuffix
+string paV1LevelState = str.tostring(telemetryLongLevelBandLow) + "|" + str.tostring(telemetryLongLevelBandHigh) + "|" + str.tostring(telemetryShortLevelBandLow) + "|" + str.tostring(telemetryShortLevelBandHigh)
+bool paV1TelemetryChanged = expansion.newUp or expansion.newDn or paV1LevelState != paV1LevelState[1]
+string paV1EventClass = paV1Candidate ? "SETUP_CANDIDATE" : "TELEMETRY"
+string paV1EventType = paV1Candidate ? "SETUP_CANDIDATE" : expansion.newUp or expansion.newDn ? "EXPANSION_UPDATE" : "SNR_UPDATE"
+bool paV1HasEvent = paV1Candidate or paV1TelemetryChanged
+string paV1OccurredAt = f_paIso(time_close)
+string paV1Fingerprint = paV1EventType + "|" + paV1OccurredAt + "|" + paV1Side + "|" + str.tostring(paV1Low) + "|" + str.tostring(paV1High)
+var string paV1LastFingerprint = ""
+bool paV1ShouldEmit = projectAEnabled and paSafetyOk and barstate.isconfirmed and barstate.isrealtime and paV1HasEvent and paV1Fingerprint != paV1LastFingerprint
+
+if paV1ShouldEmit
+    string paV1EmittedAt = f_paIso(timenow)
+    string paV1ProducerEventId = "wevt_XAUUSD_1m_" + f_paCompact(time_close) + "_" + paV1EventType
+    string paV1CorrelationJson = paV1Candidate ? "\"" + paV1CorrelationId + "\"" : "null"
+    string paV1SetupOriginJson = paV1Candidate ? "{\"origin_id\":\"" + paV1OriginId + "\",\"aoi_id\":\"" + paV1AoiId + "\"}" : "null"
+    string paV1SnrJson = paV1Candidate ? "{\"identity\":\"" + paV1SnrId + "\",\"type\":\"LEVEL_ENGINE\",\"low\":" + f_paNumber(paV1Low) + ",\"high\":" + f_paNumber(paV1High) + ",\"side\":\"" + paV1Side + "\"}" : "null"
+    string paV1Evidence = "{\"snr\":" + paV1SnrJson + ",\"hpa\":[],\"momentum\":[],\"trigger\":null,\"rejection\":null,\"break\":null,\"invalidation\":null,\"expiry\":null,\"entry_window\":null,\"geometry\":null}"
+    string paV1Source = "{\"producer\":\"snr-dashboard-project-a-v1\",\"profile\":\"project-a-shadow\",\"version\":\"1.0.0\",\"producer_checksum\":null,\"diagnostics\":{\"build_note\":\"immutable-export-2389d4c\"}}"
+    string paV1WireEvent = "{\"contract_family\":\"PROJECT_A_WIRE_EVENT\",\"schema_version\":\"1.0\",\"producer_event_id\":\"" + paV1ProducerEventId + "\",\"correlation_id\":" + paV1CorrelationJson + ",\"causation_id\":null,\"occurred_at\":\"" + paV1OccurredAt + "\",\"emitted_at\":\"" + paV1EmittedAt + "\",\"source\":" + paV1Source + ",\"symbol\":\"XAUUSD\",\"base_tf\":\"1m\",\"mode\":\"SHADOW\",\"execution_environment\":\"MT5_DEMO\",\"live_execution\":false,\"event_class\":\"" + paV1EventClass + "\",\"event_type\":\"" + paV1EventType + "\",\"hypothesis\":null,\"path\":null,\"setup_origin\":" + paV1SetupOriginJson + ",\"evidence\":" + paV1Evidence + ",\"extensions\":{}}"
+    alert(paV1WireEvent, alert.freq_once_per_bar_close)
+    paV1LastFingerprint := paV1Fingerprint
 
 // ─── Diagnostic rendering: one screenshot = complete decision state ────────
 f_bool(bool value) => value ? "TRUE" : "FALSE"
