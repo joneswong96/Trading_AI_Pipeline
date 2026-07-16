@@ -1,0 +1,428 @@
+{
+  "expired_lifecycle": {
+    "causation_id": "evt_XAUUSD_1m_20260716T000600Z_SETUP_CANDIDATE",
+    "correlation_id": "corr_XAUUSD_1m_20260716T000600Z_S_241975",
+    "disposition": {
+      "detail": "The deterministic setup observation window elapsed.",
+      "reason_code": "SETUP_WINDOW_ELAPSED",
+      "status": "EXPIRED"
+    },
+    "event_class": "LIFECYCLE",
+    "event_id": "evt_XAUUSD_1m_20260716T003600Z_SETUP_EXPIRED",
+    "event_type": "SETUP_EXPIRED",
+    "hypothesis": null,
+    "instrument": {
+      "point_size": 0.01,
+      "symbol": "XAUUSD",
+      "venue": "ICMARKETS"
+    },
+    "occurred_at": "2026-07-16T00:36:00Z",
+    "path": null,
+    "payload": {
+      "bar_time": "2026-07-16T00:36:00Z",
+      "created_time": "2026-07-16T00:36:01Z",
+      "hpa": {
+        "15m": "MIDDLE",
+        "1m": "DISCOUNT",
+        "30m": "MIDDLE",
+        "5m": "DISCOUNT",
+        "valid": true
+      },
+      "lifecycle_state": "EXPIRED",
+      "live_execution": false,
+      "lower_timeframe_evidence_time": null,
+      "momentum": {
+        "15m": "FLAT",
+        "1m": "DOWN",
+        "30m": "FLAT",
+        "5m": "DOWN",
+        "5s": null,
+        "expansion": "CLEAN_PUSH"
+      },
+      "optional_5s_arrow": null,
+      "reason": "SETUP_WINDOW_ELAPSED",
+      "risk_constraints": {
+        "environment": "MT5_DEMO",
+        "max_spread_points": 10,
+        "mode": "SHADOW",
+        "rr": 1.0
+      },
+      "snr": {
+        "high": 2420.0,
+        "low": 2419.5,
+        "side": "SUPPORT",
+        "type": "CLASSIC",
+        "valid": true
+      },
+      "structure": "RANGE",
+      "trigger": "STATE_CHANGE",
+      "trigger_price": 2420.1
+    },
+    "received_at": "2026-07-16T00:36:01Z",
+    "schema_version": "0.2",
+    "setup_id": "setup_XAUUSD_1m_20260716T000600Z_S_241975",
+    "source": {
+      "engine": "MASTER_DASHBOARD",
+      "payload_hash": "sha256:0626c75cfa5ea891d3cd8155f63abf0e4a617d5eaea12cc6dd032876cb991134",
+      "producer": "snr-dashboard-project-a-v1",
+      "provenance": "TRADINGVIEW",
+      "sensitive_fields_redacted": true
+    },
+    "timeframe": "1m"
+  },
+  "invalidated_lifecycle": {
+    "causation_id": "evt_XAUUSD_1m_20260716T000200Z_SNR_REJECTION_READY",
+    "correlation_id": "corr_XAUUSD_1m_20260716T000100Z_S_241975",
+    "disposition": {
+      "detail": "M1 closed beyond the structural invalidation level.",
+      "reason_code": "M1_STRUCTURE_BROKEN",
+      "status": "STRUCTURAL_BREAK"
+    },
+    "event_class": "LIFECYCLE",
+    "event_id": "evt_XAUUSD_1m_20260716T000300Z_SETUP_INVALIDATED",
+    "event_type": "SETUP_INVALIDATED",
+    "hypothesis": "LONG",
+    "instrument": {
+      "point_size": 0.01,
+      "symbol": "XAUUSD",
+      "venue": "ICMARKETS"
+    },
+    "occurred_at": "2026-07-16T00:03:00Z",
+    "path": "SNR_REJECTION",
+    "payload": {
+      "bar_time": "2026-07-16T00:03:00Z",
+      "created_time": "2026-07-16T00:03:01Z",
+      "hpa": {
+        "15m": "MIDDLE",
+        "1m": "DISCOUNT",
+        "30m": "MIDDLE",
+        "5m": "DISCOUNT",
+        "valid": true
+      },
+      "lifecycle_state": "INVALIDATED",
+      "live_execution": false,
+      "lower_timeframe_evidence_time": null,
+      "momentum": {
+        "15m": "FLAT",
+        "1m": "DOWN",
+        "30m": "FLAT",
+        "5m": "DOWN",
+        "5s": null,
+        "expansion": "CLEAN_PUSH"
+      },
+      "optional_5s_arrow": null,
+      "reason": "M1_STRUCTURE_BROKEN",
+      "risk_constraints": {
+        "environment": "MT5_DEMO",
+        "max_spread_points": 10,
+        "mode": "SHADOW",
+        "rr": 1.0
+      },
+      "snr": {
+        "high": 2420.0,
+        "low": 2419.5,
+        "side": "SUPPORT",
+        "type": "CLASSIC",
+        "valid": true
+      },
+      "structure": "RANGE",
+      "trigger": "STATE_CHANGE",
+      "trigger_price": 2419.2
+    },
+    "received_at": "2026-07-16T00:03:01Z",
+    "schema_version": "0.2",
+    "setup_id": "setup_XAUUSD_1m_20260716T000100Z_S_241975",
+    "source": {
+      "engine": "MASTER_DASHBOARD",
+      "payload_hash": "sha256:ef687972a2d09d719d0441428781adfb6ed1fa2a66c93eb98760262b4a2d7605",
+      "producer": "snr-dashboard-project-a-v1",
+      "provenance": "TRADINGVIEW",
+      "sensitive_fields_redacted": true
+    },
+    "timeframe": "1m"
+  },
+  "setup_candidate": {
+    "causation_id": null,
+    "correlation_id": "corr_XAUUSD_1m_20260716T000100Z_S_241975",
+    "disposition": {
+      "detail": "Valid HPA and SNR context with a clean expansion toward the level.",
+      "reason_code": "SNR_APPROACH_VALID",
+      "status": "ACCEPTED"
+    },
+    "event_class": "SETUP_CANDIDATE",
+    "event_id": "evt_XAUUSD_1m_20260716T000100Z_SETUP_CANDIDATE",
+    "event_type": "SETUP_CANDIDATE",
+    "hypothesis": null,
+    "instrument": {
+      "point_size": 0.01,
+      "symbol": "XAUUSD",
+      "venue": "ICMARKETS"
+    },
+    "occurred_at": "2026-07-16T00:01:00Z",
+    "path": null,
+    "payload": {
+      "bar_time": "2026-07-16T00:01:00Z",
+      "created_time": "2026-07-16T00:01:01Z",
+      "hpa": {
+        "15m": "MIDDLE",
+        "1m": "DISCOUNT",
+        "30m": "MIDDLE",
+        "5m": "DISCOUNT",
+        "valid": true
+      },
+      "lifecycle_state": "CANDIDATE",
+      "live_execution": false,
+      "lower_timeframe_evidence_time": null,
+      "momentum": {
+        "15m": "FLAT",
+        "1m": "DOWN",
+        "30m": "FLAT",
+        "5m": "DOWN",
+        "5s": null,
+        "expansion": "CLEAN_PUSH"
+      },
+      "optional_5s_arrow": null,
+      "reason": "SNR_APPROACH_VALID",
+      "risk_constraints": {
+        "environment": "MT5_DEMO",
+        "max_spread_points": 10,
+        "mode": "SHADOW",
+        "rr": 1.0
+      },
+      "snr": {
+        "high": 2420.0,
+        "low": 2419.5,
+        "side": "SUPPORT",
+        "type": "CLASSIC",
+        "valid": true
+      },
+      "structure": "RANGE",
+      "trigger": "STATE_CHANGE",
+      "trigger_price": 2420.1
+    },
+    "received_at": "2026-07-16T00:01:01Z",
+    "schema_version": "0.2",
+    "setup_id": "setup_XAUUSD_1m_20260716T000100Z_S_241975",
+    "source": {
+      "engine": "MASTER_DASHBOARD",
+      "payload_hash": "sha256:5351879f33f6f23fa8fbb86240329f4a53b61da470412ef8958e2171b76b838c",
+      "producer": "snr-dashboard-project-a-v1",
+      "provenance": "TRADINGVIEW",
+      "sensitive_fields_redacted": true
+    },
+    "timeframe": "1m"
+  },
+  "snr_rejection_ready": {
+    "causation_id": "evt_XAUUSD_1m_20260716T000100Z_SETUP_CANDIDATE",
+    "correlation_id": "corr_XAUUSD_1m_20260716T000100Z_S_241975",
+    "disposition": {
+      "detail": "Valid SNR reaction confirmed by a closed M1 bar.",
+      "reason_code": "M1_REACTION_CONFIRMED",
+      "status": "ACCEPTED"
+    },
+    "event_class": "ANALYSIS_READY",
+    "event_id": "evt_XAUUSD_1m_20260716T000200Z_SNR_REJECTION_READY",
+    "event_type": "SNR_REJECTION_READY",
+    "hypothesis": "LONG",
+    "instrument": {
+      "point_size": 0.01,
+      "symbol": "XAUUSD",
+      "venue": "ICMARKETS"
+    },
+    "occurred_at": "2026-07-16T00:02:00Z",
+    "path": "SNR_REJECTION",
+    "payload": {
+      "bar_time": "2026-07-16T00:02:00Z",
+      "created_time": "2026-07-16T00:02:01Z",
+      "hpa": {
+        "15m": "MIDDLE",
+        "1m": "DISCOUNT",
+        "30m": "MIDDLE",
+        "5m": "DISCOUNT",
+        "valid": true
+      },
+      "lifecycle_state": "ANALYSIS_READY",
+      "live_execution": false,
+      "lower_timeframe_evidence_time": "2026-07-16T00:01:55Z",
+      "momentum": {
+        "15m": "FLAT",
+        "1m": "UP",
+        "30m": "FLAT",
+        "5m": "DOWN",
+        "5s": null,
+        "expansion": "CLEAN_PUSH"
+      },
+      "optional_5s_arrow": null,
+      "reason": "M1_REACTION_CONFIRMED",
+      "risk_constraints": {
+        "environment": "MT5_DEMO",
+        "max_spread_points": 10,
+        "mode": "SHADOW",
+        "rr": 1.0
+      },
+      "snr": {
+        "high": 2420.0,
+        "low": 2419.5,
+        "side": "SUPPORT",
+        "type": "CLASSIC",
+        "valid": true
+      },
+      "structure": "RANGE",
+      "trigger": "SWEEP_RECLAIM",
+      "trigger_price": 2420.3
+    },
+    "received_at": "2026-07-16T00:02:01Z",
+    "schema_version": "0.2",
+    "setup_id": "setup_XAUUSD_1m_20260716T000100Z_S_241975",
+    "source": {
+      "engine": "MASTER_DASHBOARD",
+      "payload_hash": "sha256:e09c2f540347317da4b2cc228ac43a360b5f1553b6b18dbe799bab406ccc1924",
+      "producer": "snr-dashboard-project-a-v1",
+      "provenance": "TRADINGVIEW",
+      "sensitive_fields_redacted": true
+    },
+    "timeframe": "1m"
+  },
+  "snr_strong_break_ready": {
+    "causation_id": "evt_XAUUSD_1m_20260716T000400Z_SETUP_CANDIDATE",
+    "correlation_id": "corr_XAUUSD_1m_20260716T000400Z_R_242475",
+    "disposition": {
+      "detail": "M1 closed through the SNR with continuing directional momentum.",
+      "reason_code": "M1_STRONG_BREAK_CONFIRMED",
+      "status": "ACCEPTED"
+    },
+    "event_class": "ANALYSIS_READY",
+    "event_id": "evt_XAUUSD_1m_20260716T000500Z_SNR_BREAK_READY",
+    "event_type": "SNR_BREAK_READY",
+    "hypothesis": "LONG",
+    "instrument": {
+      "point_size": 0.01,
+      "symbol": "XAUUSD",
+      "venue": "ICMARKETS"
+    },
+    "occurred_at": "2026-07-16T00:05:00Z",
+    "path": "SNR_STRONG_BREAK",
+    "payload": {
+      "bar_time": "2026-07-16T00:05:00Z",
+      "created_time": "2026-07-16T00:05:01Z",
+      "hpa": {
+        "15m": "MIDDLE",
+        "1m": "PREMIUM",
+        "30m": "MIDDLE",
+        "5m": "PREMIUM",
+        "valid": true
+      },
+      "lifecycle_state": "ANALYSIS_READY",
+      "live_execution": false,
+      "lower_timeframe_evidence_time": null,
+      "momentum": {
+        "15m": "FLAT",
+        "1m": "UP",
+        "30m": "FLAT",
+        "5m": "UP",
+        "5s": null,
+        "expansion": "CLEAN_PUSH"
+      },
+      "optional_5s_arrow": null,
+      "reason": "M1_STRONG_BREAK_CONFIRMED",
+      "risk_constraints": {
+        "environment": "MT5_DEMO",
+        "max_spread_points": 10,
+        "mode": "SHADOW",
+        "rr": 1.0
+      },
+      "snr": {
+        "high": 2425.0,
+        "low": 2424.5,
+        "side": "RESISTANCE",
+        "type": "CLASSIC",
+        "valid": true
+      },
+      "structure": "RANGE",
+      "trigger": "STRONG_BREAK",
+      "trigger_price": 2425.4
+    },
+    "received_at": "2026-07-16T00:05:01Z",
+    "schema_version": "0.2",
+    "setup_id": "setup_XAUUSD_1m_20260716T000400Z_R_242475",
+    "source": {
+      "engine": "MASTER_DASHBOARD",
+      "payload_hash": "sha256:8afa2b25deaba18976f808227735c74ff333e6bddcef08831057e5caea4935c3",
+      "producer": "snr-dashboard-project-a-v1",
+      "provenance": "TRADINGVIEW",
+      "sensitive_fields_redacted": true
+    },
+    "timeframe": "1m"
+  },
+  "telemetry": {
+    "causation_id": null,
+    "correlation_id": "corr_XAUUSD_1m_20260716T000000Z_SNR_UPDATE",
+    "disposition": {
+      "detail": "Market evidence changed without a make-sense setup.",
+      "reason_code": "EVIDENCE_STATE_UPDATED",
+      "status": "ACCEPTED"
+    },
+    "event_class": "TELEMETRY",
+    "event_id": "evt_XAUUSD_1m_20260716T000000Z_SNR_UPDATE",
+    "event_type": "SNR_UPDATE",
+    "hypothesis": null,
+    "instrument": {
+      "point_size": 0.01,
+      "symbol": "XAUUSD",
+      "venue": "ICMARKETS"
+    },
+    "occurred_at": "2026-07-16T00:00:00Z",
+    "path": null,
+    "payload": {
+      "bar_time": "2026-07-16T00:00:00Z",
+      "created_time": "2026-07-16T00:00:01Z",
+      "hpa": {
+        "15m": "MIDDLE",
+        "1m": "DISCOUNT",
+        "30m": "MIDDLE",
+        "5m": "DISCOUNT",
+        "valid": true
+      },
+      "lifecycle_state": "OBSERVING",
+      "live_execution": false,
+      "lower_timeframe_evidence_time": null,
+      "momentum": {
+        "15m": "FLAT",
+        "1m": "FLAT",
+        "30m": "FLAT",
+        "5m": "FLAT",
+        "5s": null,
+        "expansion": "CLEAN_PUSH"
+      },
+      "optional_5s_arrow": null,
+      "reason": "EVIDENCE_STATE_UPDATED",
+      "risk_constraints": {
+        "environment": "MT5_DEMO",
+        "max_spread_points": 10,
+        "mode": "SHADOW",
+        "rr": 1.0
+      },
+      "snr": {
+        "high": 2420.0,
+        "low": 2419.5,
+        "side": "SUPPORT",
+        "type": "CLASSIC",
+        "valid": true
+      },
+      "structure": "RANGE",
+      "trigger": "STATE_CHANGE",
+      "trigger_price": 2420.0
+    },
+    "received_at": "2026-07-16T00:00:01Z",
+    "schema_version": "0.2",
+    "setup_id": null,
+    "source": {
+      "engine": "MASTER_DASHBOARD",
+      "payload_hash": "sha256:1960337afb0869efffaca0d4829e5bdd76b66fee302a9f717bf670e3fada17ef",
+      "producer": "snr-dashboard-project-a-v1",
+      "provenance": "TRADINGVIEW",
+      "sensitive_fields_redacted": true
+    },
+    "timeframe": "1m"
+  }
+}

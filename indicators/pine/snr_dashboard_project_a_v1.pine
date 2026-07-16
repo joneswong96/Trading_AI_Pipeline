@@ -1,0 +1,717 @@
+//@version=6
+// ============================================================================
+//  snrDashboard — SNR Rebuild Engine · Phase 2 Dashboard Session B
+//  Version: v0.4.0-project-a-shadow
+//  ---------------------------------------------------------------------------
+//  One decision engine, wired only from the six signed-off Phase-1 libraries.
+//  L1 Sensors, L2 State, L3 Decision, and L4 Telemetry are separated below.
+//
+//  GO_D = G1_D AND G2_D AND G3_D AND G4_D AND NOT V1_D.
+//  Grade, legacyScore, and bias never gate or tie-break. If both candidates
+//  pass, the verdict fails loud to WAIT + CONFLICT (PQ5).
+//
+//  Legacy Phase 2/3 behavior remains alert-silent. The isolated Project A
+//  Event 0.2 surface added below can call alert() only when its default-off
+//  shadow feature flag is explicitly enabled on XAUUSD 1m.
+// ============================================================================
+indicator("SNR Dashboard [P2 Session B]", overlay = true, max_lines_count = 4)
+import Jonesy_Wong/expDetector/1 as exp
+import Jonesy_Wong/macdVol/1 as mv
+import Jonesy_Wong/rekoArrow/1 as rk
+import Jonesy_Wong/levelEngine/1 as le
+import Jonesy_Wong/dxyReader/3 as dx
+import Jonesy_Wong/structState/1 as ss
+
+// Frozen Decision Contract v0.2 constants. Do not expose as tunable inputs.
+int comboWin = 6
+int vWin = 24
+
+// Project A does not alter any legacy plot, drawing, table, gate, or default.
+// It is an evidence sensor, not the legacy VERDICT and not trade authority.
+string projectAGroup = "Project A — Event 0.2 shadow sensor"
+bool projectAEnabled = input.bool(false, "Enable Project A shadow alerts", group = projectAGroup)
+int projectAExpiryBars = input.int(30, "Setup expiry (closed 1m bars)", minval = 1, group = projectAGroup)
+
+// ════════════════════════════════════════════════════════════════════════════
+//  L1 — SENSORS: facts only, supplied by Phase-1 libraries
+// ════════════════════════════════════════════════════════════════════════════
+float atr5 = request.security(syminfo.tickerid, "5", ta.atr(14), barmerge.gaps_off, barmerge.lookahead_off)
+le.LevelView levels = le.detect()
+exp.Exp expansion = exp.detect(8, 2.5, 14, 0.55, 2)
+mv.VolState volumeState = mv.state()
+rk.Reko rekoState = rk.detect()
+dx.Dxy dxyState = dx.read()
+
+float supportPrice = na(levels.nearSup) ? na : levels.nearSup.price
+float resistancePrice = na(levels.nearRes) ? na : levels.nearRes.price
+bool supportEligible = not na(levels.nearSup) and levels.nearSup.life != le.LvlLife.broken
+bool resistanceEligible = not na(levels.nearRes) and levels.nearRes.life != le.LvlLife.broken
+
+// ════════════════════════════════════════════════════════════════════════════
+//  L2 — STATE: the single RANGE / TREND_UP / TREND_DN narrative
+// ════════════════════════════════════════════════════════════════════════════
+ss.Struct structureState = ss.detect(resistancePrice, supportPrice, atr5)
+string structureText = ss.structStr(structureState)
+
+// ════════════════════════════════════════════════════════════════════════════
+//  L3 — DECISION: directional gates and the only verdict
+// ════════════════════════════════════════════════════════════════════════════
+// Same-direction EXP × Reko event uses frozen COMBO window 6. G4 then keeps
+// that event eligible for the frozen VERDICT window vWin=24.
+bool comboLongEvent = (rekoState.arrowBuy and not na(expansion.upAgo) and expansion.upAgo <= comboWin) or (expansion.newUp and not na(rekoState.buyAgo) and rekoState.buyAgo <= comboWin)
+bool comboShortEvent = (rekoState.arrowSell and not na(expansion.dnAgo) and expansion.dnAgo <= comboWin) or (expansion.newDn and not na(rekoState.sellAgo) and rekoState.sellAgo <= comboWin)
+int comboLongAge = ta.barssince(comboLongEvent)
+int comboShortAge = ta.barssince(comboShortEvent)
+
+float eqTolerance = atr5 * 0.25
+
+// G1 LOCATION (PQ1): direction-side band OR applicable same-side EQ tolerance.
+bool supportInsideBand = supportEligible and close >= levels.nearSup.bandLow and close <= levels.nearSup.bandHigh
+bool resistanceInsideBand = resistanceEligible and close >= levels.nearRes.bandLow and close <= levels.nearRes.bandHigh
+bool supportEqApplicable = supportEligible and levels.supEQ and math.abs(close - supportPrice) <= eqTolerance
+bool resistanceEqApplicable = resistanceEligible and levels.resEQ and math.abs(close - resistancePrice) <= eqTolerance
+bool g1Long = supportInsideBand or supportEqApplicable
+bool g1Short = resistanceInsideBand or resistanceEqApplicable
+
+// G2 STRUCTURE: with-trend only; RANGE reversals only at the appropriate edge.
+bool atSupportEdge = supportEligible and math.abs(close - supportPrice) <= eqTolerance
+bool atResistanceEdge = resistanceEligible and math.abs(close - resistancePrice) <= eqTolerance
+bool g2Long = structureState == ss.Struct.trend_up or (structureState == ss.Struct.ranging and atSupportEdge)
+bool g2Short = structureState == ss.Struct.trend_dn or (structureState == ss.Struct.ranging and atResistanceEdge)
+
+// G3 MOMENTUM (PQ2): same-direction CLEAN EXP age<=24 + histogram direction
+// aligned on at least 2/3 TFs. Strength tiers remain telemetry only.
+bool expLongFresh = not na(expansion.upAgo) and expansion.upAgo <= vWin
+bool expShortFresh = not na(expansion.dnAgo) and expansion.dnAgo <= vWin
+bool volLongAligned = volumeState.bullCnt >= 2
+bool volShortAligned = volumeState.bearCnt >= 2
+bool g3Long = expLongFresh and volLongAligned
+bool g3Short = expShortFresh and volShortAligned
+
+// G4 TRIGGER: same-direction COMBO event within vWin=24.
+bool g4Long = not na(comboLongAge) and comboLongAge <= vWin
+bool g4Short = not na(comboShortAge) and comboShortAge <= vWin
+
+// V1 hard veto: divBear vetoes LONG; divBull vetoes SHORT.
+bool v1Long = dxyState.divBear
+bool v1Short = dxyState.divBull
+
+bool goLongCandidate = g1Long and g2Long and g3Long and g4Long and not v1Long
+bool goShortCandidate = g1Short and g2Short and g3Short and g4Short and not v1Short
+bool conflict = goLongCandidate and goShortCandidate
+bool goLong = goLongCandidate and not conflict
+bool goShort = goShortCandidate and not conflict
+
+string verdict = goLong ? "GO_LONG" : goShort ? "GO_SHORT" : "WAIT"
+
+f_addReason(string acc, bool failed, string code) =>
+    failed ? (str.length(acc) == 0 ? code : acc + "|" + code) : acc
+
+f_gateReasons(bool g1, bool g2, bool g3, bool g4, bool v1) =>
+    string result = ""
+    result := f_addReason(result, not g1, "G1_NO_LEVEL")
+    result := f_addReason(result, not g2, "G2_COUNTER_STRUCT")
+    result := f_addReason(result, not g3, "G3_NO_MOMO")
+    result := f_addReason(result, not g4, "G4_NO_TRIGGER")
+    result := f_addReason(result, v1, "V1_DXY_VETO")
+    str.length(result) == 0 ? "—" : result
+
+// Both directional collections are always available for deterministic audit.
+string reasonCodesLong = f_gateReasons(g1Long, g2Long, g3Long, g4Long, v1Long)
+string reasonCodesShort = f_gateReasons(g1Short, g2Short, g3Short, g4Short, v1Short)
+bool triggerPresent = g4Long or g4Short
+bool waitSnapshot = verdict == "WAIT" and triggerPresent
+string verdictReasons = "—"
+if conflict
+    verdictReasons := "CONFLICT"
+else if goLong or goShort
+    verdictReasons := "—"
+else if g4Long and g4Short
+    verdictReasons := "L[" + reasonCodesLong + "] S[" + reasonCodesShort + "]"
+else if g4Long
+    verdictReasons := reasonCodesLong
+else if g4Short
+    verdictReasons := reasonCodesShort
+else
+    verdictReasons := "G4_NO_TRIGGER"
+
+// ════════════════════════════════════════════════════════════════════════════
+//  L4 — TELEMETRY: quality, partial comparison score, and diagnostics only
+// ════════════════════════════════════════════════════════════════════════════
+bool passedGates = goLong or goShort
+bool gradeEnhancement = goLong ? (levels.supEQ or volumeState.bullCnt == 3) : goShort ? (levels.resEQ or volumeState.bearCnt == 3) : false
+string grade = passedGates ? (gradeEnhancement ? "A" : "B") : "—"
+
+// PQ4 partial legacyScore. Available Master D1 components only; no thresholds.
+float scoreTouchLong = supportEligible and levels.nearSup.touches >= 1 ? 20.0 : 0.0
+float scoreEqLong = levels.supEQ ? 10.0 : 0.0
+float scoreVolLong = 3.0 * volumeState.bullCnt
+float scoreCombo1Long = g4Long ? 10.0 : 0.0
+float scoreCombo2Long = g4Long and scoreTouchLong > 0 ? 20.0 : 0.0
+float legacyScoreLong = scoreTouchLong + scoreEqLong + scoreVolLong + scoreCombo1Long + scoreCombo2Long
+
+float scoreTouchShort = resistanceEligible and levels.nearRes.touches >= 1 ? 20.0 : 0.0
+float scoreEqShort = levels.resEQ ? 10.0 : 0.0
+float scoreVolShort = 3.0 * volumeState.bearCnt
+float scoreCombo1Short = g4Short ? 10.0 : 0.0
+float scoreCombo2Short = g4Short and scoreTouchShort > 0 ? 20.0 : 0.0
+float legacyScoreShort = scoreTouchShort + scoreEqShort + scoreVolShort + scoreCombo1Short + scoreCombo2Short
+bool legacyScorePartial = true
+
+// Decision Contract v0.2 telemetry-variable contract. These variables are
+// diagnostic state only: no serialization, event activation, dedup, or emit.
+string telemetryEngine = "VERDICT"
+string telemetryEventCandidate = goLong ? "GO_LONG" : goShort ? "GO_SHORT" : waitSnapshot ? "WAIT_SNAPSHOT" : "NONE"
+string telemetryEvent = telemetryEventCandidate
+string telemetryDirection = goLong ? "LONG" : goShort ? "SHORT" : conflict ? "CONFLICT" : "NONE"
+string telemetryTf = timeframe.period
+float telemetryPrice = close
+string telemetryGrade = passedGates ? grade : "null"
+string telemetryReasons = verdictReasons
+string telemetryReasonsLong = reasonCodesLong
+string telemetryReasonsShort = reasonCodesShort
+bool telemetryConflict = conflict
+bool telemetryWaitSnapshotCandidate = waitSnapshot
+bool telemetryWaitSnapshotActive = false
+
+bool telemetryLongG1 = g1Long
+bool telemetryLongG2 = g2Long
+bool telemetryLongG3 = g3Long
+bool telemetryLongG4 = g4Long
+bool telemetryLongV1 = v1Long
+bool telemetryLongV1Pass = not v1Long
+bool telemetryShortG1 = g1Short
+bool telemetryShortG2 = g2Short
+bool telemetryShortG3 = g3Short
+bool telemetryShortG4 = g4Short
+bool telemetryShortV1 = v1Short
+bool telemetryShortV1Pass = not v1Short
+
+float telemetryLongLevelBandLow = supportEligible ? levels.nearSup.bandLow : na
+float telemetryLongLevelBandHigh = supportEligible ? levels.nearSup.bandHigh : na
+string telemetryLongLevelSource = supportEligible ? levels.supSrc : "NONE"
+string telemetryLongLevelLifecycle = not supportEligible ? "NONE" : levels.nearSup.life == le.LvlLife.broken ? "BROKEN" : levels.nearSup.life == le.LvlLife.tested ? "TESTED" : "FRESH"
+float telemetryShortLevelBandLow = resistanceEligible ? levels.nearRes.bandLow : na
+float telemetryShortLevelBandHigh = resistanceEligible ? levels.nearRes.bandHigh : na
+string telemetryShortLevelSource = resistanceEligible ? levels.resSrc : "NONE"
+string telemetryShortLevelLifecycle = not resistanceEligible ? "NONE" : levels.nearRes.life == le.LvlLife.broken ? "BROKEN" : levels.nearRes.life == le.LvlLife.tested ? "TESTED" : "FRESH"
+string telemetryLevelDirection = goLong ? "LONG" : goShort ? "SHORT" : g4Long and not g4Short ? "LONG" : g4Short and not g4Long ? "SHORT" : "NONE"
+float telemetryLevelBandLow = telemetryLevelDirection == "LONG" ? telemetryLongLevelBandLow : telemetryLevelDirection == "SHORT" ? telemetryShortLevelBandLow : na
+float telemetryLevelBandHigh = telemetryLevelDirection == "LONG" ? telemetryLongLevelBandHigh : telemetryLevelDirection == "SHORT" ? telemetryShortLevelBandHigh : na
+string telemetryLevelSource = telemetryLevelDirection == "LONG" ? telemetryLongLevelSource : telemetryLevelDirection == "SHORT" ? telemetryShortLevelSource : "NONE"
+string telemetryLevelLifecycle = telemetryLevelDirection == "LONG" ? telemetryLongLevelLifecycle : telemetryLevelDirection == "SHORT" ? telemetryShortLevelLifecycle : "NONE"
+string telemetryStructure = structureText
+
+float telemetryLegacyScoreLong = legacyScoreLong
+float telemetryLegacyScoreShort = legacyScoreShort
+float telemetryLegacyTouchLong = scoreTouchLong
+float telemetryLegacyEqLong = scoreEqLong
+float telemetryLegacyVolLong = scoreVolLong
+float telemetryLegacyCombo1Long = scoreCombo1Long
+float telemetryLegacyCombo2Long = scoreCombo2Long
+float telemetryLegacyTouchShort = scoreTouchShort
+float telemetryLegacyEqShort = scoreEqShort
+float telemetryLegacyVolShort = scoreVolShort
+float telemetryLegacyCombo1Short = scoreCombo1Short
+float telemetryLegacyCombo2Short = scoreCombo2Short
+bool telemetryLegacyScorePartial = legacyScorePartial
+
+bool telemetryDxyLive = dxyState.live
+int telemetryDxyAge = dxyState.ageM
+int telemetryDxyDirection = dxyState.dir
+bool telemetryDxyDivBull = dxyState.divBull
+bool telemetryDxyDivBear = dxyState.divBear
+bool telemetryJsonEmitted = false
+string telemetryOutputMode = "VARIABLES_ONLY_SILENT_NOT_EMITTED"
+
+// ════════════════════════════════════════════════════════════════════════════
+//  PROJECT A EVENT 0.2 — default-off XAUUSD 1m evidence sensor
+//  This block owns no plots or decision authority. It does not read or change
+//  the legacy VERDICT. Every event is SHADOW / MT5_DEMO / live_execution=false.
+// ════════════════════════════════════════════════════════════════════════════
+f_paBool(bool value) => value ? "true" : "false"
+f_paNullable(string value) => str.length(value) == 0 ? "null" : "\"" + value + "\""
+f_paNumber(float value) => na(value) ? "null" : str.tostring(value)
+f_paIso(int value) => str.format_time(value, "yyyy-MM-dd'T'HH:mm:ss'Z'", "UTC")
+f_paCompact(int value) => str.format_time(value, "yyyyMMdd'T'HHmmss'Z'", "UTC")
+f_paDirection(int value) => value > 0 ? "UP" : value < 0 ? "DOWN" : "FLAT"
+
+// HPA is location context only. It never grants trade authority.
+f_paHpa() =>
+    float hi = ta.highest(high, 50)
+    float lo = ta.lowest(low, 50)
+    float positionInRange = hi > lo ? (close - lo) / (hi - lo) : 0.5
+    positionInRange >= 0.60 ? "PREMIUM" : positionInRange <= 0.40 ? "DISCOUNT" : "MIDDLE"
+
+f_paMomentum() =>
+    float directionalVolume = math.abs(close - open) < syminfo.mintick * 2 ? 0.0 : close >= open ? volume : -volume
+    float main = ta.ema(directionalVolume, 12) - ta.ema(directionalVolume, 26)
+    float signal = ta.ema(main, 9)
+    float histogram = main - signal
+    histogram > 0 ? 1 : histogram < 0 ? -1 : 0
+
+// Pure-Pine SHA-256 over the canonical payload JSON. Pine has no native
+// cryptographic primitive, so the 32-bit operations are expressed arithmetically.
+// The function runs only when an event passes the semantic emission gate.
+f_paU32(int value) => int(value % 4294967296)
+f_paShiftRight(int value, int amount) => int(math.floor(value / math.pow(2, amount)))
+f_paRotateRight(int value, int amount) =>
+    int divisor = int(math.pow(2, amount))
+    int lowBits = value % divisor
+    f_paU32(f_paShiftRight(value, amount) + lowBits * int(math.pow(2, 32 - amount)))
+
+f_paXor3(int a, int b, int c) =>
+    int result = 0
+    int bitValue = 1
+    for i = 0 to 31
+        int ones = (f_paShiftRight(a, i) % 2) + (f_paShiftRight(b, i) % 2) + (f_paShiftRight(c, i) % 2)
+        if ones % 2 == 1
+            result += bitValue
+        bitValue *= 2
+    result
+
+f_paChoose(int x, int y, int z) =>
+    int result = 0
+    int bitValue = 1
+    for i = 0 to 31
+        int selected = f_paShiftRight(x, i) % 2 == 1 ? f_paShiftRight(y, i) % 2 : f_paShiftRight(z, i) % 2
+        if selected == 1
+            result += bitValue
+        bitValue *= 2
+    result
+
+f_paMajority(int x, int y, int z) =>
+    int result = 0
+    int bitValue = 1
+    for i = 0 to 31
+        int ones = (f_paShiftRight(x, i) % 2) + (f_paShiftRight(y, i) % 2) + (f_paShiftRight(z, i) % 2)
+        if ones >= 2
+            result += bitValue
+        bitValue *= 2
+    result
+
+f_paHexDigit(int value) =>
+    value == 0 ? "0" : value == 1 ? "1" : value == 2 ? "2" : value == 3 ? "3" :
+     value == 4 ? "4" : value == 5 ? "5" : value == 6 ? "6" : value == 7 ? "7" :
+     value == 8 ? "8" : value == 9 ? "9" : value == 10 ? "a" : value == 11 ? "b" :
+     value == 12 ? "c" : value == 13 ? "d" : value == 14 ? "e" : "f"
+
+f_paHex8(int value) =>
+    string result = ""
+    int divisor = 268435456
+    for i = 0 to 7
+        int digit = f_paShiftRight(value, 4 * (7 - i)) % 16
+        result += f_paHexDigit(digit)
+        divisor := int(divisor / 16)
+    result
+
+f_paSha256(string message) =>
+    string printableAscii = " !\"#$%&" + "'" + "()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+    array<int> bytes = array.new_int()
+    array<string> characters = str.split(message, "")
+    if array.size(characters) > 0
+        for i = 0 to array.size(characters) - 1
+            string character = array.get(characters, i)
+            int position = str.pos(printableAscii, character)
+            if na(position)
+                runtime.error("Project A payload contains a non-ASCII character")
+            array.push(bytes, position + 32)
+    int bitLength = array.size(bytes) * 8
+    array.push(bytes, 128)
+    while array.size(bytes) % 64 != 56
+        array.push(bytes, 0)
+    // Payloads are far below 2^32 bits; append the high word as zero.
+    array.push(bytes, 0)
+    array.push(bytes, 0)
+    array.push(bytes, 0)
+    array.push(bytes, 0)
+    array.push(bytes, f_paShiftRight(bitLength, 24) % 256)
+    array.push(bytes, f_paShiftRight(bitLength, 16) % 256)
+    array.push(bytes, f_paShiftRight(bitLength, 8) % 256)
+    array.push(bytes, bitLength % 256)
+
+    array<int> constants = array.from(
+         1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221,
+         3624381080, 310598401, 607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580,
+         3835390401, 4022224774, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986,
+         2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711, 113926993, 338241895,
+         666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037,
+         2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344,
+         430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779,
+         1955562222, 2024104815, 2227730452, 2361852424, 2428436474, 2756734187, 3204031479, 3329325298)
+
+    int h0 = 1779033703
+    int h1 = 3144134277
+    int h2 = 1013904242
+    int h3 = 2773480762
+    int h4 = 1359893119
+    int h5 = 2600822924
+    int h6 = 528734635
+    int h7 = 1541459225
+    int blockCount = int(array.size(bytes) / 64)
+    for block = 0 to blockCount - 1
+        array<int> words = array.new_int(64, 0)
+        int offset = block * 64
+        for i = 0 to 15
+            int wordOffset = offset + i * 4
+            int word = array.get(bytes, wordOffset) * 16777216 + array.get(bytes, wordOffset + 1) * 65536 + array.get(bytes, wordOffset + 2) * 256 + array.get(bytes, wordOffset + 3)
+            array.set(words, i, f_paU32(word))
+        for i = 16 to 63
+            int w15 = array.get(words, i - 15)
+            int w2 = array.get(words, i - 2)
+            int sigma0 = f_paXor3(f_paRotateRight(w15, 7), f_paRotateRight(w15, 18), f_paShiftRight(w15, 3))
+            int sigma1 = f_paXor3(f_paRotateRight(w2, 17), f_paRotateRight(w2, 19), f_paShiftRight(w2, 10))
+            array.set(words, i, f_paU32(array.get(words, i - 16) + sigma0 + array.get(words, i - 7) + sigma1))
+
+        int a = h0
+        int b = h1
+        int c = h2
+        int d = h3
+        int e = h4
+        int f = h5
+        int g = h6
+        int h = h7
+        for i = 0 to 63
+            int bigSigma1 = f_paXor3(f_paRotateRight(e, 6), f_paRotateRight(e, 11), f_paRotateRight(e, 25))
+            int temporary1 = f_paU32(h + bigSigma1 + f_paChoose(e, f, g) + array.get(constants, i) + array.get(words, i))
+            int bigSigma0 = f_paXor3(f_paRotateRight(a, 2), f_paRotateRight(a, 13), f_paRotateRight(a, 22))
+            int temporary2 = f_paU32(bigSigma0 + f_paMajority(a, b, c))
+            h := g
+            g := f
+            f := e
+            e := f_paU32(d + temporary1)
+            d := c
+            c := b
+            b := a
+            a := f_paU32(temporary1 + temporary2)
+        h0 := f_paU32(h0 + a)
+        h1 := f_paU32(h1 + b)
+        h2 := f_paU32(h2 + c)
+        h3 := f_paU32(h3 + d)
+        h4 := f_paU32(h4 + e)
+        h5 := f_paU32(h5 + f)
+        h6 := f_paU32(h6 + g)
+        h7 := f_paU32(h7 + h)
+    f_paHex8(h0) + f_paHex8(h1) + f_paHex8(h2) + f_paHex8(h3) + f_paHex8(h4) + f_paHex8(h5) + f_paHex8(h6) + f_paHex8(h7)
+
+string paHpa1m = request.security(syminfo.tickerid, "1", f_paHpa(), barmerge.gaps_off, barmerge.lookahead_off)
+string paHpa5m = request.security(syminfo.tickerid, "5", f_paHpa(), barmerge.gaps_off, barmerge.lookahead_off)
+string paHpa15m = request.security(syminfo.tickerid, "15", f_paHpa(), barmerge.gaps_off, barmerge.lookahead_off)
+string paHpa30m = request.security(syminfo.tickerid, "30", f_paHpa(), barmerge.gaps_off, barmerge.lookahead_off)
+int paMomentum5sValue = request.security(syminfo.tickerid, "5S", f_paMomentum(), barmerge.gaps_off, barmerge.lookahead_off)
+int paMomentum30mValue = request.security(syminfo.tickerid, "30", f_paMomentum(), barmerge.gaps_off, barmerge.lookahead_off)
+int paLowerEvidenceTime = request.security(syminfo.tickerid, "5S", time_close, barmerge.gaps_off, barmerge.lookahead_off)
+string paMomentum5s = f_paDirection(paMomentum5sValue)
+string paMomentum1m = f_paDirection(volumeState.m1.dir)
+string paMomentum5m = f_paDirection(volumeState.m5.dir)
+string paMomentum15m = f_paDirection(volumeState.m15.dir)
+string paMomentum30m = f_paDirection(paMomentum30mValue)
+int paHpaEdgeCount = (paHpa1m != "MIDDLE" ? 1 : 0) + (paHpa5m != "MIDDLE" ? 1 : 0) + (paHpa15m != "MIDDLE" ? 1 : 0) + (paHpa30m != "MIDDLE" ? 1 : 0)
+bool paValidHpa = paHpaEdgeCount >= 2
+bool paSymbolOk = syminfo.ticker == "XAUUSD"
+bool paTimeframeOk = timeframe.period == "1"
+bool paSafetyOk = paSymbolOk and paTimeframeOk
+bool paRangeMiddle = structureState == ss.Struct.ranging and not atSupportEdge and not atResistanceEdge and not supportInsideBand and not resistanceInsideBand
+
+bool paUpIsLatest = expLongFresh and (not expShortFresh or expansion.upAgo <= expansion.dnAgo)
+bool paDownIsLatest = expShortFresh and (not expLongFresh or expansion.dnAgo < expansion.upAgo)
+string paTargetSide = paUpIsLatest and resistanceEligible ? "RESISTANCE" : paDownIsLatest and supportEligible ? "SUPPORT" : "NONE"
+float paTargetLow = paTargetSide == "RESISTANCE" ? telemetryShortLevelBandLow : paTargetSide == "SUPPORT" ? telemetryLongLevelBandLow : na
+float paTargetHigh = paTargetSide == "RESISTANCE" ? telemetryShortLevelBandHigh : paTargetSide == "SUPPORT" ? telemetryLongLevelBandHigh : na
+float paTargetCentre = na(paTargetLow) or na(paTargetHigh) ? na : (paTargetLow + paTargetHigh) / 2
+float paTargetDistance = na(paTargetCentre) ? na : math.abs(close - paTargetCentre)
+bool paNearTarget = not na(paTargetDistance) and not na(atr5) and paTargetDistance <= atr5
+bool paContextValid = paSafetyOk and paTargetSide != "NONE" and paNearTarget and paValidHpa and not paRangeMiddle
+
+var bool paSetupActive = false
+var bool paSetupClosed = false
+var int paSetupStartTime = na
+var int paSetupStartBar = na
+var string paSetupId = ""
+var string paCorrelationId = ""
+var string paActiveSide = "NONE"
+var float paActiveLow = na
+var float paActiveHigh = na
+var string paHypothesis = ""
+var string paPath = ""
+var string paLastEventId = ""
+var string paLastFingerprint = ""
+
+bool paDifferentTarget = not paSetupActive or paActiveSide != paTargetSide or na(paActiveLow) or na(paTargetLow) or math.abs(paActiveLow - paTargetLow) > syminfo.mintick or math.abs(paActiveHigh - paTargetHigh) > syminfo.mintick
+bool paNewEncounter = paContextValid and paDifferentTarget
+if paNewEncounter
+    paSetupActive := true
+    paSetupClosed := false
+    paSetupStartTime := time_close
+    paSetupStartBar := bar_index
+    paActiveSide := paTargetSide
+    paActiveLow := paTargetLow
+    paActiveHigh := paTargetHigh
+    paHypothesis := ""
+    paPath := ""
+    paLastEventId := ""
+    int centreTicks = int(math.round(((paActiveLow + paActiveHigh) / 2) / syminfo.mintick))
+    string setupSuffix = "XAUUSD_1m_" + f_paCompact(paSetupStartTime) + "_" + (paActiveSide == "SUPPORT" ? "S" : "R") + "_" + str.tostring(centreTicks)
+    paSetupId := "setup_" + setupSuffix
+    paCorrelationId := "corr_" + setupSuffix
+
+float paBarRange = high - low
+float paBody = math.abs(close - open)
+float paLowerWick = math.min(open, close) - low
+float paUpperWick = high - math.max(open, close)
+bool paTouchesActive = paSetupActive and high >= paActiveLow and low <= paActiveHigh
+bool paLongSweep = paTouchesActive and paActiveSide == "SUPPORT" and low < paActiveLow and close > paActiveHigh
+bool paShortSweep = paTouchesActive and paActiveSide == "RESISTANCE" and high > paActiveHigh and close < paActiveLow
+bool paLongEngulf = paTouchesActive and paActiveSide == "SUPPORT" and close > open and close > high[1]
+bool paShortEngulf = paTouchesActive and paActiveSide == "RESISTANCE" and close < open and close < low[1]
+bool paLongReject = paTouchesActive and paActiveSide == "SUPPORT" and close > open and close >= paActiveHigh and paLowerWick >= paBody
+bool paShortReject = paTouchesActive and paActiveSide == "RESISTANCE" and close < open and close <= paActiveLow and paUpperWick >= paBody
+string paReaction = paLongSweep or paShortSweep ? "SWEEP_RECLAIM" : paLongEngulf or paShortEngulf ? "ENGULF" : paLongReject or paShortReject ? "REJECT" : ""
+bool paReactionReady = paSetupActive and not paSetupClosed and str.length(paHypothesis) == 0 and str.length(paReaction) > 0 and paValidHpa and not paRangeMiddle
+
+int paUpMomentumCount = (paMomentum1m == "UP" ? 1 : 0) + (paMomentum5m == "UP" ? 1 : 0) + (paMomentum15m == "UP" ? 1 : 0) + (paMomentum30m == "UP" ? 1 : 0)
+int paDownMomentumCount = (paMomentum1m == "DOWN" ? 1 : 0) + (paMomentum5m == "DOWN" ? 1 : 0) + (paMomentum15m == "DOWN" ? 1 : 0) + (paMomentum30m == "DOWN" ? 1 : 0)
+float paBreakBuffer = atr5 * 0.3
+bool paStrongBreakUp = paSetupActive and paActiveSide == "RESISTANCE" and close > paActiveHigh + paBreakBuffer and close[1] <= paActiveHigh + paBreakBuffer and close > open and paBarRange > 0 and paBody / paBarRange >= 0.55 and paUpMomentumCount >= 2
+bool paStrongBreakDown = paSetupActive and paActiveSide == "SUPPORT" and close < paActiveLow - paBreakBuffer and close[1] >= paActiveLow - paBreakBuffer and close < open and paBarRange > 0 and paBody / paBarRange >= 0.55 and paDownMomentumCount >= 2
+bool paBreakReady = not paSetupClosed and str.length(paHypothesis) == 0 and (paStrongBreakUp or paStrongBreakDown) and paValidHpa and not paRangeMiddle
+
+bool paInvalidated = paSetupActive and not paSetupClosed and str.length(paHypothesis) > 0 and (paHypothesis == "LONG" ? close < paActiveLow - paBreakBuffer : close > paActiveHigh + paBreakBuffer)
+bool paExpired = paSetupActive and not paSetupClosed and not na(paSetupStartBar) and bar_index - paSetupStartBar >= projectAExpiryBars
+string paLevelState = paTargetSide + "|" + str.tostring(paTargetLow) + "|" + str.tostring(paTargetHigh)
+bool paTelemetryChanged = expansion.newUp or expansion.newDn or paLevelState != paLevelState[1]
+
+string paEventClass = ""
+string paEventType = ""
+string paDisposition = "ACCEPTED"
+string paReasonCode = ""
+string paDetail = ""
+string paTrigger = "STATE_CHANGE"
+string paLifecycleState = "OBSERVING"
+bool paSetupOptional = false
+
+if paInvalidated
+    paEventClass := "LIFECYCLE"
+    paEventType := "SETUP_INVALIDATED"
+    paDisposition := "STRUCTURAL_BREAK"
+    paReasonCode := "M1_STRUCTURE_BROKEN"
+    paDetail := "M1 closed beyond the structural invalidation level."
+    paLifecycleState := "INVALIDATED"
+    paSetupClosed := true
+else if paExpired
+    paEventClass := "LIFECYCLE"
+    paEventType := "SETUP_EXPIRED"
+    paDisposition := "EXPIRED"
+    paReasonCode := "SETUP_WINDOW_ELAPSED"
+    paDetail := "The deterministic setup observation window elapsed."
+    paLifecycleState := "EXPIRED"
+    paSetupClosed := true
+else if paReactionReady
+    paHypothesis := paActiveSide == "SUPPORT" ? "LONG" : "SHORT"
+    paPath := "SNR_REJECTION"
+    paEventClass := "ANALYSIS_READY"
+    paEventType := "SNR_REJECTION_READY"
+    paReasonCode := "M1_REACTION_CONFIRMED"
+    paDetail := "Valid SNR reaction confirmed by a closed M1 bar."
+    paTrigger := paReaction
+    paLifecycleState := "ANALYSIS_READY"
+else if paBreakReady
+    paHypothesis := paActiveSide == "RESISTANCE" ? "LONG" : "SHORT"
+    paPath := "SNR_STRONG_BREAK"
+    paEventClass := "ANALYSIS_READY"
+    paEventType := "SNR_BREAK_READY"
+    paReasonCode := "M1_STRONG_BREAK_CONFIRMED"
+    paDetail := "M1 closed through the SNR with continuing directional momentum."
+    paTrigger := "STRONG_BREAK"
+    paLifecycleState := "ANALYSIS_READY"
+else if paNewEncounter
+    paEventClass := "SETUP_CANDIDATE"
+    paEventType := "SETUP_CANDIDATE"
+    paReasonCode := "SNR_APPROACH_VALID"
+    paDetail := "Valid HPA and SNR context with a clean expansion toward the level."
+    paLifecycleState := "CANDIDATE"
+else
+    if paTelemetryChanged or paRangeMiddle and not paRangeMiddle[1]
+        paEventClass := "TELEMETRY"
+        paEventType := expansion.newUp or expansion.newDn ? "EXPANSION_UPDATE" : "SNR_UPDATE"
+        paReasonCode := paRangeMiddle ? "RANGE_MIDDLE" : "EVIDENCE_STATE_UPDATED"
+        paDetail := paRangeMiddle ? "Range-middle evidence is telemetry only and cannot become Analysis Ready." : "Market evidence changed without a make-sense setup."
+        paSetupOptional := true
+
+bool paHasEvent = str.length(paEventType) > 0
+string paOccurredAt = f_paIso(time_close)
+string paSemanticFingerprint = paEventType + "|" + (paSetupOptional ? "NONE" : paSetupId) + "|" + paOccurredAt + "|" + paTrigger + "|" + paReasonCode + "|" + str.tostring(paActiveLow) + "|" + str.tostring(paActiveHigh) + "|" + paHpa1m + "|" + paHpa5m + "|" + paHpa15m + "|" + paHpa30m + "|" + paMomentum1m + "|" + paMomentum5m + "|" + paMomentum15m + "|" + paMomentum30m + "|" + paLifecycleState
+bool paShouldEmit = projectAEnabled and paSafetyOk and barstate.isconfirmed and barstate.isrealtime and paHasEvent and paSemanticFingerprint != paLastFingerprint
+
+if paShouldEmit
+    string paCreatedAt = f_paIso(timenow)
+    string paLowerTimeJson = na(paLowerEvidenceTime) ? "null" : "\"" + f_paIso(paLowerEvidenceTime) + "\""
+    string paArrowJson = "null" // No reliable lower-TF Arrow series is exposed by the current libraries.
+    string paPayload = "{\"bar_time\":\"" + paOccurredAt + "\",\"created_time\":\"" + paCreatedAt + "\",\"hpa\":{\"15m\":\"" + paHpa15m + "\",\"1m\":\"" + paHpa1m + "\",\"30m\":\"" + paHpa30m + "\",\"5m\":\"" + paHpa5m + "\",\"valid\":" + f_paBool(paValidHpa) + "},\"lifecycle_state\":\"" + paLifecycleState + "\",\"live_execution\":false,\"lower_timeframe_evidence_time\":" + paLowerTimeJson + ",\"momentum\":{\"15m\":\"" + paMomentum15m + "\",\"1m\":\"" + paMomentum1m + "\",\"30m\":\"" + paMomentum30m + "\",\"5m\":\"" + paMomentum5m + "\",\"5s\":\"" + paMomentum5s + "\",\"expansion\":\"CLEAN_PUSH\"},\"optional_5s_arrow\":" + paArrowJson + ",\"reason\":\"" + paReasonCode + "\",\"risk_constraints\":{\"environment\":\"MT5_DEMO\",\"max_spread_points\":10,\"mode\":\"SHADOW\",\"rr\":1},\"snr\":{\"high\":" + f_paNumber(paActiveHigh) + ",\"low\":" + f_paNumber(paActiveLow) + ",\"side\":\"" + paActiveSide + "\",\"type\":\"CLASSIC\",\"valid\":" + f_paBool(not na(paActiveLow) and not na(paActiveHigh)) + "},\"structure\":\"" + structureText + "\",\"trigger\":\"" + paTrigger + "\",\"trigger_price\":" + str.tostring(close) + "}"
+    string paPayloadHash = f_paSha256(paPayload)
+    string paSetupJson = paSetupOptional ? "null" : "\"" + paSetupId + "\""
+    string paHypothesisJson = str.length(paHypothesis) == 0 or paEventClass == "SETUP_CANDIDATE" or paEventClass == "TELEMETRY" ? "null" : "\"" + paHypothesis + "\""
+    string paPathJson = str.length(paPath) == 0 or paEventClass == "SETUP_CANDIDATE" or paEventClass == "TELEMETRY" ? "null" : "\"" + paPath + "\""
+    string paCorrelation = paSetupOptional ? "corr_XAUUSD_1m_" + f_paCompact(time_close) + "_" + paEventType : paCorrelationId
+    string paEventId = "evt_XAUUSD_1m_" + f_paCompact(time_close) + "_" + paEventType + "_" + paTrigger
+    string paCausationJson = str.length(paLastEventId) == 0 ? "null" : "\"" + paLastEventId + "\""
+    string paEnvelope = "{\"schema_version\":\"0.2\",\"event_id\":\"" + paEventId + "\",\"correlation_id\":\"" + paCorrelation + "\",\"causation_id\":" + paCausationJson + ",\"occurred_at\":\"" + paOccurredAt + "\",\"received_at\":\"" + paCreatedAt + "\",\"source\":{\"producer\":\"snr-dashboard-project-a-v1\",\"engine\":\"MASTER_DASHBOARD\",\"provenance\":\"TRADINGVIEW\",\"payload_hash\":\"sha256:" + paPayloadHash + "\",\"sensitive_fields_redacted\":true},\"instrument\":{\"symbol\":\"XAUUSD\",\"venue\":\"" + syminfo.prefix + "\",\"point_size\":" + str.tostring(syminfo.mintick) + "},\"timeframe\":\"1m\",\"event_class\":\"" + paEventClass + "\",\"event_type\":\"" + paEventType + "\",\"setup_id\":" + paSetupJson + ",\"hypothesis\":" + paHypothesisJson + ",\"path\":" + paPathJson + ",\"disposition\":{\"status\":\"" + paDisposition + "\",\"reason_code\":\"" + paReasonCode + "\",\"detail\":\"" + paDetail + "\"},\"payload\":" + paPayload + "}"
+    alert(paEnvelope, alert.freq_once_per_bar_close)
+    paLastFingerprint := paSemanticFingerprint
+    paLastEventId := paEventId
+
+// ─── Diagnostic rendering: one screenshot = complete decision state ────────
+f_bool(bool value) => value ? "TRUE" : "FALSE"
+f_pass(bool value) => value ? "PASS" : "FAIL"
+f_dir(int value) => value > 0 ? "+1" : value < 0 ? "-1" : "0"
+f_age(int value) => na(value) ? "NA" : str.tostring(value)
+f_band(le.Level value) => na(value) ? "NONE" : "[" + str.tostring(value.bandLow, format.mintick) + ", " + str.tostring(value.bandHigh, format.mintick) + "]"
+f_life(le.Level value) => na(value) ? "NONE" : value.life == le.LvlLife.broken ? "BROKEN" : value.life == le.LvlLife.tested ? "TESTED" : "FRESH"
+f_levelMeta(le.Level value, string source, string side, bool eq) =>
+    na(value) ? side + " · NONE" : side + " · source=" + (str.length(source) > 0 ? source : "NONE") + " · EQ=" + f_bool(eq)
+f_parts(float touch, float eq, float vol, float c1, float c2) => "Touch=" + str.tostring(touch, "#") + " EQ=" + str.tostring(eq, "#") + " Vol=" + str.tostring(vol, "#") + " C1=" + str.tostring(c1, "#") + " C2=" + str.tostring(c2, "#")
+f_gateCell(bool pass, string code) => f_pass(pass) + (pass ? "" : " · " + code)
+
+string volumeDirections = "1m=" + f_dir(volumeState.m1.dir) + " 5m=" + f_dir(volumeState.m5.dir) + " 15m=" + f_dir(volumeState.m15.dir)
+string gradeWhyLong = not goLong ? "GATES_NOT_PASSED" : levels.supEQ ? "A · EQ" : volumeState.bullCnt == 3 ? "A · VOL_3_OF_3" : "B · PASSED_GATES"
+string gradeWhyShort = not goShort ? "GATES_NOT_PASSED" : levels.resEQ ? "A · EQ" : volumeState.bearCnt == 3 ? "A · VOL_3_OF_3" : "B · PASSED_GATES"
+
+plot(resistancePrice, "nearRes", color.new(color.orange, 0), 2, plot.style_linebr)
+plot(supportPrice, "nearSup", color.new(color.aqua, 0), 2, plot.style_linebr)
+bgcolor(goLong ? color.new(color.lime, 88) : goShort ? color.new(color.red, 88) : conflict ? color.new(color.orange, 85) : na)
+
+var table diagnostic = table.new(position.top_right, 4, 29, border_width = 1, frame_width = 1)
+if barstate.isfirst
+    table.merge_cells(diagnostic, 0, 0, 3, 0)
+    table.merge_cells(diagnostic, 2, 11, 3, 11)
+if barstate.islast
+    color verdictColor = goLong ? color.new(color.lime, 0) : goShort ? color.new(color.red, 0) : conflict ? color.new(color.orange, 0) : color.new(color.gray, 30)
+    color sectionColor = color.new(color.navy, 35)
+    color labelColor = color.new(color.black, 25)
+    color longColor = color.new(color.teal, 78)
+    color shortColor = color.new(color.maroon, 72)
+    color telemetryColor = color.new(color.gray, 80)
+
+    table.cell(diagnostic, 0, 0, "SNR DASHBOARD · PHASE 2 SESSION B · AI DIAGNOSTIC · " + telemetryTf, text_color = color.white, bgcolor = color.new(color.black, 0), text_size = size.small)
+
+    table.cell(diagnostic, 0, 1, "VERDICT", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 1, "FINAL / CONFLICT", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 1, verdict, text_color = color.white, bgcolor = verdictColor, text_size = size.small)
+    table.cell(diagnostic, 3, 1, "CONFLICT=" + f_bool(conflict), text_color = color.white, bgcolor = verdictColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 2, "VERDICT", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 2, "CANDIDATE", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 2, "LONG=" + f_bool(goLongCandidate), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 2, "SHORT=" + f_bool(goShortCandidate), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 3, "VERDICT", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 3, "EVENT / PRICE", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 3, "candidate=" + telemetryEventCandidate, text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 3, "price=" + str.tostring(telemetryPrice, format.mintick), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+
+    table.cell(diagnostic, 0, 4, "GATE MATRIX", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 4, "GATE / FAIL CODE", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 4, "LONG", text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 4, "SHORT", text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 5, "GATE MATRIX", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 5, "G1 LOCATION", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 5, f_gateCell(g1Long, "G1_NO_LEVEL"), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 5, f_gateCell(g1Short, "G1_NO_LEVEL"), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 6, "GATE MATRIX", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 6, "G2 STRUCTURE", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 6, f_gateCell(g2Long, "G2_COUNTER_STRUCT"), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 6, f_gateCell(g2Short, "G2_COUNTER_STRUCT"), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 7, "GATE MATRIX", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 7, "G3 MOMENTUM", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 7, f_gateCell(g3Long, "G3_NO_MOMO"), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 7, f_gateCell(g3Short, "G3_NO_MOMO"), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 8, "GATE MATRIX", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 8, "G4 TRIGGER", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 8, f_gateCell(g4Long, "G4_NO_TRIGGER"), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 8, f_gateCell(g4Short, "G4_NO_TRIGGER"), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 9, "GATE MATRIX", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 9, "V1 VETO", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 9, f_gateCell(not v1Long, "V1_DXY_VETO"), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 9, f_gateCell(not v1Short, "V1_DXY_VETO"), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+
+    table.cell(diagnostic, 0, 10, "WAIT / CONFLICT", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 10, "DIRECTION REASONS", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 10, reasonCodesLong, text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 10, reasonCodesShort, text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 11, "WAIT / CONFLICT", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 11, "VERDICT REASONS", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 11, verdictReasons + " · CONFLICT=" + f_bool(conflict), text_color = color.white, bgcolor = telemetryColor, text_size = size.tiny)
+
+    table.cell(diagnostic, 0, 12, "LOCATION / LEVEL", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 12, "ACTIVE SIDE / EQ", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 12, f_levelMeta(levels.nearSup, levels.supSrc, "SUPPORT", levels.supEQ), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 12, f_levelMeta(levels.nearRes, levels.resSrc, "RESISTANCE", levels.resEQ), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 13, "LOCATION / LEVEL", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 13, "BAND / IN BAND", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 13, f_band(levels.nearSup) + " · " + f_bool(supportInsideBand), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 13, f_band(levels.nearRes) + " · " + f_bool(resistanceInsideBand), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 14, "LOCATION / LEVEL", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 14, "LIFECYCLE / TOUCH / AGE", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 14, f_life(levels.nearSup) + " · touch=" + (na(levels.nearSup) ? "NA" : str.tostring(levels.nearSup.touches)) + " · age=" + (na(levels.nearSup) ? "NA" : str.tostring(levels.nearSup.ageBars)), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 14, f_life(levels.nearRes) + " · touch=" + (na(levels.nearRes) ? "NA" : str.tostring(levels.nearRes.touches)) + " · age=" + (na(levels.nearRes) ? "NA" : str.tostring(levels.nearRes.ageBars)), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+
+    table.cell(diagnostic, 0, 15, "STRUCTURE", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 15, "STATE / RANGE EDGE", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 15, structureText + " · SUPPORT_EDGE=" + f_bool(atSupportEdge), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 15, structureText + " · RESIST_EDGE=" + f_bool(atResistanceEdge), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+
+    table.cell(diagnostic, 0, 16, "MOMENTUM", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 16, "EXP CLEAN / FRESH / AGE", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 16, "DIR=UP · CLEAN=TRUE · FRESH=" + f_bool(expLongFresh) + " · AGE=" + f_age(expansion.upAgo), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 16, "DIR=DOWN · CLEAN=TRUE · FRESH=" + f_bool(expShortFresh) + " · AGE=" + f_age(expansion.dnAgo), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 17, "MOMENTUM", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 17, "VOLUME DIRECTIONS", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 17, volumeDirections, text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 17, volumeDirections, text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 18, "MOMENTUM", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 18, "ALIGNED COUNT / NEED 2", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 18, "LONG=" + str.tostring(volumeState.bullCnt) + "/3 · " + f_pass(volLongAligned), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 18, "SHORT=" + str.tostring(volumeState.bearCnt) + "/3 · " + f_pass(volShortAligned), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+
+    table.cell(diagnostic, 0, 19, "TRIGGER", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 19, "REKO DIRECTION / AGE", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 19, "BUY_NOW=" + f_bool(rekoState.arrowBuy) + " · AGE=" + f_age(rekoState.buyAgo), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 19, "SELL_NOW=" + f_bool(rekoState.arrowSell) + " · AGE=" + f_age(rekoState.sellAgo), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 20, "TRIGGER", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 20, "COMBO VALID / EVENT / AGE", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 20, f_pass(g4Long) + " · event=" + f_bool(comboLongEvent) + " · age=" + f_age(comboLongAge), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 20, f_pass(g4Short) + " · event=" + f_bool(comboShortEvent) + " · age=" + f_age(comboShortAge), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+
+    table.cell(diagnostic, 0, 21, "DXY VETO", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 21, "DIVERGENCE / LIVE / AGE", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 21, "divBear=" + f_bool(dxyState.divBear) + " · LIVE=" + f_bool(dxyState.live) + " · DIR=" + f_dir(dxyState.dir) + " · AGE=" + str.tostring(dxyState.ageM), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 21, "divBull=" + f_bool(dxyState.divBull) + " · LIVE=" + f_bool(dxyState.live) + " · DIR=" + f_dir(dxyState.dir) + " · AGE=" + str.tostring(dxyState.ageM), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+
+    table.cell(diagnostic, 0, 22, "QUALITY", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 22, "GRADE / WHY · NON-DECISION", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 22, gradeWhyLong, text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 22, gradeWhyShort, text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+
+    table.cell(diagnostic, 0, 23, "PARTIAL SCORE", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 23, "TOTAL · partial=true", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 23, "LONG=" + str.tostring(legacyScoreLong, "#"), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 23, "SHORT=" + str.tostring(legacyScoreShort, "#"), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 24, "PARTIAL SCORE", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 24, "COMPONENTS", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 24, f_parts(scoreTouchLong, scoreEqLong, scoreVolLong, scoreCombo1Long, scoreCombo2Long), text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 24, f_parts(scoreTouchShort, scoreEqShort, scoreVolShort, scoreCombo1Short, scoreCombo2Short), text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 25, "PARTIAL SCORE", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 25, "LEGACY A70 / B50", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 25, "NOT_APPLICABLE_TO_PARTIAL", text_color = color.white, bgcolor = longColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 25, "NOT_APPLICABLE_TO_PARTIAL", text_color = color.white, bgcolor = shortColor, text_size = size.tiny)
+
+    table.cell(diagnostic, 0, 26, "TELEMETRY", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 26, "ENGINE / EVENT / TF", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 26, "engine=" + telemetryEngine + " · event=" + telemetryEventCandidate, text_color = color.white, bgcolor = telemetryColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 26, "tf=" + telemetryTf + " · price=" + str.tostring(telemetryPrice, format.mintick), text_color = color.white, bgcolor = telemetryColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 27, "TELEMETRY", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 27, "LEVEL / STRUCT / CONFLICT", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 27, "level=" + telemetryLevelDirection + " " + telemetryLevelSource + " " + telemetryLevelLifecycle, text_color = color.white, bgcolor = telemetryColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 27, "struct=" + telemetryStructure + " · conflict=" + f_bool(telemetryConflict), text_color = color.white, bgcolor = telemetryColor, text_size = size.tiny)
+    table.cell(diagnostic, 0, 28, "TELEMETRY", text_color = color.white, bgcolor = sectionColor, text_size = size.tiny)
+    table.cell(diagnostic, 1, 28, "ALERT / JSON STATE", text_color = color.white, bgcolor = labelColor, text_size = size.tiny)
+    table.cell(diagnostic, 2, 28, "Alert surface = SILENT", text_color = color.white, bgcolor = telemetryColor, text_size = size.tiny)
+    table.cell(diagnostic, 3, 28, "VARIABLES ONLY · JSON NOT EMITTED", text_color = color.white, bgcolor = telemetryColor, text_size = size.tiny)
