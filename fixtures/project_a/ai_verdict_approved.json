@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "verdict_id": "verdict_xau_20260716_0001",
+  "request_id": "req_xau_20260716_0001",
+  "setup_id": "setup_xau_20260716_0001",
+  "correlation_id": "corr_xau_20260716_0001",
+  "causation_id": "req_xau_20260716_0001",
+  "generated_at": "2026-07-16T00:00:03Z",
+  "verdict": "APPROVE",
+  "hypothesis": "LONG",
+  "path": "SNR_REJECTION",
+  "entry": 2416.5,
+  "sl": 2414.5,
+  "tp": 2418.5,
+  "valid_until": "2026-07-16T00:05:02Z",
+  "reason_codes": ["SNR_VALID", "M1_REACTION_CONFIRMED", "RR_1_TO_1"],
+  "rationale": "Fixture-only shadow verdict: valid SNR reaction and deterministic 1:1 geometry.",
+  "hard_gates": {"schema_valid": true, "symbol_valid": true, "timeframe_valid": true, "spread_valid": true, "rr_valid": true, "environment_valid": true},
+  "model": {"provider": "fixture", "name": "deterministic-fake-reviewer", "prompt_version": "project-a-v1", "mode": "SHADOW", "untrusted_input_handled": true}
+}

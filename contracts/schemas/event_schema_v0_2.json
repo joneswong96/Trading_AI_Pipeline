@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-a:EVENT_SCHEMA_V0_2",
+  "title": "EVENT_SCHEMA_V0_2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "correlation_id", "causation_id", "occurred_at", "received_at", "source", "instrument", "timeframe", "event_class", "event_type", "setup_id", "hypothesis", "path", "disposition", "payload"],
+  "properties": {
+    "schema_version": {"const": "0.2"},
+    "event_id": {"type": "string", "pattern": "^evt_[A-Za-z0-9._:-]{8,120}$"},
+    "correlation_id": {"type": "string", "pattern": "^corr_[A-Za-z0-9._:-]{8,120}$"},
+    "causation_id": {"type": ["string", "null"], "minLength": 8, "maxLength": 128},
+    "occurred_at": {"$ref": "#/$defs/utc"},
+    "received_at": {"$ref": "#/$defs/utc"},
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["producer", "engine", "provenance", "payload_hash", "sensitive_fields_redacted"],
+      "properties": {
+        "producer": {"type": "string", "minLength": 1, "maxLength": 80},
+        "engine": {"type": "string", "enum": ["MASTER_DASHBOARD", "SNR", "SR", "RENKO", "SYSTEM", "FIXTURE"]},
+        "provenance": {"type": "string", "enum": ["TRADINGVIEW", "LOCAL_REPLAY", "SYSTEM_DERIVED"]},
+        "payload_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "sensitive_fields_redacted": {"const": true}
+      }
+    },
+    "instrument": {"$ref": "#/$defs/instrument"},
+    "timeframe": {"type": "string", "enum": ["5s", "15s", "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]},
+    "event_class": {"type": "string", "enum": ["TELEMETRY", "SETUP_CANDIDATE", "ANALYSIS_READY", "LIFECYCLE"]},
+    "event_type": {"type": "string", "enum": ["SNR_UPDATE", "EXPANSION_UPDATE", "SETUP_CANDIDATE", "SNR_REJECTION_READY", "SNR_BREAK_READY", "SETUP_INVALIDATED", "SETUP_EXPIRED", "ENTRY_WINDOW_OPEN", "ENTRY_WINDOW_CLOSED", "THESIS_INVALIDATED"]},
+    "setup_id": {"type": ["string", "null"], "pattern": "^setup_[A-Za-z0-9._:-]{8,120}$"},
+    "hypothesis": {"type": ["string", "null"], "enum": ["LONG", "SHORT", null]},
+    "path": {"type": ["string", "null"], "enum": ["SNR_REJECTION", "SNR_STRONG_BREAK", null]},
+    "disposition": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "reason_code", "detail"],
+      "properties": {
+        "status": {"type": "string", "enum": ["ACCEPTED", "REJECTED", "STRUCTURAL_BREAK", "INVALID", "EXPIRED", "DUPLICATE"]},
+        "reason_code": {"type": "string", "pattern": "^[A-Z0-9_]{2,64}$"},
+        "detail": {"type": "string", "minLength": 1, "maxLength": 500}
+      }
+    },
+    "payload": {"type": "object", "maxProperties": 64, "additionalProperties": true}
+  },
+  "$defs": {
+    "utc": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "instrument": {
+      "type": "object", "additionalProperties": false,
+      "required": ["symbol", "venue", "point_size"],
+      "properties": {
+        "symbol": {"type": "string", "pattern": "^[A-Z0-9._-]{2,20}$"},
+        "venue": {"type": "string", "minLength": 1, "maxLength": 40},
+        "point_size": {"type": "number", "exclusiveMinimum": 0}
+      }
+    }
+  }
+}

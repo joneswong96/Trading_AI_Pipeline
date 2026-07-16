@@ -1,0 +1,29 @@
+[
+  {
+    "schema_version": "1.0", "thesis_id": "thesis_xau_20260716_0001", "version": 1,
+    "request_id": "req_xau_20260716_0001", "verdict_id": "verdict_xau_20260716_0001", "setup_id": "setup_xau_20260716_0001", "correlation_id": "corr_xau_20260716_0001", "causation_id": "verdict_xau_20260716_0001",
+    "created_at": "2026-07-16T00:00:04Z", "valid_until": "2026-07-16T00:05:02Z", "decision": "APPROVE", "state": "ARMED",
+    "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01}, "direction": "LONG", "path": "SNR_REJECTION",
+    "entry": 2416.5, "sl": 2414.5, "tp": 2418.5, "invalidation": 2414.5, "rr": 1.0, "mode": "SHADOW", "execution_environment": "MT5_DEMO", "live_execution": false,
+    "rationale": "Canonical shadow thesis created from approved fixture verdict.",
+    "provenance": {"compiler": "project-a-replay", "contract": "THESIS_SCHEMA_V1", "source_verdict_id": "verdict_xau_20260716_0001"}
+  },
+  {
+    "schema_version": "1.0", "thesis_id": "thesis_xau_20260716_0001", "version": 2,
+    "request_id": "req_xau_20260716_0001", "verdict_id": "verdict_xau_20260716_0001", "setup_id": "setup_xau_20260716_0001", "correlation_id": "corr_xau_20260716_0001", "causation_id": "verdict_xau_20260716_0001",
+    "created_at": "2026-07-16T00:02:01Z", "valid_until": null, "decision": "REJECT", "state": "INVALIDATED",
+    "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01}, "direction": "LONG", "path": "SNR_REJECTION",
+    "entry": null, "sl": null, "tp": null, "invalidation": 2414.5, "rr": 1.0, "mode": "SHADOW", "execution_environment": "MT5_DEMO", "live_execution": false,
+    "rationale": "Lifecycle fixture records the structural break without retaining actionable prices.",
+    "provenance": {"compiler": "project-a-replay", "contract": "THESIS_SCHEMA_V1", "source_verdict_id": "verdict_xau_20260716_0001"}
+  },
+  {
+    "schema_version": "1.0", "thesis_id": "thesis_xau_20260716_0002", "version": 1,
+    "request_id": "req_xau_20260716_0002", "verdict_id": "verdict_xau_20260716_0002", "setup_id": "setup_xau_20260716_0002", "correlation_id": "corr_xau_20260716_0002", "causation_id": "verdict_xau_20260716_0002",
+    "created_at": "2026-07-16T00:10:00Z", "valid_until": null, "decision": "EXPIRED", "state": "EXPIRED",
+    "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01}, "direction": "SHORT", "path": "SNR_STRONG_BREAK",
+    "entry": null, "sl": null, "tp": null, "invalidation": null, "rr": 1.0, "mode": "SHADOW", "execution_environment": "MT5_DEMO", "live_execution": false,
+    "rationale": "Expired fixture remains auditable and cannot produce an order.",
+    "provenance": {"compiler": "project-a-replay", "contract": "THESIS_SCHEMA_V1", "source_verdict_id": "verdict_xau_20260716_0002"}
+  }
+]

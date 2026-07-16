@@ -2,6 +2,7 @@
 pytest
 pyyaml
 python-dotenv
+jsonschema>=4.21,<5
 
 # Step 1 — capture 雙路（已裝，連 chromium：python -m playwright install chromium）
 playwright

@@ -1,0 +1,12 @@
+{
+  "setup_id": "setup_xau_20260716_0001",
+  "correlation_id": "corr_xau_20260716_0001",
+  "thesis_id": "thesis_xau_20260716_0001",
+  "mode": "SHADOW",
+  "outputs": {
+    "tradingview": {"adapter": "FAKE", "port": 4999, "symbol": "XAUUSD", "timeframe": "1m", "draw": true},
+    "telegram": {"adapter": "FAKE", "notify_only": true, "sent": false},
+    "notion": {"adapter": "FAKE", "audit_only": true, "written": false},
+    "mt5": {"adapter": "FAKE", "environment": "MT5_DEMO", "dry_run": true, "order_placed": false}
+  }
+}

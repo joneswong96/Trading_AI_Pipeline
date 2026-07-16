@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-a:THESIS_SCHEMA_V1",
+  "title": "THESIS_SCHEMA_V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "thesis_id", "version", "request_id", "verdict_id", "setup_id", "correlation_id", "causation_id", "created_at", "valid_until", "decision", "state", "instrument", "direction", "path", "entry", "sl", "tp", "invalidation", "rr", "mode", "execution_environment", "live_execution", "rationale", "provenance"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "thesis_id": {"type": "string", "pattern": "^thesis_[A-Za-z0-9._:-]{8,120}$"},
+    "version": {"type": "integer", "minimum": 1},
+    "request_id": {"type": "string", "pattern": "^req_[A-Za-z0-9._:-]{8,120}$"},
+    "verdict_id": {"type": "string", "pattern": "^verdict_[A-Za-z0-9._:-]{8,120}$"},
+    "setup_id": {"type": "string", "pattern": "^setup_[A-Za-z0-9._:-]{8,120}$"},
+    "correlation_id": {"type": "string", "pattern": "^corr_[A-Za-z0-9._:-]{8,120}$"},
+    "causation_id": {"type": "string", "pattern": "^verdict_[A-Za-z0-9._:-]{8,120}$"},
+    "created_at": {"$ref": "#/$defs/utc"},
+    "valid_until": {"oneOf": [{"$ref": "#/$defs/utc"}, {"type": "null"}]},
+    "decision": {"type": "string", "enum": ["APPROVE", "REJECT", "MODIFY", "EXPIRED"]},
+    "state": {"type": "string", "enum": ["ARMED", "IN_TRADE", "WAIT", "INVALIDATED", "EXPIRED", "CLOSED"]},
+    "instrument": {
+      "type": "object", "additionalProperties": false, "required": ["symbol", "venue", "point_size"],
+      "properties": {"symbol": {"const": "XAUUSD"}, "venue": {"type": "string", "minLength": 1}, "point_size": {"type": "number", "exclusiveMinimum": 0}}
+    },
+    "direction": {"type": ["string", "null"], "enum": ["LONG", "SHORT", null]},
+    "path": {"type": "string", "enum": ["SNR_REJECTION", "SNR_STRONG_BREAK"]},
+    "entry": {"type": ["number", "null"], "exclusiveMinimum": 0},
+    "sl": {"type": ["number", "null"], "exclusiveMinimum": 0},
+    "tp": {"type": ["number", "null"], "exclusiveMinimum": 0},
+    "invalidation": {"type": ["number", "null"], "exclusiveMinimum": 0},
+    "rr": {"const": 1.0}, "mode": {"const": "SHADOW"},
+    "execution_environment": {"const": "MT5_DEMO"}, "live_execution": {"const": false},
+    "rationale": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["compiler", "contract", "source_verdict_id"],
+      "properties": {
+        "compiler": {"type": "string", "minLength": 1},
+        "contract": {"const": "THESIS_SCHEMA_V1"},
+        "source_verdict_id": {"type": "string", "pattern": "^verdict_[A-Za-z0-9._:-]{8,120}$"}
+      }
+    }
+  },
+  "$defs": {"utc": {"type": "string", "format": "date-time", "pattern": "Z$"}}
+}

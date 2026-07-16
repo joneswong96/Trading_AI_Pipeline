@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-a:AI_VERDICT_SCHEMA_V1",
+  "title": "AI_VERDICT_SCHEMA_V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "verdict_id", "request_id", "setup_id", "correlation_id", "causation_id", "generated_at", "verdict", "hypothesis", "path", "entry", "sl", "tp", "valid_until", "reason_codes", "rationale", "hard_gates", "model"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "verdict_id": {"type": "string", "pattern": "^verdict_[A-Za-z0-9._:-]{8,120}$"},
+    "request_id": {"type": "string", "pattern": "^req_[A-Za-z0-9._:-]{8,120}$"},
+    "setup_id": {"type": "string", "pattern": "^setup_[A-Za-z0-9._:-]{8,120}$"},
+    "correlation_id": {"type": "string", "pattern": "^corr_[A-Za-z0-9._:-]{8,120}$"},
+    "causation_id": {"type": "string", "pattern": "^req_[A-Za-z0-9._:-]{8,120}$"},
+    "generated_at": {"$ref": "#/$defs/utc"},
+    "verdict": {"type": "string", "enum": ["APPROVE", "REJECT", "MODIFY", "EXPIRED"]},
+    "hypothesis": {"type": "string", "enum": ["LONG", "SHORT"]},
+    "path": {"type": "string", "enum": ["SNR_REJECTION", "SNR_STRONG_BREAK"]},
+    "entry": {"type": ["number", "null"], "exclusiveMinimum": 0},
+    "sl": {"type": ["number", "null"], "exclusiveMinimum": 0},
+    "tp": {"type": ["number", "null"], "exclusiveMinimum": 0},
+    "valid_until": {"oneOf": [{"$ref": "#/$defs/utc"}, {"type": "null"}]},
+    "reason_codes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z0-9_]{2,64}$"}},
+    "rationale": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "hard_gates": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_valid", "symbol_valid", "timeframe_valid", "spread_valid", "rr_valid", "environment_valid"],
+      "properties": {
+        "schema_valid": {"type": "boolean"}, "symbol_valid": {"type": "boolean"},
+        "timeframe_valid": {"type": "boolean"}, "spread_valid": {"type": "boolean"},
+        "rr_valid": {"type": "boolean"}, "environment_valid": {"type": "boolean"}
+      }
+    },
+    "model": {
+      "type": "object", "additionalProperties": false,
+      "required": ["provider", "name", "prompt_version", "mode", "untrusted_input_handled"],
+      "properties": {
+        "provider": {"type": "string", "minLength": 1, "maxLength": 80},
+        "name": {"type": "string", "minLength": 1, "maxLength": 120},
+        "prompt_version": {"type": "string", "minLength": 1, "maxLength": 40},
+        "mode": {"const": "SHADOW"}, "untrusted_input_handled": {"const": true}
+      }
+    }
+  },
+  "$defs": {"utc": {"type": "string", "format": "date-time", "pattern": "Z$"}}
+}

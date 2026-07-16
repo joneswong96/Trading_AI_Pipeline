@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-a:ANALYSIS_REQUEST_SCHEMA_V1",
+  "title": "ANALYSIS_REQUEST_SCHEMA_V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "setup_id", "correlation_id", "causation_id", "created_at", "expires_at", "instrument", "hypothesis", "path", "base_timeframe", "session", "snr", "hpa", "momentum", "trigger_price", "spread_points", "entry_candidate", "sl_candidate", "tp_candidate", "risk", "screenshots_required", "source_event_ids", "provenance"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "request_id": {"type": "string", "pattern": "^req_[A-Za-z0-9._:-]{8,120}$"},
+    "setup_id": {"type": "string", "pattern": "^setup_[A-Za-z0-9._:-]{8,120}$"},
+    "correlation_id": {"type": "string", "pattern": "^corr_[A-Za-z0-9._:-]{8,120}$"},
+    "causation_id": {"type": "string", "pattern": "^evt_[A-Za-z0-9._:-]{8,120}$"},
+    "created_at": {"$ref": "#/$defs/utc"},
+    "expires_at": {"$ref": "#/$defs/utc"},
+    "instrument": {"$ref": "#/$defs/instrument"},
+    "hypothesis": {"type": "string", "enum": ["LONG", "SHORT"]},
+    "path": {"type": "string", "enum": ["SNR_REJECTION", "SNR_STRONG_BREAK"]},
+    "base_timeframe": {"const": "1m"},
+    "session": {"type": "string", "enum": ["ASIAN", "LONDON", "NEW_YORK", "OVERLAP", "OFF_HOURS"]},
+    "snr": {
+      "type": "object", "additionalProperties": false,
+      "required": ["low", "high", "type"],
+      "properties": {
+        "low": {"type": "number"}, "high": {"type": "number"},
+        "type": {"type": "string", "enum": ["CLASSIC", "HNS", "BO", "SWEEP", "TL"]}
+      }
+    },
+    "hpa": {"type": "array", "maxItems": 16, "items": {"type": "string", "minLength": 1, "maxLength": 80}},
+    "momentum": {
+      "type": "object", "additionalProperties": false,
+      "required": ["5s", "1m", "5m", "15m", "30m"],
+      "properties": {
+        "5s": {"$ref": "#/$defs/momentum"}, "1m": {"$ref": "#/$defs/momentum"},
+        "5m": {"$ref": "#/$defs/momentum"}, "15m": {"$ref": "#/$defs/momentum"},
+        "30m": {"$ref": "#/$defs/momentum"}
+      }
+    },
+    "trigger_price": {"type": "number", "exclusiveMinimum": 0},
+    "spread_points": {"type": "number", "minimum": 0},
+    "entry_candidate": {"type": "number", "exclusiveMinimum": 0},
+    "sl_candidate": {"type": "number", "exclusiveMinimum": 0},
+    "tp_candidate": {"type": "number", "exclusiveMinimum": 0},
+    "risk": {
+      "type": "object", "additionalProperties": false,
+      "required": ["max_spread_points", "rr", "mode", "execution_environment", "live_execution"],
+      "properties": {
+        "max_spread_points": {"const": 10}, "rr": {"const": 1.0},
+        "mode": {"const": "SHADOW"}, "execution_environment": {"const": "MT5_DEMO"},
+        "live_execution": {"const": false}
+      }
+    },
+    "screenshots_required": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 80}},
+    "source_event_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^evt_[A-Za-z0-9._:-]{8,120}$"}},
+    "provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["compiler", "compiler_version", "capture_mode", "port", "symbol_verified", "timeframe_verified"],
+      "properties": {
+        "compiler": {"type": "string", "minLength": 1}, "compiler_version": {"type": "string", "minLength": 1},
+        "capture_mode": {"type": "string", "enum": ["FIXTURE", "TRADINGVIEW_MCP", "SCREENSHOT"]},
+        "port": {"const": 4999}, "symbol_verified": {"const": true}, "timeframe_verified": {"const": true}
+      }
+    }
+  },
+  "$defs": {
+    "utc": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "instrument": {
+      "type": "object", "additionalProperties": false, "required": ["symbol", "venue", "point_size"],
+      "properties": {"symbol": {"const": "XAUUSD"}, "venue": {"type": "string", "minLength": 1}, "point_size": {"type": "number", "exclusiveMinimum": 0}}
+    },
+    "momentum": {
+      "type": "object", "additionalProperties": false, "required": ["classification", "direction", "source"],
+      "properties": {
+        "classification": {"type": "string", "enum": ["CLEAN_PUSH", "WEAK_PUSH", "EXHAUSTING", "RANGE_DRIFT", "TOO_EXTENDED", "UNAVAILABLE"]},
+        "direction": {"type": ["string", "null"], "enum": ["LONG", "SHORT", "NEUTRAL", null]},
+        "source": {"type": "string", "enum": ["FIXTURE", "SCREENSHOT", "OHLC"]}
+      }
+    }
+  }
+}

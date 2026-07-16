@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "request_id": "req_xau_20260716_0001",
+  "setup_id": "setup_xau_20260716_0001",
+  "correlation_id": "corr_xau_20260716_0001",
+  "causation_id": "evt_xau_20260716_0001",
+  "created_at": "2026-07-16T00:00:02Z",
+  "expires_at": "2026-07-16T00:05:02Z",
+  "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01},
+  "hypothesis": "LONG",
+  "path": "SNR_REJECTION",
+  "base_timeframe": "1m",
+  "session": "ASIAN",
+  "snr": {"low": 2415.0, "high": 2416.0, "type": "CLASSIC"},
+  "hpa": ["M15_DISCOUNT", "M5_DISCOUNT"],
+  "momentum": {
+    "5s": {"classification": "UNAVAILABLE", "direction": null, "source": "FIXTURE"},
+    "1m": {"classification": "EXHAUSTING", "direction": "SHORT", "source": "FIXTURE"},
+    "5m": {"classification": "WEAK_PUSH", "direction": "SHORT", "source": "FIXTURE"},
+    "15m": {"classification": "WEAK_PUSH", "direction": "SHORT", "source": "FIXTURE"},
+    "30m": {"classification": "RANGE_DRIFT", "direction": "NEUTRAL", "source": "FIXTURE"}
+  },
+  "trigger_price": 2416.5,
+  "spread_points": 8,
+  "entry_candidate": 2416.5,
+  "sl_candidate": 2414.5,
+  "tp_candidate": 2418.5,
+  "risk": {"max_spread_points": 10, "rr": 1.0, "mode": "SHADOW", "execution_environment": "MT5_DEMO", "live_execution": false},
+  "screenshots_required": ["xauusd_1m", "xauusd_5m", "xauusd_15m", "xauusd_30m"],
+  "source_event_ids": ["evt_xau_20260716_0001"],
+  "provenance": {"compiler": "project-a-replay", "compiler_version": "1.0.0", "capture_mode": "FIXTURE", "port": 4999, "symbol_verified": true, "timeframe_verified": true}
+}

@@ -1,0 +1,24 @@
+project_a:
+  enabled_instruments: [XAUUSD]
+  mode: SHADOW
+  execution_environment: MT5_DEMO
+  live_execution: false
+  order_placement: false
+  fail_closed_on_environment_mismatch: true
+  base_timeframe: 1m
+  tradingview:
+    XAUUSD:
+      enabled: true
+      port: 4999
+      expected_symbol: XAUUSD
+      expected_timeframe: 1m
+    USTEC: {enabled: false}
+    DE40: {enabled: false}
+  risk:
+    max_spread_points: 10
+    rr: 1.0
+  contracts:
+    event: EVENT_SCHEMA_V0_2
+    analysis_request: ANALYSIS_REQUEST_SCHEMA_V1
+    ai_verdict: AI_VERDICT_SCHEMA_V1
+    thesis: THESIS_SCHEMA_V1

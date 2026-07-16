@@ -1,0 +1,99 @@
+{
+  "accepted_alert": {
+    "expected": {"valid": true, "outcome": "ACCEPTED"},
+    "payload": {
+      "schema_version": "0.2", "event_id": "evt_xau_20260716_0001", "correlation_id": "corr_xau_20260716_0001", "causation_id": null,
+      "occurred_at": "2026-07-16T00:00:00Z", "received_at": "2026-07-16T00:00:01Z",
+      "source": {"producer": "project-a-fixture", "engine": "FIXTURE", "provenance": "LOCAL_REPLAY", "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "sensitive_fields_redacted": true},
+      "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01}, "timeframe": "1m",
+      "event_class": "ANALYSIS_READY", "event_type": "SNR_REJECTION_READY", "setup_id": "setup_xau_20260716_0001", "hypothesis": "LONG", "path": "SNR_REJECTION",
+      "disposition": {"status": "ACCEPTED", "reason_code": "REACTION_CONFIRMED", "detail": "M1 reaction confirmed at a valid SNR."},
+      "payload": {"snr_low": 2415.0, "snr_high": 2416.0, "trigger_price": 2416.5, "session": "ASIAN"}
+    }
+  },
+  "rejected_alert": {
+    "expected": {"valid": true, "outcome": "REJECTED"},
+    "payload": {
+      "schema_version": "0.2", "event_id": "evt_xau_20260716_0002", "correlation_id": "corr_xau_20260716_0002", "causation_id": null,
+      "occurred_at": "2026-07-16T00:01:00Z", "received_at": "2026-07-16T00:01:01Z",
+      "source": {"producer": "project-a-fixture", "engine": "FIXTURE", "provenance": "LOCAL_REPLAY", "payload_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "sensitive_fields_redacted": true},
+      "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01}, "timeframe": "1m",
+      "event_class": "SETUP_CANDIDATE", "event_type": "SETUP_CANDIDATE", "setup_id": "setup_xau_20260716_0002", "hypothesis": "SHORT", "path": "SNR_REJECTION",
+      "disposition": {"status": "REJECTED", "reason_code": "RANGE_MIDDLE", "detail": "Candidate is in the middle of the range."}, "payload": {"trigger_price": 2419.0}
+    }
+  },
+  "structural_break": {
+    "expected": {"valid": true, "outcome": "STRUCTURAL_BREAK"},
+    "payload": {
+      "schema_version": "0.2", "event_id": "evt_xau_20260716_0003", "correlation_id": "corr_xau_20260716_0001", "causation_id": "evt_xau_20260716_0001",
+      "occurred_at": "2026-07-16T00:02:00Z", "received_at": "2026-07-16T00:02:01Z",
+      "source": {"producer": "project-a-fixture", "engine": "SYSTEM", "provenance": "SYSTEM_DERIVED", "payload_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "sensitive_fields_redacted": true},
+      "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01}, "timeframe": "1m",
+      "event_class": "LIFECYCLE", "event_type": "SETUP_INVALIDATED", "setup_id": "setup_xau_20260716_0001", "hypothesis": "LONG", "path": "SNR_REJECTION",
+      "disposition": {"status": "STRUCTURAL_BREAK", "reason_code": "M1_STRUCTURE_BROKEN", "detail": "The structural invalidation level was breached."}, "payload": {"price": 2414.0, "invalidation": 2414.5}
+    }
+  },
+  "semantically_invalid_payload": {
+    "expected": {"valid": false, "error_code": "analysis_ready_path_required"},
+    "payload": {
+      "schema_version": "0.2", "event_id": "evt_xau_20260716_0004", "correlation_id": "corr_xau_20260716_0004", "causation_id": null,
+      "occurred_at": "2026-07-16T00:03:00Z", "received_at": "2026-07-16T00:03:01Z",
+      "source": {"producer": "project-a-fixture", "engine": "FIXTURE", "provenance": "LOCAL_REPLAY", "payload_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "sensitive_fields_redacted": true},
+      "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01}, "timeframe": "1m",
+      "event_class": "ANALYSIS_READY", "event_type": "SNR_REJECTION_READY", "setup_id": "setup_xau_20260716_0004", "hypothesis": "LONG", "path": null,
+      "disposition": {"status": "INVALID", "reason_code": "PATH_MISSING", "detail": "Analysis Ready cannot omit its path."}, "payload": {}
+    }
+  },
+  "expired_event": {
+    "expected": {"valid": true, "outcome": "EXPIRED"},
+    "payload": {
+      "schema_version": "0.2", "event_id": "evt_xau_20260716_0005", "correlation_id": "corr_xau_20260716_0005", "causation_id": null,
+      "occurred_at": "2026-07-15T23:30:00Z", "received_at": "2026-07-16T00:05:00Z",
+      "source": {"producer": "project-a-fixture", "engine": "SYSTEM", "provenance": "LOCAL_REPLAY", "payload_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "sensitive_fields_redacted": true},
+      "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01}, "timeframe": "1m",
+      "event_class": "LIFECYCLE", "event_type": "SETUP_EXPIRED", "setup_id": "setup_xau_20260716_0005", "hypothesis": "SHORT", "path": "SNR_STRONG_BREAK",
+      "disposition": {"status": "EXPIRED", "reason_code": "EVENT_STALE", "detail": "The analysis window expired before consumption."}, "payload": {"age_seconds": 2100}
+    }
+  },
+  "missing_required_field": {
+    "expected": {"valid": false, "error_code": "schema_required"},
+    "payload": {
+      "schema_version": "0.2", "correlation_id": "corr_xau_20260716_0006", "causation_id": null,
+      "occurred_at": "2026-07-16T00:06:00Z", "received_at": "2026-07-16T00:06:01Z",
+      "source": {"producer": "project-a-fixture", "engine": "FIXTURE", "provenance": "LOCAL_REPLAY", "payload_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "sensitive_fields_redacted": true},
+      "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01}, "timeframe": "1m", "event_class": "TELEMETRY", "event_type": "SNR_UPDATE",
+      "setup_id": null, "hypothesis": null, "path": null, "disposition": {"status": "INVALID", "reason_code": "EVENT_ID_MISSING", "detail": "Fixture intentionally omits event_id."}, "payload": {}
+    }
+  },
+  "unsupported_schema_version": {
+    "expected": {"valid": false, "error_code": "schema_const"},
+    "payload": {
+      "schema_version": "0.1", "event_id": "evt_xau_20260716_0007", "correlation_id": "corr_xau_20260716_0007", "causation_id": null,
+      "occurred_at": "2026-07-16T00:07:00Z", "received_at": "2026-07-16T00:07:01Z",
+      "source": {"producer": "project-a-fixture", "engine": "FIXTURE", "provenance": "LOCAL_REPLAY", "payload_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111", "sensitive_fields_redacted": true},
+      "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01}, "timeframe": "1m", "event_class": "TELEMETRY", "event_type": "SNR_UPDATE",
+      "setup_id": null, "hypothesis": null, "path": null, "disposition": {"status": "INVALID", "reason_code": "VERSION_UNSUPPORTED", "detail": "Fixture intentionally uses 0.1."}, "payload": {}
+    }
+  },
+  "invalid_enum_value": {
+    "expected": {"valid": false, "error_code": "schema_enum"},
+    "payload": {
+      "schema_version": "0.2", "event_id": "evt_xau_20260716_0008", "correlation_id": "corr_xau_20260716_0008", "causation_id": null,
+      "occurred_at": "2026-07-16T00:08:00Z", "received_at": "2026-07-16T00:08:01Z",
+      "source": {"producer": "project-a-fixture", "engine": "FIXTURE", "provenance": "LOCAL_REPLAY", "payload_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222", "sensitive_fields_redacted": true},
+      "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01}, "timeframe": "2m", "event_class": "TELEMETRY", "event_type": "SNR_UPDATE",
+      "setup_id": null, "hypothesis": null, "path": null, "disposition": {"status": "INVALID", "reason_code": "TIMEFRAME_INVALID", "detail": "Fixture intentionally uses 2m."}, "payload": {}
+    }
+  },
+  "duplicate_replayed_event": {
+    "expected": {"valid": true, "outcome": "DUPLICATE"},
+    "payload": {
+      "schema_version": "0.2", "event_id": "evt_xau_20260716_0009", "correlation_id": "corr_xau_20260716_0001", "causation_id": "evt_xau_20260716_0001",
+      "occurred_at": "2026-07-16T00:00:00Z", "received_at": "2026-07-16T00:09:00Z",
+      "source": {"producer": "project-a-fixture", "engine": "FIXTURE", "provenance": "LOCAL_REPLAY", "payload_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "sensitive_fields_redacted": true},
+      "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01}, "timeframe": "1m",
+      "event_class": "ANALYSIS_READY", "event_type": "SNR_REJECTION_READY", "setup_id": "setup_xau_20260716_0001", "hypothesis": "LONG", "path": "SNR_REJECTION",
+      "disposition": {"status": "DUPLICATE", "reason_code": "PAYLOAD_HASH_REPLAY", "detail": "Same payload hash and setup already consumed."}, "payload": {"original_event_id": "evt_xau_20260716_0001"}
+    }
+  }
+}
