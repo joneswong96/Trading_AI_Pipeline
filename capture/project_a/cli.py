@@ -51,18 +51,21 @@ def _parser() -> argparse.ArgumentParser:
     for item in (preflight,):
         item.add_argument("--profile", required=True)
         item.add_argument("--pin", required=True)
-        item.add_argument("--event", required=True)
+        item.add_argument("--canonical-event", required=True)
+        item.add_argument("--analysis-adapter", required=True)
         item.add_argument("--artifact-root", required=True)
     capture = commands.add_parser("capture", help="capture and compile one Analysis Ready event")
     capture.add_argument("--profile", required=True)
     capture.add_argument("--pin", required=True)
-    capture.add_argument("--event", required=True)
+    capture.add_argument("--canonical-event", required=True)
+    capture.add_argument("--analysis-adapter", required=True)
     capture.add_argument("--artifact-root", required=True)
     capture.add_argument("--dispatch-id", required=True)
     capture.add_argument("--retry-count", type=int, default=0)
     compile_cmd = commands.add_parser("compile", help="compile in place from frozen event and manifest")
     compile_cmd.add_argument("--profile", required=True)
-    compile_cmd.add_argument("--event", required=True)
+    compile_cmd.add_argument("--canonical-event", required=True)
+    compile_cmd.add_argument("--analysis-adapter", required=True)
     compile_cmd.add_argument("--manifest", required=True)
     compile_cmd.add_argument("--created-at", required=True)
     replay = commands.add_parser("replay", help="verify artifacts and deterministically rebuild offline")
@@ -71,9 +74,9 @@ def _parser() -> argparse.ArgumentParser:
     replay.add_argument("--at")
     verify = commands.add_parser("verify", help="verify manifest paths, sizes and SHA-256 values")
     verify.add_argument("--manifest", required=True)
-    sample = commands.add_parser("build-sample", help="build the deterministic fake candidate bundle")
-    sample.add_argument("--frozen-cases", required=True)
-    sample.add_argument("--extension", required=True)
+    sample = commands.add_parser("build-sample", help="build the deterministic synthetic Canonical V1 bundle")
+    sample.add_argument("--wire-vectors", required=True)
+    sample.add_argument("--adapter", required=True)
     sample.add_argument("--profile", required=True)
     sample.add_argument("--output-root", required=True)
     sample.add_argument("--started-at", required=True)
@@ -89,7 +92,7 @@ def run(argv=None) -> dict:
         return {"ok": True, "status": manifest["status"], "artifact_count": len(manifest["artifacts"])}
     if args.command == "build-sample":
         root = build_sample(
-            frozen_cases=args.frozen_cases, extension_path=args.extension,
+            wire_vectors=args.wire_vectors, adapter_path=args.adapter,
             profile_path=args.profile, output_root=args.output_root,
             started_at=parse_utc(args.started_at, "started_at"),
             finished_at=parse_utc(args.finished_at, "finished_at"),
@@ -101,12 +104,25 @@ def run(argv=None) -> dict:
         at = parse_utc(args.at, "at") if args.at else None
         return replay_bundle(args.bundle, profile, replay_at=at)
     if args.command == "compile":
-        event = _load_json(args.event)
+        canonical_event = _load_json(args.canonical_event)
+        analysis_adapter = _load_json(args.analysis_adapter)
         manifest = verify_manifest(args.manifest)
         created = parse_utc(args.created_at, "created_at")
-        request = compile_analysis_request(event, manifest, profile, created_at=created)
-        write_bundle(Path(args.manifest).resolve().parent, event=event, manifest=manifest,
-                     request=request, release_at=created)
+        request = compile_analysis_request(
+            canonical_event,
+            analysis_adapter,
+            manifest,
+            profile,
+            created_at=created,
+        )
+        write_bundle(
+            Path(args.manifest).resolve().parent,
+            canonical_event=canonical_event,
+            analysis_adapter=analysis_adapter,
+            manifest=manifest,
+            request=request,
+            release_at=created,
+        )
         return {"ok": True, "request_id": request["request_id"], "bundle": str(Path(args.manifest).resolve().parent)}
     probe = WindowsCdpProbe()
     endpoint, targets = probe.inspect(profile)
@@ -125,23 +141,41 @@ def run(argv=None) -> dict:
         selected = select_pinned_target(profile, candidate, targets)
         _atomic_state(Path(args.output), candidate.as_dict())
         return {"ok": True, "target_id": selected.target_id, "pin": str(Path(args.output).resolve())}
-    event = _load_json(args.event)
+    canonical_event = _load_json(args.canonical_event)
+    analysis_adapter = _load_json(args.analysis_adapter)
     pin = TabPin.load(args.pin)
     store = ArtifactStore(args.artifact_root)
     if args.command == "preflight":
         from .input_boundary import validate_analysis_ready
-        authority = validate_analysis_ready(event, require_compiler_fields=True)
+        authority = validate_analysis_ready(
+            canonical_event,
+            analysis_adapter,
+            require_compiler_fields=True,
+        )
         with PlaywrightPinnedDriver(profile) as driver:
             result = verify_preflight(profile, pin, endpoint, targets, driver.inspect(), authority,
                                       observed_at=_now(), destination_writable=store.writable())
         return {"ok": True, "preflight": result}
     manifest, path = capture_event(
-        event, profile, pin, store, probe, PlaywrightPinnedDriver,
+        canonical_event, analysis_adapter, profile, pin, store, probe, PlaywrightPinnedDriver,
         dispatch_id=args.dispatch_id, retry_count=args.retry_count, now=_now,
     )
     created = parse_utc(manifest["finished_at"], "finished_at")
-    request = compile_analysis_request(event, manifest, profile, created_at=created)
-    write_bundle(Path(path).parent, event=event, manifest=manifest, request=request, release_at=created)
+    request = compile_analysis_request(
+        canonical_event,
+        analysis_adapter,
+        manifest,
+        profile,
+        created_at=created,
+    )
+    write_bundle(
+        Path(path).parent,
+        canonical_event=canonical_event,
+        analysis_adapter=analysis_adapter,
+        manifest=manifest,
+        request=request,
+        release_at=created,
+    )
     return {"ok": True, "request_id": request["request_id"], "bundle": str(Path(path).parent)}
 
 

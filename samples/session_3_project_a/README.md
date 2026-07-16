@@ -1,7 +1,19 @@
-# Session 3 candidate sample
+# Session 3 recorded synthetic samples
 
-This directory is Session 3-owned. The candidate starts from Session 0's unchanged `accepted_alert` envelope and stable IDs, then adds the documented `payload.analysis` extension from `analysis_extension.json` because the frozen baseline event does not contain all request compiler fields.
+`candidate_bundle_v1/attempt_8b59cacf927faad01734a7f50903119d`
+is the corrected offline sample. It starts from a valid Wire Event V1 known
+vector, records it through the replay-only trusted receipt processor, and binds
+the resulting Canonical Event V1 to
+`PROJECT_A_SESSION_2_CAPTURE_ADAPTER/1.0`.
 
-`candidate_bundle/attempt_f3f0ce2b4e76389ffe02d8a6b5e82be0` contains five deterministic one-pixel fake PNGs. They are safe offline artifacts, not TradingView evidence. The manifest, exact Analysis Request 1.0 document, source event and release decision replay without browser/network/AI dependencies.
+The five one-pixel PNGs are explicitly `SYNTHETIC_FIXTURE`; the manifest says
+`real_browser_used=false`, `runtime_compatibility_claim=NONE`, and
+`release_enabled=false`. Replay reports `SYNTHETIC_RETAINED` and never releases
+the bundle to Session 4.
 
-Do not use this fixture as evidence for the required 20–30 live XAUUSD shadow samples.
+`candidate_bundle/attempt_f3f0ce2b4e76389ffe02d8a6b5e82be0` is the preserved
+original V0.2 candidate sample. It is superseded, synthetic, and retained only
+as original-history evidence. It is not an accepted input or runtime proof.
+
+Neither directory is TradingView, Chrome, Playwright, real-port, feed, layout,
+or visual compatibility evidence.

@@ -1,4 +1,10 @@
-# Session 3 baseline audit
+# Session 3 original-candidate baseline audit
+
+This document records the historical observations that preceded the original
+candidate. It is not current runtime evidence and does not establish
+compatibility with TradingView, Chrome, Playwright, or a real port-4999
+listener. The corrected offline candidate performs no browser or port access.
+Real compatibility remains a Runtime Activation Gate.
 
 Audit date: 2026-07-16 (Australia/Sydney). Baseline: `d10f6eaf44658caa83dba19009eeef5162cf033c` on `project-a/integration-v1`. Working branch: `project-a/session-3-capture-bundle-v1`.
 
@@ -11,7 +17,7 @@ Audit date: 2026-07-16 (Australia/Sydney). Baseline: `d10f6eaf44658caa83dba19009
 
 ## MCP and browser boundary
 
-- `vendor/tradingview-mcp` is a separate untracked-by-Git Node package at `C:\Users\jones.w\TradingSys\vendor\tradingview-mcp`, package version `1.0.0`. It has installed dependencies but no `.git` metadata, so no repository/branch/commit can be attested locally.
+- `vendor/tradingview-mcp` was observed as a separate untracked-by-Git Node package under the local workspace, package version `1.0.0`. It had installed dependencies but no `.git` metadata, so no repository/branch/commit was attested.
 - Its `src/connection.js` and `src/core/tab.js` hard-code `localhost:9222`; target discovery accepts the first TradingView chart-like target and then a fuzzy TradingView fallback. That violates Project A's port 4999 and explicit-tab requirements. The package will remain unmodified and will not be used as capture authority.
 - The Project A route therefore needs a narrow local adapter over CDP on exactly `127.0.0.1:4999`, an exact operator-pinned target ID and layout URL, and structured chart verification. The adapter may use the same underlying TradingView/Playwright capabilities without depending on vendor internals.
 

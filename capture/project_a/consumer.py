@@ -19,7 +19,8 @@ from .input_boundary import parse_utc, utc_z, validate_analysis_ready
 @dataclass(frozen=True)
 class DispatchEnvelope:
     dispatch_id: str
-    event: dict
+    canonical_event: dict
+    analysis_adapter: dict
     retry_count: int
     requested_at: str
 
@@ -29,6 +30,11 @@ class DispatchEnvelope:
         if self.retry_count < 0:
             raise Session3Error("RETRY_SEQUENCE_INVALID", "retry_count cannot be negative")
         parse_utc(self.requested_at, "requested_at")
+        validate_analysis_ready(
+            self.canonical_event,
+            self.analysis_adapter,
+            require_compiler_fields=True,
+        )
 
 
 class FileDispatchLedger:
@@ -64,9 +70,16 @@ class FileDispatchLedger:
 def consume_dispatch(envelope: DispatchEnvelope, ledger: FileDispatchLedger,
                      handler: Callable[[DispatchEnvelope, str], dict]) -> dict:
     envelope.validate()
-    authority = validate_analysis_ready(envelope.event, require_compiler_fields=True)
+    authority = validate_analysis_ready(
+        envelope.canonical_event,
+        envelope.analysis_adapter,
+        require_compiler_fields=True,
+    )
     requested_at = parse_utc(envelope.requested_at, "requested_at")
-    fingerprint = hashlib.sha256(canonical_json(envelope.event).encode("utf-8")).hexdigest()
+    fingerprint = hashlib.sha256(canonical_json({
+        "canonical_event": envelope.canonical_event,
+        "analysis_adapter": envelope.analysis_adapter,
+    }).encode("utf-8")).hexdigest()
     record = ledger.load(envelope.dispatch_id)
     if record and record["event_sha256"] != fingerprint:
         raise Session3Error("DISPATCH_CONFLICT", "same dispatch_id carried a different canonical event")
@@ -84,7 +97,14 @@ def consume_dispatch(envelope: DispatchEnvelope, ledger: FileDispatchLedger,
         record = {
             "dispatch_id": envelope.dispatch_id,
             "event_sha256": fingerprint,
-            "event_id": authority.event_id,
+            "source_event_id": authority.event_id,
+            "producer_event_id": authority.producer_event_id,
+            "canonical_event_id": authority.canonical_event_id,
+            "canonical_content_hash": authority.canonical_content_hash,
+            "semantic_evidence_hash": authority.semantic_evidence_hash,
+            "receipt_id": authority.receipt_id,
+            "raw_content_hash": authority.raw_content_hash,
+            "analysis_adapter_hash": authority.adapter_output_hash,
             "setup_id": authority.setup_id,
             "correlation_id": authority.correlation_id,
             "status": "PENDING",
@@ -106,7 +126,7 @@ def consume_dispatch(envelope: DispatchEnvelope, ledger: FileDispatchLedger,
             "attempt_id": attempt_id,
             "request_id": result["request_id"],
             "bundle_path": result.get("bundle_path"),
-            "release_to_session_4": result.get("release_to_session_4", True),
+            "release_to_session_4": result.get("release_to_session_4", False),
             "error": None,
         }
         record["status"] = "COMPLETED"

@@ -1,6 +1,7 @@
 {
   "symbol": "XAUUSD",
   "enabled": true,
+  "real_browser_enabled": false,
   "aliases": ["ICMARKETS:XAUUSD"],
   "broker_feed": "ICMARKETS",
   "host": "127.0.0.1",

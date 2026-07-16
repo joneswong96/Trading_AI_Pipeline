@@ -13,7 +13,7 @@ from .input_boundary import AnalysisAuthority, parse_utc, utc_z, validate_analys
 from .profile import CaptureProfile
 
 COMPILER_NAME = "project-a-session-3"
-COMPILER_VERSION = "1.0.0"
+COMPILER_VERSION = "1.1.0"
 
 
 def _capture_mode(value: str) -> str:
@@ -38,6 +38,8 @@ def _validated_artifacts(manifest: dict, profile: CaptureProfile) -> list[dict]:
         raise Session3Error("WRONG_FEED", "manifest feed differs from profile")
     if manifest.get("restored_base_timeframe") is not True:
         raise Session3Error("WRONG_TIMEFRAME", "manifest does not prove 1m restoration")
+    if manifest.get("runtime_compatibility_claim") != "NONE" or manifest.get("release_enabled") is not False:
+        raise Session3Error("CONTRACT_COMPILATION_FAILURE", "offline manifest cannot claim runtime compatibility or release")
     by_tf: dict[str, dict] = {}
     for record in manifest.get("artifacts", []):
         tf = record.get("requested_timeframe")
@@ -45,6 +47,8 @@ def _validated_artifacts(manifest: dict, profile: CaptureProfile) -> list[dict]:
             raise Session3Error("PARTIAL_CAPTURE", f"duplicate artifact for {tf}")
         if record.get("observed_timeframe") != tf or not all(record.get("verification", {}).values()):
             raise Session3Error("WRONG_TIMEFRAME", f"unverified artifact for {tf}")
+        if record.get("synthetic") is not manifest.get("synthetic"):
+            raise Session3Error("CONTRACT_COMPILATION_FAILURE", f"artifact evidence label differs for {tf}")
         by_tf[tf] = record
     missing = [tf for tf in profile.required_timeframes if tf not in by_tf]
     if missing:
@@ -57,7 +61,14 @@ def _request_id(authority: AnalysisAuthority, manifest: dict,
     del created_at  # clock is already frozen in manifest.started_at
     seed = canonical_json({
         "dispatch_id": manifest["dispatch_id"],
-        "event_id": authority.event_id,
+        "source_event_id": authority.event_id,
+        "producer_event_id": authority.producer_event_id,
+        "canonical_event_id": authority.canonical_event_id,
+        "canonical_content_hash": authority.canonical_content_hash,
+        "semantic_evidence_hash": authority.semantic_evidence_hash,
+        "receipt_id": authority.receipt_id,
+        "raw_content_hash": authority.raw_content_hash,
+        "analysis_adapter_hash": authority.adapter_output_hash,
         "retry_count": manifest["retry_count"],
         "started_at": manifest["started_at"],
         "profile": profile.identity_dict(),
@@ -68,19 +79,38 @@ def _request_id(authority: AnalysisAuthority, manifest: dict,
     return expected
 
 
-def compile_analysis_request(event: dict, manifest: dict, profile: CaptureProfile,
-                             *, created_at: datetime) -> dict:
+def compile_analysis_request(canonical_event: dict, analysis_adapter: dict, manifest: dict,
+                             profile: CaptureProfile, *, created_at: datetime) -> dict:
     profile.validate()
-    authority = validate_analysis_ready(event, require_compiler_fields=True)
+    authority = validate_analysis_ready(
+        canonical_event,
+        analysis_adapter,
+        require_compiler_fields=True,
+    )
     created_at = created_at.astimezone(timezone.utc)
     authority.ensure_unexpired(created_at)
     analysis = authority.require_compiler_fields()
-    if manifest.get("source_event_id") != authority.event_id or manifest.get("setup_id") != authority.setup_id:
-        raise Session3Error("CONTRACT_COMPILATION_FAILURE", "manifest/source stable identifiers do not match")
-    if manifest.get("finished_at") and parse_utc(manifest["finished_at"], "manifest.finished_at") >= authority.expires_at:
-        raise Session3Error("SOURCE_EXPIRED", "capture finished at or after the original expiry")
+    expected_lineage = {
+        "source_event_id": authority.event_id,
+        "producer_event_id": authority.producer_event_id,
+        "canonical_event_id": authority.canonical_event_id,
+        "canonical_content_hash": authority.canonical_content_hash,
+        "semantic_evidence_hash": authority.semantic_evidence_hash,
+        "setup_id": authority.setup_id,
+        "receipt_id": authority.receipt_id,
+        "raw_content_hash": authority.raw_content_hash,
+        "immutable_raw_reference": authority.immutable_raw_reference,
+        "analysis_adapter_hash": authority.adapter_output_hash,
+    }
+    if any(manifest.get(key) != value for key, value in expected_lineage.items()):
+        raise Session3Error("CONTRACT_COMPILATION_FAILURE", "manifest canonical/receipt lineage does not match")
     records = _validated_artifacts(manifest, profile)
-    source_ids = sorted(set(analysis["source_event_ids"]) | {authority.event_id})
+    finished_at = parse_utc(manifest["finished_at"], "manifest.finished_at") if manifest.get("finished_at") else None
+    if finished_at and finished_at >= authority.expires_at:
+        raise Session3Error("SOURCE_EXPIRED", "capture finished at or after the original expiry")
+    if finished_at and created_at < finished_at:
+        raise Session3Error("CONTRACT_COMPILATION_FAILURE", "request creation precedes capture completion")
+    source_ids = [authority.event_id]
     screenshot_refs = [f"{record['requested_timeframe']}:sha256:{record['sha256']}" for record in records]
     request = {
         "schema_version": "1.0",
@@ -90,10 +120,10 @@ def compile_analysis_request(event: dict, manifest: dict, profile: CaptureProfil
         "causation_id": authority.event_id,
         "created_at": utc_z(created_at),
         "expires_at": analysis["expires_at"],
-        "instrument": deepcopy(event["instrument"]),
-        "hypothesis": event["hypothesis"],
-        "path": event["path"],
-        "base_timeframe": event["timeframe"],
+        "instrument": deepcopy(analysis["instrument"]),
+        "hypothesis": authority.wire_event["hypothesis"],
+        "path": authority.wire_event["path"],
+        "base_timeframe": authority.wire_event["base_tf"],
         "session": analysis["session"],
         "snr": deepcopy(analysis["snr"]),
         "hpa": deepcopy(analysis["hpa"]),
@@ -128,7 +158,14 @@ def compile_analysis_request(event: dict, manifest: dict, profile: CaptureProfil
     return request
 
 
-def compile_from_manifest_path(event: dict, manifest_path, profile: CaptureProfile,
+def compile_from_manifest_path(canonical_event: dict, analysis_adapter: dict,
+                               manifest_path, profile: CaptureProfile,
                                *, created_at: datetime) -> dict:
     manifest = verify_manifest(manifest_path)
-    return compile_analysis_request(event, manifest, profile, created_at=created_at)
+    return compile_analysis_request(
+        canonical_event,
+        analysis_adapter,
+        manifest,
+        profile,
+        created_at=created_at,
+    )

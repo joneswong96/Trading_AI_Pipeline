@@ -4,44 +4,69 @@
 
 `capture.project_a` is a new Session 3-owned package. It does not import or alter legacy 9222/9333 capture code, Session 2 persistence, AI, output, Telegram, Notion or MT5 modules.
 
-1. `input_boundary.py` validates the exact frozen Event 0.2 contract and accepts only `ANALYSIS_READY`, `ACCEPTED`, XAUUSD, 1m events with one of the two approved paths.
-2. `profile.py` provides a multi-symbol-shaped profile but rejects every enabled profile except exact XAUUSD/ICMARKETS/127.0.0.1:4999/1m.
-3. `cdp.py` attests the Windows listener/process and standard CDP endpoint. A tab is selected by an operator-pinned target ID plus an exact allowlisted TradingView layout URL. It never selects the first target or uses a title match.
-4. `preflight.py` independently checks endpoint, process/profile marker, local-only binding, exact tab, URL/layout/chart count, structured and header symbol/feed/timeframe signals, authentication, modal/disconnect/loading state, available timeframes, streaming state, source-bar coverage, expiry and destination writability.
-5. `coordinator.py` switches one chart through `5s -> 1m -> 5m -> 15m -> 30m`, waits for two stable structured observations per switch, captures only after verification, and restores/reverifies 1m in `finally`. Any missing artifact or failed restoration makes the manifest `FAILED` and prevents compilation.
-6. `artifacts.py` derives attempt/file paths from hashes and allowlisted timeframe values, writes with exclusive create, hashes actual bytes with SHA-256, and verifies path containment, existence, byte size and hash during replay.
-7. `compiler.py` is pure for fixed event, manifest, profile and clock. It creates a deterministic request ID, maps only frozen schema fields, validates the exact Analysis Request 1.0 contract and encodes artifact identities as `<tf>:sha256:<digest>` in the existing `screenshots_required` field.
-8. `replay.py` needs only stored files. It verifies artifacts, validates both contracts, recompiles and compares canonical JSON. The separate release gate retains expired bundles but returns `release_to_session_4=false`.
-9. `consumer.py` defines the future Session 2 boundary: dispatch ID, validated event, retry count and requested-at time. A replace-atomically file ledger proves at-least-once idempotency without assuming Session 2 tables. Session 2 may replace the ledger behind the same interface.
+1. `input_boundary.py` accepts Canonical Event V1 only. It recomputes canonical content, semantic evidence, stable setup and canonical IDs from `wire_event`; requires an accepted, non-duplicate, dispatch-eligible trusted-ingress record; and binds the exact receipt lineage.
+2. Data absent from Canonical Event V1 but required by the frozen Analysis Request schema is supplied only by `PROJECT_A_SESSION_2_CAPTURE_ADAPTER/1.0`. This adapter is `DISABLED_RECORDED_ONLY`, has `runtime_enabled=false`, and binds its `payload.analysis` to the exact canonical/setup/producer/receipt/hash lineage.
+3. `profile.py` rejects every profile except exact XAUUSD/ICMARKETS/127.0.0.1:4999/1m. `real_browser_enabled` defaults false and the probe/driver/capture path raises `RUNTIME_ACTIVATION_DISABLED` before subprocess, HTTP, Playwright, or CDP access.
+4. `cdp.py` and `preflight.py` retain strict 4999, exact target, XAUUSD, ICMARKETS, layout, timeframe and freshness checks for the later Runtime Activation campaign. There is no 9222/9333, tab, symbol, feed, timeframe or layout fallback.
+5. `coordinator.py` preserves `5s -> 1m -> 5m -> 15m -> 30m` capture and final verified 1m restoration. In the offline candidate it may be exercised only with `capture_method=FIXTURE`; the real route is disabled.
+6. `artifacts.py` binds every attempt to request/setup/source/canonical/semantic/raw/receipt/adapter lineage. Every artifact and manifest says whether it is synthetic and carries `runtime_compatibility_claim=NONE`.
+7. `compiler.py` creates a deterministic request ID from the complete lineage. Because frozen Analysis Request 1.0 requires `evt_` IDs, it uses the deterministic alias `evt_<canonical-hash>` and records the actual `cevt_` identity in the manifest.
+8. `replay.py` needs only stored files. It verifies the exact lineage, artifacts and deterministic request. Synthetic bundles are `SYNTHETIC_RETAINED`; every release remains false until Runtime Activation.
+9. `consumer.py` fingerprints the Canonical V1 plus disabled adapter output together and records the complete lineage in its offline idempotency ledger.
 
 The reference file ledger assumes one Session 2 dispatcher process per ledger root. Its exclusive temporary writes and atomic replacement protect restart recovery, but they are not a cross-process compare-and-swap transaction. A concurrent production consumer must implement the same interface with a database uniqueness constraint/transaction on `dispatch_id` and the stored input hash.
 
-## Event payload extension
+## Versioned adapter convention
 
-The frozen accepted event fixture lacks expiry, HPA, five momentum values, spread and candidate prices. The compiler therefore requires these fields under Event 0.2's existing, explicitly extensible `payload.analysis` bag:
+`payload.analysis` is not an Event V1 extension and is not shared event
+semantics. It exists only inside the explicitly versioned, disabled Session 2
+adapter output:
 
 ```json
 {
-  "expires_at": "UTC Z",
-  "bar_time": "UTC Z",
-  "session": "ASIAN | LONDON | NEW_YORK | OVERLAP | OFF_HOURS",
-  "snr": {"low": 0, "high": 0, "type": "CLASSIC | HNS | BO | SWEEP | TL"},
-  "hpa": [],
-  "momentum": {"5s": {}, "1m": {}, "5m": {}, "15m": {}, "30m": {}},
-  "trigger_price": 0,
-  "spread_points": 0,
-  "entry_candidate": 0,
-  "sl_candidate": 0,
-  "tp_candidate": 0,
-  "source_event_ids": []
+  "adapter_family": "PROJECT_A_SESSION_2_CAPTURE_ADAPTER",
+  "adapter_version": "1.0",
+  "runtime_enabled": false,
+  "status": "DISABLED_RECORDED_ONLY",
+  "source": {
+    "canonical_event_id": "cevt_...",
+    "canonical_content_hash": "sha256:...",
+    "semantic_evidence_hash": "sha256:...",
+    "setup_id": "setup_...",
+    "producer_event_id": "wevt_...",
+    "receipt_id": "rcpt_...",
+    "raw_content_hash": "sha256:...",
+    "immutable_raw_reference": "..."
+  },
+  "payload": {
+    "analysis": {
+      "expires_at": "UTC Z",
+      "bar_time": "UTC Z",
+      "session": "ASIAN | LONDON | NEW_YORK | OVERLAP | OFF_HOURS",
+      "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01},
+      "snr": {"low": 0, "high": 0, "type": "CLASSIC | HNS | BO | SWEEP | TL"},
+      "hpa": [],
+      "momentum": {"5s": {}, "1m": {}, "5m": {}, "15m": {}, "30m": {}},
+      "trigger_price": 0,
+      "spread_points": 0,
+      "entry_candidate": 0,
+      "sl_candidate": 0,
+      "tp_candidate": 0
+    }
+  }
 }
 ```
 
-This is an adapter convention, not a shared-schema change. Missing data fails with `COMPILATION_INPUT_MISSING`; it is never defaulted from market assumptions. Session 0 should ratify this producer/consumer convention before Session 2 wiring.
+The adapter source block must repeat and exactly match canonical event ID,
+canonical/semantic hashes, setup ID, producer event ID, receipt ID, raw hash and
+immutable raw reference. Canonical SNR, trigger, geometry, observed spread, HPA
+projection and bar time are cross-checked. Missing or conflicting data fails
+closed. Momentum/session/expiry translation remains adapter-version behavior,
+not a change to Event V1 semantics.
 
 ## Freshness and expiry
 
-- Expiry is producer-supplied and is never calculated or extended by Session 3.
+- Expiry is supplied by the versioned disabled adapter and is never calculated or extended by Session 3.
 - It is checked before preflight, after capture, before compilation, before every retry, and at release.
 - No undocumented age threshold is introduced. Each observed forming/latest bar must not end before the source bar for its own timeframe, structured chronology must be sane, the chart must report streaming/not disconnected, and capture must complete before the original expiry.
 - The repository's existing m5/m15 OHLC thresholds remain legacy 9333 behavior and are not generalized to Project A.
@@ -58,7 +83,8 @@ Stable failures carry code, bounded detail, retryable flag, attempt ID and next 
 | Tab/chart context | `TAB_NOT_FOUND`, `TAB_AMBIGUOUS`, `WRONG_TAB`, `PAGE_NOT_READY`, `AUTH_UNUSABLE`, `WRONG_SYMBOL`, `WRONG_FEED`, `WRONG_TIMEFRAME`, `WRONG_LAYOUT`, `CHART_NOT_READY`, `STALE_CHART`, `MISSING_TIMEFRAME`, `MODAL_BLOCKING` | Manual correction, same dispatch, original expiry |
 | Artifact | `SCREENSHOT_FAILURE`, `ARTIFACT_WRITE_FAILURE`, `PARTIAL_CAPTURE` | Preserve attempt, then retry before expiry |
 | Integrity/security | `ARTIFACT_HASH_MISMATCH`, `ARTIFACT_MISSING`, `PATH_TRAVERSAL` | Terminal/quarantine |
-| Authority/contract | `SOURCE_EXPIRED`, `SOURCE_INVALID`, `COMPILATION_INPUT_MISSING`, `CONTRACT_COMPILATION_FAILURE` | Terminal; a new source event is required after expiry |
+| Authority/contract | `SOURCE_EXPIRED`, `SOURCE_INVALID`, `CANONICAL_LINEAGE_INVALID`, `ADAPTER_LINEAGE_INVALID`, `COMPILATION_INPUT_MISSING`, `CONTRACT_COMPILATION_FAILURE` | Terminal; quarantine mismatched lineage or wait for new authority after expiry |
+| Runtime | `RUNTIME_ACTIVATION_DISABLED` | Terminal in the offline candidate; complete the separately authorized activation gate |
 | Delivery | `DISPATCH_CONFLICT`, `RETRY_SEQUENCE_INVALID` | Terminal/quarantine |
 
 ## Security findings
@@ -77,5 +103,5 @@ Stable failures carry code, bounded detail, retryable flag, attempt ID and next 
 - The current vendor MCP cannot reliably support Project A without upstream configurability for host/port and exact target ID. The wrapper is safer than a vendor patch, but it uses undocumented TradingView internals (`TradingViewApi`, `setResolution`) and will require smoke tests after TradingView/Chrome upgrades.
 - Screenshot evidence alone is not sufficient. It cannot reliably prove feed, timeframe, freshness or artifact-to-chart identity. The implementation requires structured state plus header/URL signals and treats PNGs as auditable evidence, not identity authority.
 - TradingView DOM/header selectors and internal API shapes are brittle. A structured broker/market-data source with explicit timestamps would materially improve freshness and feed attestation; screenshots should remain supporting evidence.
-- The strongest remaining risk is the absence of a real 4999 profile/layout during this session. Mocked tests prove logic, not current TradingView compatibility. Session 0 must require a live smoke test and 20–30 shadow samples before merge/release.
+- The strongest remaining risk is the absence of real 4999 evidence. Offline integration does not claim TradingView/Chrome/Playwright compatibility. A separately authorized real five-timeframe capture, final 1m restoration, integrity replay and representative shadow samples remain Runtime Activation Gates.
 - The frozen request schema has no dedicated artifact manifest field. Hash references in `screenshots_required` are valid but cramped. A future contract version should model artifact records explicitly; no current schema change is required for the candidate.

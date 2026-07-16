@@ -22,16 +22,23 @@ class Driver(AbstractContextManager):
     def screenshot(self) -> bytes: ...
 
 
-def capture_event(event: dict, profile: CaptureProfile, pin: TabPin,
+def capture_event(canonical_event: dict, analysis_adapter: dict,
+                  profile: CaptureProfile, pin: TabPin,
                   store: ArtifactStore, probe: Probe,
                   driver_factory: Callable[[CaptureProfile], Driver], *,
                   dispatch_id: str, retry_count: int,
                   now: Callable[[], datetime],
                   capture_method: str = "PROJECT_A_CDP",
                   tool_version: str = "project-a-session-3/1.0.0") -> tuple[dict, str]:
-    authority = validate_analysis_ready(event, require_compiler_fields=True)
+    if capture_method != "FIXTURE":
+        profile.require_real_browser_activation()
+    authority = validate_analysis_ready(
+        canonical_event,
+        analysis_adapter,
+        require_compiler_fields=True,
+    )
     started_at = now().astimezone(timezone.utc)
-    authority.ensure_unexpired(started_at)
+    authority.ensure_capture_chronology(started_at)
     if not store.writable():
         raise Session3Error("DESTINATION_UNWRITABLE", str(store.root))
     attempt_dir, manifest = store.begin(

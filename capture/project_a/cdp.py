@@ -56,7 +56,7 @@ class WindowsCdpProbe:
     """Proves listener binding/process identity, then reads standard CDP metadata."""
 
     def inspect(self, profile: CaptureProfile) -> tuple[EndpointInfo, list[TargetInfo]]:
-        profile.validate()
+        profile.require_real_browser_activation()
         if os.name != "nt":
             raise Session3Error("UNSAFE_BINDING", "listener/process attestation is implemented for Windows only")
         script = (
@@ -113,6 +113,7 @@ class PlaywrightPinnedDriver(AbstractContextManager):
         self._page = None
 
     def __enter__(self):
+        self.profile.require_real_browser_activation()
         from playwright.sync_api import sync_playwright
 
         self._playwright = sync_playwright().start()

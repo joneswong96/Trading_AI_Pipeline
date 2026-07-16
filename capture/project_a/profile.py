@@ -25,6 +25,7 @@ def normalized_chart_url(value: str) -> str:
 class CaptureProfile:
     symbol: str
     enabled: bool
+    real_browser_enabled: bool
     aliases: tuple[str, ...]
     broker_feed: str
     host: str
@@ -42,6 +43,7 @@ class CaptureProfile:
         profile = cls(
             symbol=str(data["symbol"]),
             enabled=data.get("enabled") is True,
+            real_browser_enabled=data.get("real_browser_enabled") is True,
             aliases=tuple(data.get("aliases") or ()),
             broker_feed=str(data["broker_feed"]),
             host=str(data["host"]),
@@ -64,6 +66,8 @@ class CaptureProfile:
     def validate(self) -> None:
         if self.symbol != "XAUUSD" or not self.enabled:
             raise Session3Error("WRONG_SYMBOL", "V1 enables only the exact XAUUSD profile")
+        if self.broker_feed != "ICMARKETS":
+            raise Session3Error("WRONG_FEED", f"V1 requires ICMARKETS, got {self.broker_feed}")
         if self.host != "127.0.0.1" or self.port != 4999:
             raise Session3Error("PORT_MISMATCH", f"configured endpoint is {self.host}:{self.port}")
         if self.base_timeframe != "1m":
@@ -78,9 +82,18 @@ class CaptureProfile:
         if self.expected_chart_count != 1 or not self.expected_layout_id or not self.profile_marker:
             raise Session3Error("WRONG_LAYOUT", "a named single-chart layout and isolated profile marker are required")
 
+    def require_real_browser_activation(self) -> None:
+        self.validate()
+        if not self.real_browser_enabled:
+            raise Session3Error(
+                "RUNTIME_ACTIVATION_DISABLED",
+                "real 127.0.0.1:4999 browser access is disabled in this offline candidate",
+            )
+
     def identity_dict(self) -> dict:
         return {
             "symbol": self.symbol,
+            "real_browser_enabled": self.real_browser_enabled,
             "aliases": list(self.aliases),
             "broker_feed": self.broker_feed,
             "host": self.host,

@@ -12,7 +12,7 @@ class FailurePolicy:
 
 FAILURE_POLICIES = {
     "PORT_MISMATCH": FailurePolicy(False, "Configure the dedicated route on 127.0.0.1:4999."),
-    "PORT_UNAVAILABLE": FailurePolicy(True, "Start the approved isolated browser on port 4999, then rerun preflight."),
+    "PORT_UNAVAILABLE": FailurePolicy(True, "During an authorized Runtime Activation campaign, restore the approved isolated 4999 route."),
     "WRONG_PROCESS": FailurePolicy(False, "Stop the conflicting listener and start the approved browser profile."),
     "UNSAFE_BINDING": FailurePolicy(False, "Bind CDP only to a loopback interface."),
     "MCP_UNAVAILABLE": FailurePolicy(True, "Restore the local CDP/MCP boundary and rerun preflight."),
@@ -36,8 +36,11 @@ FAILURE_POLICIES = {
     "ARTIFACT_MISSING": FailurePolicy(False, "Quarantine the incomplete bundle; never release it downstream."),
     "SOURCE_EXPIRED": FailurePolicy(False, "Retain the attempt; only a new valid source event can authorize capture."),
     "SOURCE_INVALID": FailurePolicy(False, "Reject or quarantine the source event at the producer boundary."),
-    "COMPILATION_INPUT_MISSING": FailurePolicy(False, "Provide the documented Event 0.2 payload extension from the producer."),
+    "CANONICAL_LINEAGE_INVALID": FailurePolicy(False, "Quarantine the canonical input and verify it against trusted Session 2 receipt processing."),
+    "ADAPTER_LINEAGE_INVALID": FailurePolicy(False, "Quarantine the disabled adapter output; its canonical and receipt lineage must match exactly."),
+    "COMPILATION_INPUT_MISSING": FailurePolicy(False, "Provide the disabled versioned Session 2 adapter payload.analysis output."),
     "CONTRACT_COMPILATION_FAILURE": FailurePolicy(False, "Retain inputs and request Session 0 review if an adapter cannot solve it."),
+    "RUNTIME_ACTIVATION_DISABLED": FailurePolicy(False, "Complete the separately authorized Session 3 runtime activation gate before browser access."),
     "PARTIAL_CAPTURE": FailurePolicy(True, "Retry the same dispatch before expiry; do not compile the partial attempt."),
     "DISPATCH_CONFLICT": FailurePolicy(False, "Quarantine the conflicting payload for the reused dispatch ID."),
     "RETRY_SEQUENCE_INVALID": FailurePolicy(False, "Use a strictly increasing retry count for the same dispatch."),

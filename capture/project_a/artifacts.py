@@ -10,7 +10,7 @@ from pathlib import Path, PurePosixPath
 from contracts import canonical_json
 
 from .errors import Session3Error
-from .input_boundary import AnalysisAuthority, utc_z
+from .input_boundary import AnalysisAuthority, parse_utc, utc_z
 from .profile import CaptureProfile
 
 
@@ -60,9 +60,18 @@ class ArtifactStore:
     def begin(self, authority: AnalysisAuthority, profile: CaptureProfile, *,
               dispatch_id: str, retry_count: int, started_at: datetime,
               capture_method: str, tool_version: str) -> tuple[Path, dict]:
+        authority.ensure_capture_chronology(started_at)
+        synthetic = capture_method == "FIXTURE"
         seed = canonical_json({
             "dispatch_id": dispatch_id,
-            "event_id": authority.event_id,
+            "source_event_id": authority.event_id,
+            "producer_event_id": authority.producer_event_id,
+            "canonical_event_id": authority.canonical_event_id,
+            "canonical_content_hash": authority.canonical_content_hash,
+            "semantic_evidence_hash": authority.semantic_evidence_hash,
+            "receipt_id": authority.receipt_id,
+            "raw_content_hash": authority.raw_content_hash,
+            "analysis_adapter_hash": authority.adapter_output_hash,
             "retry_count": retry_count,
             "started_at": utc_z(started_at),
             "profile": profile.identity_dict(),
@@ -74,7 +83,7 @@ class ArtifactStore:
             raise Session3Error("PATH_TRAVERSAL", "attempt directory escaped artifact root")
         attempt_dir.mkdir(parents=True, exist_ok=True)
         manifest = {
-            "manifest_version": "1.0",
+            "manifest_version": "1.1",
             "status": "IN_PROGRESS",
             "capture_attempt_id": attempt_id,
             "dispatch_id": dispatch_id[:128],
@@ -82,21 +91,45 @@ class ArtifactStore:
             "request_id": request_id,
             "setup_id": authority.setup_id,
             "source_event_id": authority.event_id,
-            "source_event_ids": list((authority.analysis or {}).get("source_event_ids") or [authority.event_id]),
+            "source_event_ids": [authority.event_id],
+            "producer_event_id": authority.producer_event_id,
+            "canonical_event_id": authority.canonical_event_id,
+            "canonical_content_hash": authority.canonical_content_hash,
+            "semantic_evidence_hash": authority.semantic_evidence_hash,
+            "receipt_id": authority.receipt_id,
+            "raw_content_hash": authority.raw_content_hash,
+            "immutable_raw_reference": authority.immutable_raw_reference,
+            "received_at": authority.canonical_event["receipt"]["received_at"],
+            "transport_identity": authority.canonical_event["receipt"]["transport_identity"],
+            "source_adapter_identity": authority.canonical_event["receipt"]["source_adapter_identity"],
+            "analysis_adapter_family": authority.analysis_adapter["adapter_family"],
+            "analysis_adapter_version": authority.analysis_adapter["adapter_version"],
+            "analysis_adapter_hash": authority.adapter_output_hash,
             "correlation_id": authority.correlation_id,
             "causation_id": authority.event_id,
-            "source_causation_id": authority.event.get("causation_id"),
-            "schema_versions": {"event": "0.2", "analysis_request": "1.0", "manifest": "1.0"},
+            "source_causation_id": authority.wire_event.get("causation_id"),
+            "schema_versions": {
+                "canonical_event": "1.0",
+                "wire_event": "1.0",
+                "analysis_adapter": authority.analysis_adapter["adapter_version"],
+                "analysis_request": "1.0",
+                "manifest": "1.1",
+            },
             "symbol": profile.symbol,
             "broker_feed": profile.broker_feed,
             "base_timeframe": profile.base_timeframe,
             "required_timeframes": list(profile.required_timeframes),
-            "source_event_timestamp": authority.event["occurred_at"],
+            "source_event_timestamp": authority.wire_event["occurred_at"],
             "source_bar_timestamp": utc_z(authority.bar_time),
             "source_expires_at": utc_z(authority.expires_at) if authority.expires_at else None,
             "started_at": utc_z(started_at),
             "finished_at": None,
             "capture_method": capture_method,
+            "evidence_classification": "SYNTHETIC_FIXTURE" if synthetic else "REAL_BROWSER_CAPTURE",
+            "synthetic": synthetic,
+            "real_browser_used": not synthetic,
+            "runtime_compatibility_claim": "NONE",
+            "release_enabled": False,
             "tool_version": tool_version,
             "port": profile.port,
             "artifacts": [],
@@ -133,6 +166,8 @@ class ArtifactStore:
             "byte_size": len(data),
             "sha256": digest,
             "capture_method": capture_method,
+            "synthetic": manifest["synthetic"],
+            "runtime_compatibility_claim": "NONE",
             "verification": verification,
         }
         manifest["artifacts"].append(record)
@@ -141,6 +176,14 @@ class ArtifactStore:
     def finalize(self, attempt_dir: Path, manifest: dict, *, finished_at: datetime,
                  preflight: dict, restored_base_timeframe: bool,
                  failure: Session3Error | None = None) -> Path:
+        started_at = parse_utc(manifest["started_at"], "manifest.started_at")
+        finished_at = finished_at.astimezone(started_at.tzinfo)
+        if finished_at < started_at:
+            raise Session3Error("SOURCE_INVALID", "capture finished before it started")
+        for record in manifest["artifacts"]:
+            captured_at = parse_utc(record["capture_timestamp"], "artifact.capture_timestamp")
+            if captured_at < started_at or captured_at > finished_at:
+                raise Session3Error("SOURCE_INVALID", "artifact capture chronology is invalid")
         manifest["finished_at"] = utc_z(finished_at)
         manifest["preflight"] = preflight
         manifest["restored_base_timeframe"] = restored_base_timeframe
@@ -161,7 +204,15 @@ def verify_manifest(manifest_path: str | Path) -> dict:
     except FileNotFoundError as exc:
         raise Session3Error("ARTIFACT_MISSING", f"manifest missing: {manifest_path}") from exc
     root = manifest_path.parent
+    if manifest.get("runtime_compatibility_claim") != "NONE" or manifest.get("release_enabled") is not False:
+        raise Session3Error("CONTRACT_COMPILATION_FAILURE", "offline manifest claims runtime compatibility or release")
+    synthetic = manifest.get("synthetic")
+    expected_classification = "SYNTHETIC_FIXTURE" if synthetic is True else "REAL_BROWSER_CAPTURE"
+    if manifest.get("evidence_classification") != expected_classification:
+        raise Session3Error("CONTRACT_COMPILATION_FAILURE", "manifest evidence classification is inconsistent")
     for record in manifest.get("artifacts", []):
+        if record.get("synthetic") is not synthetic or record.get("runtime_compatibility_claim") != "NONE":
+            raise Session3Error("CONTRACT_COMPILATION_FAILURE", "artifact evidence label differs from manifest")
         relative = _safe_relative(record["artifact_path"])
         artifact = (root / Path(*relative.parts)).resolve()
         if root not in artifact.parents:
