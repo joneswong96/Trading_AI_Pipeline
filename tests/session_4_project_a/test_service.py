@@ -102,6 +102,133 @@ def test_duplicate_request_is_idempotent(request_doc, artifact_root, trusted_now
     assert client.calls == 1
 
 
+def test_cached_release_rechecks_expiry(request_doc, artifact_root, trusted_now, tmp_path):
+    clock = MutableClock(trusted_now)
+    service, client = make_service(tmp_path, candidate_raw(), clock)
+    dispatch = make_dispatch(request_doc, artifact_root)
+    assert service.review(dispatch).status == "VERDICT"
+    clock.value = trusted_now + timedelta(minutes=6)
+    result = service.review(dispatch)
+    assert result.status == "INPUT_REJECTION"
+    assert result.failure["code"] == FailureCode.INPUT_EXPIRED.value
+    assert result.verdict is None
+    assert client.calls == 1
+
+
+def test_cached_release_rechecks_artifact_integrity(
+    request_doc, artifact_root, trusted_now, tmp_path
+):
+    service, client = make_service(tmp_path, candidate_raw(), lambda: trusted_now)
+    dispatch = make_dispatch(request_doc, artifact_root)
+    assert service.review(dispatch).status == "VERDICT"
+    (artifact_root / "xauusd_1m.txt").write_text("tampered", encoding="utf-8")
+    result = service.review(dispatch)
+    assert result.status == "INPUT_REJECTION"
+    assert result.failure["code"] in {
+        FailureCode.ARTIFACT_SIZE_MISMATCH.value,
+        FailureCode.ARTIFACT_HASH_MISMATCH.value,
+    }
+    assert result.verdict is None
+    assert client.calls == 1
+
+
+def test_cached_release_withholds_on_audit_chain_tamper(
+    request_doc, artifact_root, trusted_now, tmp_path
+):
+    store = ShadowAuditStore(tmp_path / "audit")
+    service, client = make_service(
+        tmp_path, candidate_raw(), lambda: trusted_now, store=store
+    )
+    dispatch = make_dispatch(request_doc, artifact_root)
+    assert service.review(dispatch).status == "VERDICT"
+    path = store.request_dir(request_doc["request_id"]) / "attempts.jsonl"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("VERDICT", "REJECTED", 1),
+        encoding="utf-8",
+    )
+    result = service.review(dispatch)
+    assert result.status == "TECHNICAL_FAILURE"
+    assert result.failure["code"] == FailureCode.AUDIT_PERSISTENCE_FAILURE.value
+    assert result.verdict is None
+    assert client.calls == 1
+
+
+def test_cached_release_withholds_when_audit_is_missing(
+    request_doc, artifact_root, trusted_now, tmp_path
+):
+    store = ShadowAuditStore(tmp_path / "audit")
+    service, client = make_service(
+        tmp_path, candidate_raw(), lambda: trusted_now, store=store
+    )
+    dispatch = make_dispatch(request_doc, artifact_root)
+    assert service.review(dispatch).status == "VERDICT"
+    (store.request_dir(request_doc["request_id"]) / "attempts.jsonl").unlink()
+    result = service.review(dispatch)
+    assert result.status == "TECHNICAL_FAILURE"
+    assert result.failure["code"] == FailureCode.AUDIT_PERSISTENCE_FAILURE.value
+    assert result.verdict is None
+    assert client.calls == 1
+
+
+@pytest.mark.parametrize("replacement", ["{", "[]"])
+def test_cached_release_withholds_malformed_completed_state(
+    request_doc, artifact_root, trusted_now, tmp_path, replacement
+):
+    store = ShadowAuditStore(tmp_path / "audit")
+    service, client = make_service(
+        tmp_path, candidate_raw(), lambda: trusted_now, store=store
+    )
+    dispatch = make_dispatch(request_doc, artifact_root)
+    assert service.review(dispatch).status == "VERDICT"
+    completed = store.request_dir(request_doc["request_id"]) / "completed.json"
+    completed.write_text(replacement, encoding="utf-8")
+    result = service.review(dispatch)
+    assert result.status == "TECHNICAL_FAILURE"
+    assert result.failure["code"] == FailureCode.AUDIT_PERSISTENCE_FAILURE.value
+    assert result.verdict is None
+    assert client.calls == 1
+
+
+def test_cached_release_binds_final_audit_hash(
+    request_doc, artifact_root, trusted_now, tmp_path
+):
+    store = ShadowAuditStore(tmp_path / "audit")
+    service, client = make_service(
+        tmp_path, candidate_raw(), lambda: trusted_now, store=store
+    )
+    dispatch = make_dispatch(request_doc, artifact_root)
+    assert service.review(dispatch).status == "VERDICT"
+    completed = store.request_dir(request_doc["request_id"]) / "completed.json"
+    document = json.loads(completed.read_text(encoding="utf-8"))
+    document["audit_record_hash"] = "0" * 64
+    completed.write_text(json.dumps(document), encoding="utf-8")
+    result = service.review(dispatch)
+    assert result.status == "TECHNICAL_FAILURE"
+    assert result.failure["code"] == FailureCode.AUDIT_PERSISTENCE_FAILURE.value
+    assert result.verdict is None
+    assert client.calls == 1
+
+
+def test_cached_release_binds_verdict_identity(
+    request_doc, artifact_root, trusted_now, tmp_path
+):
+    store = ShadowAuditStore(tmp_path / "audit")
+    service, client = make_service(
+        tmp_path, candidate_raw(), lambda: trusted_now, store=store
+    )
+    dispatch = make_dispatch(request_doc, artifact_root)
+    assert service.review(dispatch).status == "VERDICT"
+    completed = store.request_dir(request_doc["request_id"]) / "completed.json"
+    document = json.loads(completed.read_text(encoding="utf-8"))
+    document["verdict"]["request_id"] = "req_xau_20260716_wrong"
+    completed.write_text(json.dumps(document), encoding="utf-8")
+    result = service.review(dispatch)
+    assert result.status == "TECHNICAL_FAILURE"
+    assert result.failure["code"] == FailureCode.IDENTIFIER_MISMATCH.value
+    assert result.verdict is None
+    assert client.calls == 1
+
+
 def test_conflicting_duplicate_fails_closed(request_doc, artifact_root, trusted_now, tmp_path):
     service, client = make_service(tmp_path, candidate_raw(), lambda: trusted_now)
     first = make_dispatch(request_doc, artifact_root)

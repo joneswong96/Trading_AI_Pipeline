@@ -166,19 +166,57 @@ class ShadowAuditStore:
 
     def load_completed(self, request_id: str) -> dict | None:
         path = self.request_dir(request_id) / "completed.json"
-        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+        if not path.exists():
+            return None
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise TechnicalFailure(
+                FailureCode.AUDIT_PERSISTENCE_FAILURE,
+                "completed verdict record is unreadable",
+            ) from exc
+        if not isinstance(document, dict):
+            raise TechnicalFailure(
+                FailureCode.AUDIT_PERSISTENCE_FAILURE,
+                "completed verdict record must be an object",
+            )
+        return document
+
+    def final_attempt(self, request_id: str) -> dict | None:
+        path = self.request_dir(request_id) / "attempts.jsonl"
+        if not path.exists():
+            return None
+        final: dict | None = None
+        try:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    item = json.loads(line)
+                    if not isinstance(item, dict):
+                        raise ValueError("attempt envelope must be an object")
+                    final = item
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise TechnicalFailure(
+                FailureCode.AUDIT_PERSISTENCE_FAILURE,
+                "audit attempt chain is unreadable",
+            ) from exc
+        return final
 
     def verify_chain(self, request_id: str) -> bool:
         path = self.request_dir(request_id) / "attempts.jsonl"
         previous = "0" * 64
         if not path.exists():
             return True
-        for line in path.read_text(encoding="utf-8").splitlines():
-            item = json.loads(line)
-            if item["previous_hash"] != previous:
-                return False
-            envelope = {"previous_hash": previous, "record": item["record"]}
-            if sha256_text(canonical_json(envelope)) != item["record_hash"]:
-                return False
-            previous = item["record_hash"]
-        return True
+        try:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                if item["previous_hash"] != previous:
+                    return False
+                envelope = {"previous_hash": previous, "record": item["record"]}
+                if sha256_text(canonical_json(envelope)) != item["record_hash"]:
+                    return False
+                previous = item["record_hash"]
+            return True
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+            return False
