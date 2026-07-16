@@ -1,11 +1,14 @@
 # Project A frozen contracts
 
-Status: **FROZEN on `project-a/integration-v1`**. Changes require the process in
-`CHANGE_REQUEST.md`.
+Status: existing Event 0.2 and pipeline contracts are **FROZEN on
+`project-a/integration-v1`**. Event V1 entries below are a reader-only foundation;
+their writers are disabled. Changes require the process in `CHANGE_REQUEST.md`.
 
 | Contract | Wire version | Schema file | Producer | Consumers |
 |---|---:|---|---|---|
 | `EVENT_SCHEMA_V0_2` | `0.2` | `schemas/event_schema_v0_2.json` | Sessions 1–2 | Sessions 2–3, replay |
+| `PROJECT_A_WIRE_EVENT_V1` | `1.0` | `schemas/project_a_wire_event_v1.json` | **Writer disabled** | Session 0 dual reader only |
+| `PROJECT_A_CANONICAL_EVENT_V1` | `1.0` | `schemas/project_a_canonical_event_v1.json` | **Writer disabled** | Session 0 dual reader/replay only |
 | `ANALYSIS_REQUEST_SCHEMA_V1` | `1.0` | `schemas/analysis_request_schema_v1.json` | Session 3 | Session 4, replay |
 | `AI_VERDICT_SCHEMA_V1` | `1.0` | `schemas/ai_verdict_schema_v1.json` | Session 4 | Session 5, replay |
 | `THESIS_SCHEMA_V1` | `1.0` | `schemas/thesis_schema_v1.json` | Session 5 compiler | Session 5 adapters, Session 0 acceptance |
@@ -21,12 +24,18 @@ Status: **FROZEN on `project-a/integration-v1`**. Changes require the process in
 - Timeframes use canonical compact values (`5s`, `1m`, `4h`, `1d`, etc.). V1
   analysis requests require a `1m` base timeframe.
 - Top-level and defined nested objects use `additionalProperties: false`.
-  `EVENT_SCHEMA_V0_2.payload` is the only extension bag; readers must ignore
-  unknown payload keys and must not promote them into decision authority.
+  Event V1 diagnostics/extensions are closed allowlists of benign, typed,
+  non-authoritative fields. Reserved control concepts are rejected in keys and
+  string values. `EVENT_SCHEMA_V0_2.payload` remains frozen and untrusted.
 - Documents are limited to 256 KiB. Secret-like keys must be absent, empty, or
   `REDACTED`. Raw payload references belong in protected storage, not contracts.
 - Deterministic serialization is UTF-8 JSON with keys sorted, no insignificant
-  whitespace, finite numbers only, and no Unicode escaping requirement. Use
+  whitespace, finite normalized base-10 numbers, and no Unicode normalization.
+  Numeric equivalents (`1`, `1.0`, `1e0`, negative zero) serialize identically.
+  Before fixed-form rendering, numbers are limited to 64 significant digits,
+  absolute exponent and adjusted exponent 10,000, and 2,048 rendered characters.
+  Wire schemas impose their own tighter numeric magnitudes where applicable.
+  This Project A policy is deliberately not represented as RFC 8785. Use
   `contracts.canonical_json` for hashes and fixture comparisons.
 - Validation rejects before persistence or downstream calls. Stable error codes
   distinguish structural schema errors from semantic hard-gate failures.
@@ -34,6 +43,65 @@ Status: **FROZEN on `project-a/integration-v1`**. Changes require the process in
   pin `SHADOW`, `MT5_DEMO`, and `live_execution=false`.
 
 ## Contract-specific decisions
+
+### Wire and Canonical Event 1.0 reader foundation
+
+Wire Event 1.0 contains only producer-known evidence and never accepts trusted
+receipt, canonical identity/hash, validation, retry, dead-letter, or ingest audit
+fields. `validate_*_shape` and `parse_wire_event_v1_bytes` produce only
+non-authoritative document wrappers. A canonical JSON document that passes its
+schema remains untrusted.
+
+`process_wire_event_v1_receipt` first completes a raw boundary over exact bounded
+bytes: hash, strict UTF-8/JSON parse, lifecycle identity checks, and Wire shape
+validation. Malformed or invalid input returns an auditable `REJECTED` result
+with no Canonical Event and without consulting canonical dedupe. Durable raw
+receipt retention is a separate trusted-ingress responsibility owned by the
+future Session 2 adapter; this foundation does not represent in-memory state as
+durable storage. Only valid Wire input enters a `DedupeAuthority` transaction,
+where receipt decision, exact reservation, semantic reservation, decision
+persistence, and eligibility share one commit boundary.
+
+`verify_and_authorize_canonical_event_v1` is required immediately at every
+state mutation, dispatch, audit acceptance, outbox creation, downstream handoff,
+or authority-relevant replay release. It recomputes every trusted field from the
+exact raw bytes, receipt context, current open committed transaction, and
+intended action. Its fresh `CanonicalVerificationResultV1` must be consumed once
+by that same transaction. Authorization is atomic and once-only for each
+transaction generation/action pair; generation advance invalidates pending
+results and consumption checks the current generation. Parsed, canonical,
+processing, and verification types
+are data/result surfaces: class identity, `isinstance`, internal-looking fields,
+copy, pickle, subclassing, or a caller's `authority=true` never prove authority.
+The generic reader always returns V1 inputs as `SHAPE_VALID / authority=NONE`.
+
+Replay receipt issuance lives only in the private `_trusted_ingress` module and
+is absent from ordinary exports. There is no production issuer. Python module
+privacy is not a cryptographic boundary and malicious code in the same process
+is explicitly outside the isolation claim; production adapters will require
+process/security isolation. The enforced API safety property is that an ordinary
+consumer cannot act without fresh exact-byte, context-, transaction-, and
+action-bound verification.
+
+Receipt transport identity means a stable provider delivery/idempotency key,
+not a connection, process, random attempt, machine, or local-path identity. An
+offline in-memory dedupe implementation exists only for tests/replay; a runtime
+adapter must be durable and unavailability, invalid adapter results, transaction
+failure, and partial/unknown commits fail closed. Every receipt keeps a
+unique receipt ID and immutable raw reference even when duplicate suppression
+prevents dispatch.
+
+`canonical_json` is the single deterministic serializer: UTF-8, sorted object
+keys, compact `,`/`:` separators, array order preserved, lowercase JSON
+booleans/null, no ASCII requirement, no NFC normalization, and finite normalized
+base-10 numbers. Trusted byte parsing uses `Decimal`; unsupported/non-finite
+values reject. Semantic evidence additionally normalizes every included time to
+`YYYY-MM-DDTHH:MM:SS.mmmZ`; offsets, missing zones, leap seconds, invalid dates,
+and more than millisecond precision reject.
+
+Ordinary Event 0.2 reads are always `LEGACY_UNVERIFIED`, non-dispatching, and
+non-mutating. Caller metadata cannot establish `LEGACY_TRUSTED`. No trusted
+legacy migration API exists until an immutable stored-receipt adapter is built.
 
 ### Event 0.2
 

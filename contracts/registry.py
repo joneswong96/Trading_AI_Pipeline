@@ -4,6 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 
 EVENT_SCHEMA_V0_2 = "EVENT_SCHEMA_V0_2"
+PROJECT_A_WIRE_EVENT_V1 = "PROJECT_A_WIRE_EVENT_V1"
+PROJECT_A_CANONICAL_EVENT_V1 = "PROJECT_A_CANONICAL_EVENT_V1"
 ANALYSIS_REQUEST_SCHEMA_V1 = "ANALYSIS_REQUEST_SCHEMA_V1"
 AI_VERDICT_SCHEMA_V1 = "AI_VERDICT_SCHEMA_V1"
 THESIS_SCHEMA_V1 = "THESIS_SCHEMA_V1"
@@ -11,6 +13,8 @@ THESIS_SCHEMA_V1 = "THESIS_SCHEMA_V1"
 SCHEMA_DIR = Path(__file__).with_name("schemas")
 SCHEMA_FILES = {
     EVENT_SCHEMA_V0_2: SCHEMA_DIR / "event_schema_v0_2.json",
+    PROJECT_A_WIRE_EVENT_V1: SCHEMA_DIR / "project_a_wire_event_v1.json",
+    PROJECT_A_CANONICAL_EVENT_V1: SCHEMA_DIR / "project_a_canonical_event_v1.json",
     ANALYSIS_REQUEST_SCHEMA_V1: SCHEMA_DIR / "analysis_request_schema_v1.json",
     AI_VERDICT_SCHEMA_V1: SCHEMA_DIR / "ai_verdict_schema_v1.json",
     THESIS_SCHEMA_V1: SCHEMA_DIR / "thesis_schema_v1.json",

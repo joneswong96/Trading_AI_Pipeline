@@ -1,6 +1,6 @@
 # Lifecycle and disposition decision
 
-Status: **Recommended compatibility ruling; no executable change**
+Status: **V0.2 frozen; V1 reader-only fail-closed ruling implemented**
 
 ## Frozen Event 0.2 ruling
 
@@ -28,7 +28,7 @@ For an unsupported V0.2 lifecycle event, Session 2 must:
 
 1. retain one immutable raw receipt and its actual receipt metadata;
 2. record structural validation separately from processing support;
-3. produce stable outcome `UNSUPPORTED_LIFECYCLE_V0_2` with no coercion;
+3. produce stable outcome `UNSUPPORTED_LIFECYCLE_V02` with no coercion;
 4. make no setup/thesis state mutation;
 5. create no actionable canonical event and no downstream outbox dispatch;
 6. retain audit/dead-letter visibility and acknowledge/reject transport according
@@ -46,6 +46,19 @@ the frozen validator or schema in this task.
 Wire Event 1.0 reports a lifecycle **transition request/evidence**, while
 Canonical Event 1.0 reports whether Session 2 applied it. Do not overload one
 `disposition` word for both producer intent and trusted processing outcome.
+
+The reader foundation never permits a V1 lifecycle state mutation unless symbol,
+AOI, SNR identity, hypothesis, and setup origin produce a verified canonical
+`setup_id`. Missing identity yields `REJECTED / MISSING_CANONICAL_SETUP_IDENTITY`,
+`canonical_document=null`, `state_mutation_allowed=false`, and
+`dispatch_allowed=false`, while retaining the trusted-ingress raw hash/reference
+and processing audit without entering canonical dedupe. Durable raw retention is
+Session 2 ingress ownership. Caller-supplied, foreign, receipt-, retry-, machine-, random-, or
+contradictory setup identities yield `INVALID_CANONICAL_SETUP_IDENTITY`. Receipt,
+transport, retry, machine, or random values never enter derived setup identity.
+Even a valid derived setup ID authorizes no mutation until fresh point-of-use
+verification binds it to the exact bytes, receipt context, current committed
+transaction, and `STATE_MUTATION` action.
 
 The future contract should explicitly define:
 

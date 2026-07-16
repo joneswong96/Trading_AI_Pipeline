@@ -1,6 +1,6 @@
 # Evidence fingerprint projection
 
-Status: **Proposed semantic contract; no implementation**
+Status: **Implemented in the reader-only Session 0 foundation; writers disabled**
 
 ## Purpose
 
@@ -9,36 +9,33 @@ the analysis pipeline materially new trading evidence for this setup?” It is n
 an event identity, raw-content hash, receipt idempotency key, transport retry key,
 or proof of authenticity.
 
-Projection/version name: `project-a-evidence/1.0`.
+Projection/version name: `project-a-evidence/1.1`.
 
 ## Exact projection and ordering
 
-Session 2 builds this ordered logical object. Keys appear in this order before
+Session 0 reader code builds this ordered logical object. Keys appear in this order before
 canonical JSON serialization; the serializer also sorts object keys, so ordering
 is deterministic even if a map implementation does not preserve insertion order.
 
 1. `projection_version`
 2. `setup_id`
-3. `occurred_at`
-4. `event_class`
-5. `event_type`
-6. `path`
-7. `hypothesis`
-8. `snr`: `identity`, `type`, `low`, `high`, `side`
-9. `hpa`: fixed timeframe order `1m`, `5m`, `15m`, `30m`; each item contains
+3. `event_class`
+4. `event_type`
+5. `path`
+6. `hypothesis`
+7. `snr`: `identity`, `type`, `low`, `high`, `side`
+8. `hpa`: fixed timeframe order `1m`, `5m`, `15m`, `30m`; each item contains
    `classification`, `bar_id`, `bar_close`, and `confirmation_state`
-10. `momentum`: fixed ratified timeframe order; each item contains `timeframe`,
+9. `momentum`: fixed ratified timeframe order; each item contains `timeframe`,
     `classification`, `direction`, `bar_id`, and `bar_close`
-11. `rejection`: ratified reaction identity/type, level/side, observed bar ID,
-    and ratified measurements
-12. `break`: direction, level identity, observed bar ID, confirmation identity,
-    and ratified measurements
-13. `invalidation`: rule identity, level, observed value, bar ID, and reason
-14. `expiry`: window identity, basis, start, end, and reason
-15. `entry_window`: window identity, transition (`OPEN`/`CLOSED`), effective time,
+10. `rejection`: reaction identity/classification, observed bar/time, and measurements
+11. `break`: direction, level/price, observed bar/time, identity, and measurements
+12. `invalidation`: rule identity, level, observed value, bar/time, and reason
+13. `expiry`: window identity, basis, start, end, and reason
+14. `entry_window`: window identity, transition (`OPEN`/`CLOSED`), effective time,
     and reason
-16. `trigger`: `identity`, `price`
-17. `geometry`: `entry`, `sl`, `tp`, and direction
+15. `trigger`: `identity`, `price`, and `evidence_time`
+16. `geometry`: `entry`, `sl`, `tp`, `rr`, and direction
 
 This is the exhaustive semantic list. Event-specific sections use `null` when
 not applicable, not omission. Lists use the fixed timeframe order, never source
@@ -69,9 +66,8 @@ not assert new market/setup evidence and does not change this fingerprint.
 - A section that is semantically inapplicable is the JSON literal `null`.
 - A contract-defined optional value inside an applicable section is explicitly
   `null` only when the contract says “unknown” is legal and distinct from absent.
-- Unknown extension fields are ignored for projection but retained in raw/canonical
-  audit according to their contract. Ignoring them cannot make an otherwise
-  invalid required field valid.
+- Unknown extension fields reject. The small typed allowlist is retained in
+  raw/canonical audit but never read by authority or included in this projection.
 - Provisional HTF evidence must include `confirmation_state: PROVISIONAL`, bar
   identity, and close time. The recommended default is to disallow provisional
   evidence for canonical Analysis Ready events.
@@ -81,16 +77,13 @@ not assert new market/setup evidence and does not change this fingerprint.
 1. Reject JSON booleans, NaN, infinity, non-numeric strings, and values outside
    the owning contract's bounds.
 2. Parse JSON numbers with a decimal implementation, not binary float.
-3. Normalize price/level/geometry values to exact integer points using the
-   verified instrument `point_size`; reject a non-integral conversion rather
-   than round it.
-4. Normalize dimensionless ratified measurements to the scale and maximum
-   decimal places specified by their future contract; trailing zeroes are
-   removed and negative zero becomes zero.
-5. Serialize normalized numeric values as canonical base-10 strings in the
+3. Normalize every accepted number to finite base-10 decimal form; trailing
+   zeroes are removed and negative zero becomes zero. No unratified point-size
+   conversion, measurement scale, or rounding rule is introduced here.
+4. Serialize normalized numeric values as canonical base-10 strings in the
    projection. Scientific notation, leading plus, and locale separators are
    forbidden. Thus `2415`, `2415.0`, and `2415.00` resolve to the same normalized
-   point value when all are valid representations.
+   numeric value when all are valid representations.
 
 The exact scales for currently unratified HPA/break/rejection measurements are
 blocked on those trading decisions; the projection cannot invent them.
@@ -98,19 +91,19 @@ blocked on those trading decisions; the projection cannot invent them.
 ## Timestamp normalization
 
 Parse an allowed UTC input and serialize it as `YYYY-MM-DDTHH:MM:SS.mmmZ`, with
-exact millisecond precision. A contract must either reject sub-millisecond input
-or define lossless rounding before implementation; this proposal recommends
-rejecting it. Naive/local-offset values and leap/invalid dates fail closed.
-`occurred_at` is included. Receipt/emission/canonicalization clocks are excluded.
+exact millisecond precision. Event V1 rejects sub-millisecond input rather than
+rounding it. Naive/local-offset values and leap/invalid dates fail closed.
+Top-level `occurred_at` is excluded; event-specific evidence times are included.
+Receipt/emission/canonicalization clocks are excluded.
 
 ## Hash and serializer ownership
 
-Trusted Python Session 2 owns projection construction, canonical UTF-8 JSON
+Trusted Python Session 0 reader code owns projection construction, canonical UTF-8 JSON
 serialization, and `SHA-256` of those exact bytes. The stored form is
 `sha256:<64 lowercase hexadecimal characters>` and is bound to
-`project-a-evidence/1.0`. Pine does not compute or authorize this value. The
-future executable contract must add known vectors covering Unicode, key order,
-numeric equivalence, null/inapplicable sections, and timestamp normalization.
+`project-a-evidence/1.1`. Pine does not compute or authorize this value. Known
+vectors and cross-process tests cover Unicode, key order, numeric equivalence,
+null/inapplicable sections, and timestamp normalization.
 
 ## Dedupe examples
 

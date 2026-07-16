@@ -25,7 +25,7 @@ Session 2 can implement two corrections without waiting for Jones to choose the
 numerical Session 1 rules:
 
 1. a version/type allowlist that rejects unsupported Event 0.2 lifecycle events
-   with `UNSUPPORTED_LIFECYCLE_V0_2`, preserving raw receipt and causing no state
+   with `UNSUPPORTED_LIFECYCLE_V02`, preserving raw receipt and causing no state
    mutation/dispatch; and
 2. the projection engine/known-vector tests using the ratified projection shape,
    treating HPA/momentum/reaction values as validated opaque fields until their
