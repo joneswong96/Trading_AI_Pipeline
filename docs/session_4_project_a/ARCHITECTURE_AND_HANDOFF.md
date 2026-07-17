@@ -1,5 +1,14 @@
 # Session 4 architecture and handoff
 
+## V1 runtime decision
+
+Session 0 has deferred OpenClaw for Project A V1. The exact stable candidate
+still performs embedded fallback from `openclaw agent` after selected Gateway
+failures/timeouts, so it cannot satisfy the pre-execution Gateway-only release
+gate. The existing adapter remains disabled and preserved for future evaluation.
+See `SESSION_4_RUNTIME_DECISION.md` and
+`DIRECT_PROVIDER_V1_CHANGE_REQUEST.md` for the evidence and bounded next task.
+
 ## Outcome and trust boundary
 
 ```text

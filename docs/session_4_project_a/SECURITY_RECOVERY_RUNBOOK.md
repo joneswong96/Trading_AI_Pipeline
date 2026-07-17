@@ -1,5 +1,11 @@
 # Project A reviewer security and recovery runbook
 
+> **Project A V1 status:** OpenClaw is deferred by
+> `SESSION_4_RUNTIME_DECISION.md`. Do not run the installation, Gateway,
+> authentication, pairing, or live invocation steps below for V1. They are
+> retained only as disabled future-adapter recovery context. The next authorized
+> work is the documentation-defined, disabled provider-neutral adapter skeleton.
+
 All commands are examples for Jones to run locally. Steps marked **STOP** require
 Jones's explicit interaction because they install software, modify user-level
 OpenClaw state, authenticate, pair Telegram, or handle private identifiers.
