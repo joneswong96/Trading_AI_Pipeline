@@ -1,0 +1,28 @@
+{
+  "adapter_family": "PROJECT_A_SESSION_2_CAPTURE_ADAPTER",
+  "adapter_version": "1.0",
+  "runtime_enabled": false,
+  "status": "DISABLED_RECORDED_ONLY",
+  "payload": {
+    "analysis": {
+      "expires_at": "2026-07-16T01:10:00Z",
+      "bar_time": "2026-07-16T01:01:00Z",
+      "session": "ASIAN",
+      "instrument": {"symbol": "XAUUSD", "venue": "ICMARKETS", "point_size": 0.01},
+      "snr": {"low": 2415.0, "high": 2416.0, "type": "CLASSIC"},
+      "hpa": ["M5_DISCOUNT", "M15_DISCOUNT", "M30_MIDDLE"],
+      "momentum": {
+        "5s": {"classification": "UNAVAILABLE", "direction": null, "source": "FIXTURE"},
+        "1m": {"classification": "CLEAN_PUSH", "direction": "LONG", "source": "FIXTURE"},
+        "5m": {"classification": "CLEAN_PUSH", "direction": "LONG", "source": "FIXTURE"},
+        "15m": {"classification": "RANGE_DRIFT", "direction": "NEUTRAL", "source": "FIXTURE"},
+        "30m": {"classification": "RANGE_DRIFT", "direction": "NEUTRAL", "source": "FIXTURE"}
+      },
+      "trigger_price": 2416.5,
+      "spread_points": 8,
+      "entry_candidate": 2416.5,
+      "sl_candidate": 2414.5,
+      "tp_candidate": 2418.5
+    }
+  }
+}
