@@ -4,6 +4,8 @@ Status owner: Session 0 Integration Lead
 Authoritative starting integration: `project-a/integration-v1` at
 `c0bea3b726a1f83c1c42c8a5c992fb1128b04db9`
 
+Offline convergence status: `COMPLETE`; runtime activation gates remain pending.
+
 This is the only convergence status document for Sessions 1–5. Offline
 integration acceptance is separate from the runtime activation gates recorded
 in `RUNTIME_ACTIVATION_GATES.md`. Missing live evidence does not block a
@@ -90,5 +92,6 @@ unratified trading semantic.
 Session 0 integrated Sessions 1, 2, 3, 4, and 5 in dependency order. The
 post-merge focused results were respectively `12`, `55`, `59`, `110`, and `78`
 passing tests. Runtime-only evidence remains deferred to the activation gates;
-the final repository suite and complete offline replay are the remaining
-offline convergence gates.
+the final repository suite passed with `868 passed, 1 skipped`, complete offline
+replay returned `ok=true` with writers disabled, and the frozen, SQLite,
+ownership, secret, path, import, configuration, and mixed-EOL gates passed.
