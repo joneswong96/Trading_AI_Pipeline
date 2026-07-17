@@ -1,0 +1,184 @@
+{
+  "telemetry": {
+    "contract_family": "PROJECT_A_WIRE_EVENT",
+    "schema_version": "1.0",
+    "producer_event_id": "wevt_XAUUSD_1m_20260716T000000Z_SNR_UPDATE",
+    "correlation_id": null,
+    "causation_id": null,
+    "occurred_at": "2026-07-16T00:00:00Z",
+    "emitted_at": "2026-07-16T00:00:01Z",
+    "source": {
+      "producer": "snr-dashboard-project-a-v1",
+      "profile": "project-a-shadow",
+      "version": "1.0.0",
+      "producer_checksum": null,
+      "diagnostics": {
+        "build_note": "immutable-export-2389d4c"
+      }
+    },
+    "symbol": "XAUUSD",
+    "base_tf": "1m",
+    "mode": "SHADOW",
+    "execution_environment": "MT5_DEMO",
+    "live_execution": false,
+    "event_class": "TELEMETRY",
+    "event_type": "SNR_UPDATE",
+    "hypothesis": null,
+    "path": null,
+    "setup_origin": null,
+    "evidence": {
+      "snr": null,
+      "hpa": [],
+      "momentum": [],
+      "trigger": null,
+      "rejection": null,
+      "break": null,
+      "invalidation": null,
+      "expiry": null,
+      "entry_window": null,
+      "geometry": null
+    },
+    "extensions": {}
+  },
+  "support_setup_candidate": {
+    "contract_family": "PROJECT_A_WIRE_EVENT",
+    "schema_version": "1.0",
+    "producer_event_id": "wevt_XAUUSD_1m_20260716T000100Z_SETUP_CANDIDATE",
+    "correlation_id": "corr_XAUUSD_1m_S_241950_242000",
+    "causation_id": null,
+    "occurred_at": "2026-07-16T00:01:00Z",
+    "emitted_at": "2026-07-16T00:01:01Z",
+    "source": {
+      "producer": "snr-dashboard-project-a-v1",
+      "profile": "project-a-shadow",
+      "version": "1.0.0",
+      "producer_checksum": null,
+      "diagnostics": {
+        "build_note": "immutable-export-2389d4c"
+      }
+    },
+    "symbol": "XAUUSD",
+    "base_tf": "1m",
+    "mode": "SHADOW",
+    "execution_environment": "MT5_DEMO",
+    "live_execution": false,
+    "event_class": "SETUP_CANDIDATE",
+    "event_type": "SETUP_CANDIDATE",
+    "hypothesis": null,
+    "path": null,
+    "setup_origin": {
+      "origin_id": "origin_XAUUSD_1m_S_241950_242000",
+      "aoi_id": "aoi_XAUUSD_1m_S_241950_242000"
+    },
+    "evidence": {
+      "snr": {
+        "identity": "snr_XAUUSD_1m_S_241950_242000",
+        "type": "LEVEL_ENGINE",
+        "low": 2419.5,
+        "high": 2420.0,
+        "side": "SUPPORT"
+      },
+      "hpa": [],
+      "momentum": [],
+      "trigger": null,
+      "rejection": null,
+      "break": null,
+      "invalidation": null,
+      "expiry": null,
+      "entry_window": null,
+      "geometry": null
+    },
+    "extensions": {}
+  },
+  "resistance_setup_candidate": {
+    "contract_family": "PROJECT_A_WIRE_EVENT",
+    "schema_version": "1.0",
+    "producer_event_id": "wevt_XAUUSD_1m_20260716T000200Z_SETUP_CANDIDATE",
+    "correlation_id": "corr_XAUUSD_1m_R_242450_242500",
+    "causation_id": null,
+    "occurred_at": "2026-07-16T00:02:00Z",
+    "emitted_at": "2026-07-16T00:02:01Z",
+    "source": {
+      "producer": "snr-dashboard-project-a-v1",
+      "profile": "project-a-shadow",
+      "version": "1.0.0",
+      "producer_checksum": null,
+      "diagnostics": {
+        "build_note": "immutable-export-2389d4c"
+      }
+    },
+    "symbol": "XAUUSD",
+    "base_tf": "1m",
+    "mode": "SHADOW",
+    "execution_environment": "MT5_DEMO",
+    "live_execution": false,
+    "event_class": "SETUP_CANDIDATE",
+    "event_type": "SETUP_CANDIDATE",
+    "hypothesis": null,
+    "path": null,
+    "setup_origin": {
+      "origin_id": "origin_XAUUSD_1m_R_242450_242500",
+      "aoi_id": "aoi_XAUUSD_1m_R_242450_242500"
+    },
+    "evidence": {
+      "snr": {
+        "identity": "snr_XAUUSD_1m_R_242450_242500",
+        "type": "LEVEL_ENGINE",
+        "low": 2424.5,
+        "high": 2425.0,
+        "side": "RESISTANCE"
+      },
+      "hpa": [],
+      "momentum": [],
+      "trigger": null,
+      "rejection": null,
+      "break": null,
+      "invalidation": null,
+      "expiry": null,
+      "entry_window": null,
+      "geometry": null
+    },
+    "extensions": {}
+  },
+  "ambiguous_expansion_telemetry": {
+    "contract_family": "PROJECT_A_WIRE_EVENT",
+    "schema_version": "1.0",
+    "producer_event_id": "wevt_XAUUSD_1m_20260716T000300Z_EXPANSION_UPDATE",
+    "correlation_id": null,
+    "causation_id": null,
+    "occurred_at": "2026-07-16T00:03:00Z",
+    "emitted_at": "2026-07-16T00:03:01Z",
+    "source": {
+      "producer": "snr-dashboard-project-a-v1",
+      "profile": "project-a-shadow",
+      "version": "1.0.0",
+      "producer_checksum": null,
+      "diagnostics": {
+        "build_note": "immutable-export-2389d4c"
+      }
+    },
+    "symbol": "XAUUSD",
+    "base_tf": "1m",
+    "mode": "SHADOW",
+    "execution_environment": "MT5_DEMO",
+    "live_execution": false,
+    "event_class": "TELEMETRY",
+    "event_type": "EXPANSION_UPDATE",
+    "hypothesis": null,
+    "path": null,
+    "setup_origin": null,
+    "evidence": {
+      "snr": null,
+      "hpa": [],
+      "momentum": [],
+      "trigger": null,
+      "rejection": null,
+      "break": null,
+      "invalidation": null,
+      "expiry": null,
+      "entry_window": null,
+      "geometry": null
+    },
+    "extensions": {}
+  }
+}
