@@ -1,0 +1,41 @@
+# Session 5 secret-free template. Copy outside Git and replace every REQUIRED value.
+# This template intentionally fails validation until exact allowlists are supplied.
+shadow: true
+dry_run: true
+recorded_test_profile: false
+enabled_renderers: [TRADINGVIEW, TELEGRAM, NOTION, MT5_DEMO]
+retry_limit: 3
+retry_seconds: 5
+claim_timeout_seconds: 60
+storage_path: storage/project_a_outputs.db
+audit_output_path: storage/project_a_audit
+
+tradingview:
+  port: 4999
+  expected_process_identity: REPLACE_WITH_EXACT_4999_PROCESS_IDENTITY
+  expected_symbol: XAUUSD
+  feed_allowlist: [REPLACE_WITH_EXACT_XAUUSD_BROKER_FEED]
+  expected_timeframe: 1m
+  expected_layout_id: REPLACE_WITH_EXACT_PROJECT_A_LAYOUT_ID
+  expected_tab_id: REPLACE_WITH_EXACT_SINGLE_TAB_ID
+
+telegram:
+  destination_id: REPLACE_WITH_NUMERIC_JONES_USER_ID
+  owner_user_id: REPLACE_WITH_SAME_NUMERIC_JONES_USER_ID
+  direct_message_only: true
+  max_message_length: 1500
+
+notion:
+  database_id: REPLACE_WITH_APPROVED_CALL_LOG_DATABASE_ID
+  # These fields do not exist in the current Phase 1 Call Log. Real writes remain
+  # blocked until Session 0 approves the proposal in CHANGE_PROPOSALS.md.
+  schema_fields: [setup_id, content_hash, thesis_id, renderer_statuses]
+
+mt5:
+  # No broker transport is implemented in this branch. This flag remains false.
+  demo_mirror_enabled: false
+  account_allowlist: [REPLACE_WITH_EXACT_DEMO_ACCOUNT_ID]
+  server_allowlist: [REPLACE_WITH_EXACT_DEMO_SERVER]
+  terminal_path_allowlist: [REPLACE_WITH_EXACT_DEMO_TERMINAL_PATH]
+  symbol_mapping: XAUUSD
+  precision: 2
