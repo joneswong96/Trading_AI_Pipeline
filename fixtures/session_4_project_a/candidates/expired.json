@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "verdict_id": "verdict_candidate_expired_0001",
+  "request_id": "req_xau_20260716_0001",
+  "setup_id": "setup_xau_20260716_0001",
+  "correlation_id": "corr_xau_20260716_0001",
+  "causation_id": "req_xau_20260716_0001",
+  "generated_at": "2026-07-16T00:00:03Z",
+  "verdict": "EXPIRED",
+  "hypothesis": "LONG",
+  "path": "SNR_REJECTION",
+  "entry": null,
+  "sl": null,
+  "tp": null,
+  "valid_until": null,
+  "reason_codes": ["SETUP_WINDOW_EXPIRED", "EVIDENCE_XAUUSD_1M"],
+  "rationale": "Shadow candidate: the supplied setup is no longer valid within its authorized analysis window.",
+  "hard_gates": {"schema_valid": true, "symbol_valid": true, "timeframe_valid": true, "spread_valid": true, "rr_valid": true, "environment_valid": true},
+  "model": {"provider": "fixture", "name": "recorded-reviewer", "prompt_version": "project-a-reviewer-v1.0.0", "mode": "SHADOW", "untrusted_input_handled": true}
+}

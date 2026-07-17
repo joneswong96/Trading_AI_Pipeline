@@ -1,0 +1,7 @@
+{
+  "timeout": {"code": "MODEL_TIMEOUT", "retryable": true},
+  "oauth_expiry": {"code": "AUTHENTICATION_UNAVAILABLE", "retryable": false},
+  "rate_limit": {"code": "RATE_LIMITED", "retryable": true},
+  "model_unavailable": {"code": "MODEL_UNAVAILABLE", "retryable": true},
+  "openclaw_unavailable": {"code": "OPENCLAW_UNAVAILABLE", "retryable": true}
+}
