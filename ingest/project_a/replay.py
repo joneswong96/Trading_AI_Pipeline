@@ -101,8 +101,23 @@ def run(config: ProjectAConfig, *, selector: str, value: str | None = None,
 
     try:
         for raw, replay_at, source in items:
-            service = ProjectAIngestService(target_config, clock=lambda at=replay_at: at)
-            result = service.receive(
+            try:
+                document = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                document = None
+            is_v1 = (
+                isinstance(document, dict)
+                and document.get("contract_family") == "PROJECT_A_WIRE_EVENT"
+                and document.get("schema_version") == "1.0"
+            )
+            item_config = target_config
+            if is_v1 and not item_config.v1_ingest_enabled:
+                item_config = ProjectAConfig(
+                    **{**item_config.__dict__, "v1_ingest_enabled": True}
+                )
+            service = ProjectAIngestService(item_config, clock=lambda at=replay_at: at)
+            receiver = service.receive_v1 if is_v1 else service.receive
+            result = receiver(
                 raw, source_metadata={"transport": "REPLAY", "replay_source": source},
                 replay_operation_id=operation_id if commit else None,
             )

@@ -6,12 +6,14 @@ import sqlite3
 from contextlib import closing, contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 EXPECTED_TABLES = {
     "project_a_schema_migrations", "project_a_raw_receipts",
     "project_a_receipt_processing", "project_a_canonical_events",
     "project_a_setup_state", "project_a_setup_state_history", "project_a_outbox",
     "project_a_outbox_attempts", "project_a_dead_letters", "project_a_replay_operations",
+    "project_a_receipt_transactions", "project_a_exact_dedupe",
+    "project_a_semantic_dedupe", "project_a_setup_state_v1",
 }
 EXPECTED_TRIGGERS = {
     "project_a_raw_receipts_no_update", "project_a_raw_receipts_no_delete",
@@ -158,6 +160,78 @@ CREATE TABLE project_a_replay_operations (
 """
 MIGRATION_1_CHECKSUM = "sha256:" + hashlib.sha256(MIGRATION_1.encode("utf-8")).hexdigest()
 
+MIGRATION_2 = """
+CREATE TABLE project_a_receipt_transactions (
+  transaction_id TEXT PRIMARY KEY,
+  ingest_id TEXT NOT NULL UNIQUE REFERENCES project_a_raw_receipts(ingest_id),
+  receipt_id TEXT NOT NULL UNIQUE,
+  generation INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN (
+    'CLAIMED','COMMITTED_UNCONFIRMED','CONFIRMED','ROLLED_BACK',
+    'COMMIT_UNKNOWN','ABANDONED'
+  )),
+  claimed_at TEXT NOT NULL,
+  committed_at TEXT,
+  confirmed_at TEXT,
+  abandoned_at TEXT,
+  canonical_event_id TEXT,
+  processing_status TEXT,
+  reason_code TEXT,
+  state_mutation_allowed INTEGER,
+  dispatch_allowed INTEGER,
+  last_error TEXT
+);
+CREATE INDEX project_a_receipt_transactions_status_idx
+  ON project_a_receipt_transactions(status, claimed_at);
+CREATE TABLE project_a_exact_dedupe (
+  transport_identity TEXT NOT NULL,
+  canonical_content_hash TEXT NOT NULL,
+  canonical_event_id TEXT NOT NULL,
+  ingest_id TEXT NOT NULL REFERENCES project_a_raw_receipts(ingest_id),
+  transaction_id TEXT NOT NULL REFERENCES project_a_receipt_transactions(transaction_id),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (transport_identity, canonical_content_hash)
+);
+CREATE TABLE project_a_semantic_dedupe (
+  semantic_evidence_hash TEXT NOT NULL,
+  canonical_event_id TEXT NOT NULL,
+  ingest_id TEXT NOT NULL REFERENCES project_a_raw_receipts(ingest_id),
+  transaction_id TEXT NOT NULL REFERENCES project_a_receipt_transactions(transaction_id),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (semantic_evidence_hash, canonical_event_id)
+);
+CREATE INDEX project_a_semantic_dedupe_hash_idx
+  ON project_a_semantic_dedupe(semantic_evidence_hash, created_at);
+CREATE TABLE project_a_setup_state_v1 (
+  setup_id TEXT NOT NULL,
+  transaction_id TEXT NOT NULL UNIQUE
+    REFERENCES project_a_receipt_transactions(transaction_id),
+  symbol TEXT NOT NULL,
+  lifecycle_state TEXT NOT NULL,
+  hypothesis TEXT,
+  path TEXT,
+  canonical_event_id TEXT NOT NULL,
+  occurred_at TEXT NOT NULL,
+  semantic_evidence_hash TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  recorded_at TEXT NOT NULL,
+  PRIMARY KEY (setup_id, transaction_id)
+);
+CREATE INDEX project_a_setup_state_v1_current_idx
+  ON project_a_setup_state_v1(setup_id, version, recorded_at);
+ALTER TABLE project_a_setup_state ADD COLUMN transaction_id TEXT;
+ALTER TABLE project_a_setup_state_history ADD COLUMN transaction_id TEXT;
+ALTER TABLE project_a_outbox ADD COLUMN transaction_id TEXT;
+ALTER TABLE project_a_outbox ADD COLUMN release_authorized INTEGER NOT NULL DEFAULT 1;
+CREATE INDEX project_a_outbox_release_idx
+  ON project_a_outbox(status, release_authorized, available_at, created_at);
+"""
+MIGRATION_2_CHECKSUM = "sha256:" + hashlib.sha256(MIGRATION_2.encode("utf-8")).hexdigest()
+MIGRATIONS = (
+    (1, "initial_project_a_runtime", MIGRATION_1, MIGRATION_1_CHECKSUM),
+    (2, "event_v1_durable_authority", MIGRATION_2, MIGRATION_2_CHECKSUM),
+)
+
 
 class ProjectADatabase:
     def __init__(self, path: str | Path):
@@ -186,21 +260,37 @@ class ProjectADatabase:
     def migrate(self, applied_at: str) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self.connect()) as conn:
-            tables = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='project_a_schema_migrations'"
-            ).fetchone()
-        if tables is None:
+            ledger_exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='project_a_schema_migrations'"
+            ).fetchone() is not None
+            applied = set()
+            if ledger_exists:
+                applied = {
+                    int(row[0])
+                    for row in conn.execute(
+                        "SELECT version FROM project_a_schema_migrations"
+                    ).fetchall()
+                }
+        for version, name, sql, checksum in MIGRATIONS:
+            if version in applied:
+                continue
+            if version != 1 and not ledger_exists:
+                raise RuntimeError("cannot apply later migration without migration ledger")
             safe_applied_at = applied_at.replace("'", "''")
-            safe_checksum = MIGRATION_1_CHECKSUM.replace("'", "''")
+            safe_name = name.replace("'", "''")
+            safe_checksum = checksum.replace("'", "''")
             conn = self.connect()
             try:
                 conn.executescript(
-                    "BEGIN IMMEDIATE;\n" + MIGRATION_1 +
+                    "BEGIN IMMEDIATE;\n" + sql +
                     "\nINSERT INTO project_a_schema_migrations"
                     "(version,name,applied_at,checksum) VALUES"
-                    f"(1,'initial_project_a_runtime','{safe_applied_at}',"
+                    f"({version},'{safe_name}','{safe_applied_at}',"
                     f"'{safe_checksum}');\nCOMMIT;"
                 )
+                ledger_exists = True
+                applied.add(version)
             except Exception:
                 if conn.in_transaction:
                     conn.execute("ROLLBACK")
@@ -219,9 +309,13 @@ class ProjectADatabase:
             versions = [row["version"] for row in rows]
             if versions != list(range(1, SCHEMA_VERSION + 1)):
                 raise RuntimeError(f"unsupported or partial Project A schema: {versions}")
-            if (rows[0]["name"], rows[0]["checksum"]) != (
-                    "initial_project_a_runtime", MIGRATION_1_CHECKSUM):
-                raise RuntimeError("Project A migration ledger checksum mismatch")
+            expected = {
+                version: (name, checksum)
+                for version, name, _, checksum in MIGRATIONS
+            }
+            for row in rows:
+                if (row["name"], row["checksum"]) != expected[row["version"]]:
+                    raise RuntimeError("Project A migration ledger checksum mismatch")
             objects = conn.execute(
                 "SELECT type,name FROM sqlite_master WHERE name LIKE 'project_a_%'"
             ).fetchall()

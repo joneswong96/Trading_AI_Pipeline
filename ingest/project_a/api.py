@@ -11,7 +11,7 @@ from .config import ProjectAConfig
 from .service import ProjectAIngestService, RuntimeReject
 
 log = logging.getLogger("ingest.project_a")
-router = APIRouter(prefix="/project-a/v0.2", tags=["project-a-v0.2"])
+router = APIRouter(tags=["project-a"])
 _service: ProjectAIngestService | None = None
 
 
@@ -48,7 +48,7 @@ def _metadata(request: Request) -> dict:
     }
 
 
-@router.post("/events")
+@router.post("/project-a/v0.2/events")
 async def project_a_event(request: Request):
     service = get_service()
     raw, complete = await _bounded_body(request, service.config.max_body_bytes)
@@ -67,12 +67,32 @@ async def project_a_event(request: Request):
     return JSONResponse(result.response(), status_code=result.http_status)
 
 
-@router.get("/health/live")
+@router.post("/project-a/v1/events")
+async def project_a_event_v1(request: Request):
+    service = get_service()
+    raw, complete = await _bounded_body(request, service.config.max_body_bytes)
+    pre_error = None if complete else RuntimeReject(
+        "BODY_TOO_LARGE", "request body exceeds configured maximum", status=413,
+        replay_eligible=False)
+    result = service.receive_v1(
+        raw, content_type=request.headers.get("content-type"), method=request.method,
+        source_metadata=_metadata(request), raw_complete=complete, pre_error=pre_error,
+    )
+    log.info(json.dumps({
+        "contract": "PROJECT_A_WIRE_EVENT_V1",
+        "result_code": result.result_code, "ingest_id": result.ingest_id,
+        "event_id": result.event_id, "setup_id": result.setup_id,
+        "transition": result.transition_code, "dispatch_key": result.dispatch_key,
+    }, separators=(",", ":")))
+    return JSONResponse(result.response(), status_code=result.http_status)
+
+
+@router.get("/project-a/v0.2/health/live")
 def project_a_liveness():
     return {"ok": True, "service": "project-a-ingest", "live_execution": False}
 
 
-@router.get("/health/ready")
+@router.get("/project-a/v0.2/health/ready")
 def project_a_readiness():
     try:
         report = get_service().health()
@@ -86,6 +106,6 @@ def project_a_readiness():
         }, status_code=503)
 
 
-@router.get("/metrics")
+@router.get("/project-a/v0.2/metrics")
 def project_a_metrics():
     return get_service().metrics()

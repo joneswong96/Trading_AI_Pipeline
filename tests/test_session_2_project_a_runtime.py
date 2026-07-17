@@ -215,6 +215,24 @@ def test_invalidation_and_expiry_are_immediate_and_terminal(runtime, event_type)
     assert scalar(service, "SELECT lifecycle_state FROM project_a_setup_state") == event_type
 
 
+@pytest.mark.parametrize(
+    ("event_type", "wrong_status"),
+    [("SETUP_INVALIDATED", "EXPIRED"), ("SETUP_EXPIRED", "STRUCTURAL_BREAK")],
+)
+def test_supported_v02_lifecycle_requires_its_exact_disposition(
+        runtime, event_type, wrong_status):
+    service, clock, _ = runtime
+    service.receive(wire(ready()))
+    clock.value += timedelta(minutes=1)
+    event = lifecycle(event_type, event_id=f"evt_xau_wrong_{event_type.lower()}_0001")
+    event["disposition"]["status"] = wrong_status
+    result = service.receive(wire(event))
+    assert result.result_code == "UNSUPPORTED_LIFECYCLE_V02"
+    assert scalar(service, "SELECT COUNT(*) FROM project_a_raw_receipts") == 2
+    assert scalar(service, "SELECT COUNT(*) FROM project_a_canonical_events") == 1
+    assert scalar(service, "SELECT COUNT(*) FROM project_a_outbox") == 1
+
+
 def test_illegal_reopen_and_out_of_order_are_dead_lettered(runtime):
     service, clock, _ = runtime
     service.receive(wire(ready()))
@@ -274,8 +292,9 @@ def test_replay_dry_run_has_no_effect_and_commit_is_idempotent(runtime):
 def test_health_and_metrics_report_schema_and_shadow_safety(runtime):
     service, _, _ = runtime
     health = service.health()
-    assert health["ok"] is True and health["schema_version"] == 1
+    assert health["ok"] is True and health["schema_version"] == 2
     assert health["reserved_capture_port"] == 4999 and health["ingest_port"] == 8000
+    assert health["v1_ingest_enabled"] is False
     assert health["live_execution"] is False and health["order_placement"] is False
     assert service.metrics()["receipts_total"] == 0
 
@@ -312,17 +331,27 @@ def test_rejected_candidate_and_telemetry_are_retained_without_dispatch(runtime)
     assert scalar(service, "SELECT COUNT(*) FROM project_a_outbox") == 0
 
 
-def test_entry_window_open_and_close_use_exact_contract_values(runtime):
+@pytest.mark.parametrize(
+    "event_type", ["ENTRY_WINDOW_OPEN", "ENTRY_WINDOW_CLOSED", "THESIS_INVALIDATED"]
+)
+def test_unsupported_v02_lifecycle_is_retained_without_mutation_or_dispatch(
+        runtime, event_type):
     service, clock, _ = runtime
     service.receive(wire(ready()))
     clock.value += timedelta(seconds=10)
-    opened = lifecycle("ENTRY_WINDOW_OPEN", event_id="evt_xau_window_open_0001",
-                       occurred="2026-07-16T00:00:10Z")
-    assert service.receive(wire(opened)).transition_code == "ENTRY_WINDOW_OPENED"
-    clock.value += timedelta(seconds=10)
-    closed = lifecycle("ENTRY_WINDOW_CLOSED", event_id="evt_xau_window_close_0001",
-                       occurred="2026-07-16T00:00:20Z")
-    assert service.receive(wire(closed)).transition_code == "ENTRY_WINDOW_CLOSED"
+    before_state = scalar(service, "SELECT COUNT(*) FROM project_a_setup_state_history")
+    before_outbox = scalar(service, "SELECT COUNT(*) FROM project_a_outbox")
+    unsupported = lifecycle(
+        event_type,
+        event_id=f"evt_xau_{event_type.lower()}_0001",
+        occurred="2026-07-16T00:00:10Z",
+    )
+    result = service.receive(wire(unsupported))
+    assert result.result_code == "UNSUPPORTED_LIFECYCLE_V02"
+    assert scalar(service, "SELECT COUNT(*) FROM project_a_raw_receipts") == 2
+    assert scalar(service, "SELECT COUNT(*) FROM project_a_canonical_events") == 1
+    assert scalar(service, "SELECT COUNT(*) FROM project_a_setup_state_history") == before_state
+    assert scalar(service, "SELECT COUNT(*) FROM project_a_outbox") == before_outbox
 
 
 def test_raw_and_canonical_audit_rows_are_database_immutable(runtime):
@@ -357,12 +386,12 @@ def test_startup_rejects_unknown_or_partial_schema(runtime):
     with service.db.transaction(immediate=True) as conn:
         conn.execute(
             "INSERT INTO project_a_schema_migrations(version,name,applied_at,checksum) "
-            "VALUES(2,'unapproved','2026-07-16T00:00:00Z','bad')")
+            "VALUES(3,'unapproved','2026-07-16T00:00:00Z','bad')")
     with pytest.raises(RuntimeError, match="unsupported or partial"):
         ProjectAIngestService(config, clock=clock, initialize=False)
     with service.db.transaction(immediate=True) as conn:
-        conn.execute("DELETE FROM project_a_schema_migrations WHERE version=2")
-        conn.execute("DROP TABLE project_a_replay_operations")
+        conn.execute("DELETE FROM project_a_schema_migrations WHERE version=3")
+        conn.execute("DROP TABLE project_a_semantic_dedupe")
     with pytest.raises(RuntimeError, match="partial Project A schema objects"):
         ProjectAIngestService(config, clock=clock, initialize=False)
 

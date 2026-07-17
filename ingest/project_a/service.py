@@ -11,11 +11,25 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from contracts import EVENT_SCHEMA_V0_2, ContractError, canonical_json, validate_contract
+from contracts import (
+    EVENT_SCHEMA_V0_2,
+    ContractError,
+    canonical_json,
+    parse_wire_event_v1_bytes,
+    process_wire_event_v1_receipt,
+    process_wire_event_v1_receipt_in_transaction,
+    validate_contract,
+)
 
 from .config import ProjectAConfig
 from .database import ProjectADatabase, SCHEMA_VERSION
+from .event_v1_runtime import (
+    SQLiteDedupeAuthority,
+    authorize_and_confirm,
+    recover_abandoned_transactions,
+)
 from .state import transition
+from .trusted_ingress import issue_production_receipt_context
 
 Clock = Callable[[], datetime]
 SUPPORTED_SCHEMA_VERSION = "0.2"
@@ -41,7 +55,9 @@ def utc_now() -> datetime:
 
 
 def iso(value: datetime) -> str:
-    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    utc = value.astimezone(timezone.utc)
+    timespec = "milliseconds" if utc.microsecond else "seconds"
+    return utc.isoformat(timespec=timespec).replace("+00:00", "Z")
 
 
 def parse_utc(value: str) -> datetime:
@@ -94,11 +110,12 @@ class RuntimeReject(ValueError):
 
 class ProjectAIngestService:
     def __init__(self, config: ProjectAConfig, *, clock: Clock = utc_now,
-                 initialize: bool = True):
+                 initialize: bool = True, v1_fail_at: str | None = None):
         config.assert_safe()
         self.config = config
         self.clock = clock
         self.db = ProjectADatabase(config.database_path)
+        self._v1_fail_at = v1_fail_at
         if initialize:
             self.db.migrate(iso(self._now()))
         else:
@@ -157,6 +174,7 @@ class ProjectAIngestService:
                 category = "STRUCTURAL_VALIDATION_FAILED" if exc.code.startswith("schema_") \
                     else "SEMANTIC_VALIDATION_FAILED"
                 raise RuntimeReject(category, f"{exc.code}: {bounded(str(exc), 420)}") from exc
+            self._validate_v02_lifecycle_support(document)
             self._runtime_validate(document, now)
             return self._commit_validated(
                 ingest_id, body_hash, document, now_text, replay_operation_id)
@@ -180,6 +198,246 @@ class ProjectAIngestService:
             return IngestResult(
                 ingest_id, reject.code, reject.status, event_id=event_id, setup_id=setup_id,
                 detail=reject.detail,
+            )
+
+    def receive_v1(
+        self,
+        raw_body: bytes,
+        *,
+        content_type: str | None = "application/json",
+        method: str = "POST",
+        source_metadata: dict[str, Any] | None = None,
+        raw_complete: bool = True,
+        pre_error: RuntimeReject | None = None,
+        replay_operation_id: str | None = None,
+    ) -> IngestResult:
+        """Durably retain exact bytes, then invoke the accepted trusted V1 reader."""
+        now = self._now()
+        received_at = iso(now)
+        receipt_id = "rcpt_" + uuid.uuid4().hex
+        if not self.config.v1_ingest_enabled:
+            return IngestResult(
+                receipt_id,
+                "V1_INGEST_DISABLED",
+                503,
+                detail="Wire Event V1 ingest is disabled by default",
+            )
+        body_hash = digest(raw_body)
+        safe_source = self._safe_source_metadata(source_metadata or {})
+        self._store_raw(
+            receipt_id,
+            raw_body,
+            body_hash,
+            received_at,
+            method,
+            content_type,
+            safe_source,
+            raw_complete,
+        )
+        transaction = None
+        try:
+            if pre_error:
+                raise pre_error
+            if method != "POST":
+                raise RuntimeReject(
+                    "METHOD_NOT_ALLOWED",
+                    "Project A accepts POST only",
+                    status=405,
+                    replay_eligible=False,
+                )
+            media_type = (content_type or "").split(";", 1)[0].strip().lower()
+            if media_type != "application/json":
+                raise RuntimeReject(
+                    "CONTENT_TYPE_UNSUPPORTED",
+                    "Content-Type must be application/json",
+                    status=415,
+                )
+            if not raw_complete or len(raw_body) > self.config.max_body_bytes:
+                raise RuntimeReject(
+                    "BODY_TOO_LARGE",
+                    "request body exceeds configured maximum",
+                    status=413,
+                    replay_eligible=False,
+                )
+            canonicalized_at = iso(self._now())
+            context = issue_production_receipt_context(
+                raw_body,
+                receipt_id=receipt_id,
+                received_at=received_at,
+                transport_identity="project_a.http.v1",
+                source_adapter_identity="session2.ingress.v1",
+                immutable_raw_reference=f"project_a_raw_receipts:{receipt_id}",
+                canonicalized_at=canonicalized_at,
+                transport_attempt_id=receipt_id,
+            )
+
+            # The accepted reader performs raw/hash/JSON/shape/lifecycle preflight
+            # before a durable dedupe transaction is allowed to begin.
+            preflight = process_wire_event_v1_receipt(raw_body, context, None)
+            if preflight.reason_code != "DEDUPE_AUTHORITY_REQUIRED":
+                reject = RuntimeReject(
+                    preflight.reason_code,
+                    preflight.audit_detail or "Wire Event V1 preflight rejected",
+                    status=422 if preflight.processing_status == "REJECTED" else 503,
+                )
+                self._record_rejection(
+                    receipt_id,
+                    received_at,
+                    reject,
+                    version=preflight.wire_version,
+                    event_id=None,
+                    setup_id=preflight.setup_id,
+                    replay_operation_id=replay_operation_id,
+                )
+                return IngestResult(
+                    receipt_id,
+                    reject.code,
+                    reject.status,
+                    setup_id=preflight.setup_id,
+                    detail=reject.detail,
+                )
+
+            wire = parse_wire_event_v1_bytes(raw_body).document
+            self._runtime_validate_v1(wire, now)
+            authority = SQLiteDedupeAuthority(
+                self.db,
+                self.config,
+                ingest_id=receipt_id,
+                raw_bytes=raw_body,
+                recorded_at=canonicalized_at,
+                replay_operation_id=replay_operation_id,
+                fail_at=self._v1_fail_at,
+            )
+            transaction = authority.begin_receipt_transaction(context)
+            processed = process_wire_event_v1_receipt_in_transaction(
+                raw_body, context, transaction
+            )
+            if processed.processing_status == "ERROR" or processed.canonical_document is None:
+                reject = RuntimeReject(
+                    processed.reason_code,
+                    processed.audit_detail or "durable Event V1 processing failed",
+                    status=503,
+                )
+                self._record_rejection(
+                    receipt_id,
+                    received_at,
+                    reject,
+                    version=processed.wire_version,
+                    event_id=None,
+                    setup_id=processed.setup_id,
+                    replay_operation_id=replay_operation_id,
+                )
+                return IngestResult(
+                    receipt_id,
+                    reject.code,
+                    reject.status,
+                    setup_id=processed.setup_id,
+                    detail=reject.detail,
+                )
+
+            authorize_and_confirm(
+                transaction, raw_body, processed.canonical_document
+            )
+            with closing(self.db.connect()) as conn:
+                claim = conn.execute(
+                    "SELECT processing_status,reason_code,canonical_event_id "
+                    "FROM project_a_receipt_transactions WHERE transaction_id=?",
+                    (transaction.transaction_id,),
+                ).fetchone()
+                outbox = conn.execute(
+                    "SELECT dispatch_key FROM project_a_outbox WHERE transaction_id=?",
+                    (transaction.transaction_id,),
+                ).fetchone()
+            status = claim["processing_status"]
+            code = claim["reason_code"]
+            http_status = 200 if status == "DUPLICATE" else 202
+            if status == "REJECTED":
+                http_status = 409
+            return IngestResult(
+                receipt_id,
+                code if status == "REJECTED" else status,
+                http_status,
+                event_id=claim["canonical_event_id"],
+                setup_id=processed.setup_id,
+                duplicate=status == "DUPLICATE",
+                dispatch_key=outbox["dispatch_key"] if outbox else None,
+                transition_code=code,
+            )
+        except RuntimeReject as exc:
+            self._record_rejection(
+                receipt_id,
+                received_at,
+                exc,
+                version=self._detect_version(raw_body),
+                event_id=None,
+                setup_id=None,
+                replay_operation_id=replay_operation_id,
+            )
+            return IngestResult(
+                receipt_id, exc.code, exc.status, detail=exc.detail
+            )
+        except (ContractError, sqlite3.Error, RuntimeError) as exc:
+            reject = RuntimeReject(
+                "DEDUPE_TRANSACTION_PARTIAL_OR_UNKNOWN"
+                if transaction is not None and transaction.committed
+                else "PERSISTENCE_FAILURE",
+                type(exc).__name__,
+                status=503,
+            )
+            if transaction is not None and transaction.committed:
+                transaction.mark_commit_unknown(type(exc).__name__)
+            self._record_rejection(
+                receipt_id,
+                received_at,
+                reject,
+                version=self._detect_version(raw_body),
+                event_id=None,
+                setup_id=None,
+                replay_operation_id=replay_operation_id,
+            )
+            return IngestResult(
+                receipt_id, reject.code, reject.status, detail=reject.detail
+            )
+        finally:
+            if transaction is not None and not transaction.closed:
+                try:
+                    transaction.close()
+                except ContractError:
+                    pass
+
+    @staticmethod
+    def _validate_v02_lifecycle_support(event: dict) -> None:
+        if event["event_class"] != "LIFECYCLE":
+            return
+        event_type = event["event_type"]
+        if event_type in {
+            "ENTRY_WINDOW_OPEN", "ENTRY_WINDOW_CLOSED", "THESIS_INVALIDATED"
+        }:
+            raise RuntimeReject(
+                "UNSUPPORTED_LIFECYCLE_V02",
+                f"{event_type} has no ratified Event V0.2 transition semantics",
+            )
+        required = {
+            "SETUP_INVALIDATED": "STRUCTURAL_BREAK",
+            "SETUP_EXPIRED": "EXPIRED",
+        }.get(event_type)
+        if required is None or event["disposition"]["status"] != required:
+            raise RuntimeReject(
+                "UNSUPPORTED_LIFECYCLE_V02",
+                "Event V0.2 lifecycle disposition is not a supported combination",
+            )
+
+    def _runtime_validate_v1(self, event: dict, now: datetime) -> None:
+        occurred = parse_utc(event["occurred_at"])
+        if occurred > now + timedelta(seconds=self.config.future_tolerance_seconds):
+            raise RuntimeReject(
+                "FUTURE_TIMESTAMP",
+                "occurred_at exceeds the configured future tolerance",
+            )
+        age = (now - occurred).total_seconds()
+        if age > self.config.stale_after_seconds and event["event_type"] != "SETUP_EXPIRED":
+            raise RuntimeReject(
+                "STALE_TIMESTAMP", "event exceeds the configured lifecycle threshold"
             )
 
     def _runtime_validate(self, event: dict, now: datetime) -> None:
@@ -478,7 +736,8 @@ class ProjectAIngestService:
         with self.db.transaction(immediate=True) as conn:
             row = conn.execute(
                 "SELECT * FROM project_a_outbox WHERE status IN ('PENDING','FAILED') "
-                "AND available_at<=? ORDER BY created_at,outbox_id LIMIT 1", (now_text,),
+                "AND release_authorized=1 AND available_at<=? "
+                "ORDER BY created_at,outbox_id LIMIT 1", (now_text,),
             ).fetchone()
             if row is None:
                 return None
@@ -555,6 +814,9 @@ class ProjectAIngestService:
         now = self._now()
         cutoff = iso(now - timedelta(seconds=self.config.claim_timeout_seconds))
         now_text = iso(now)
+        recovered_ingress = recover_abandoned_transactions(
+            self.db, cutoff, now_text
+        )
         with self.db.transaction(immediate=True) as conn:
             rows = conn.execute(
                 "SELECT outbox_id,claimed_by FROM project_a_outbox "
@@ -571,7 +833,7 @@ class ProjectAIngestService:
                     "VALUES(?,?,?,'RECOVERED','ABANDONED_CLAIM')",
                     (row["outbox_id"], now_text, row["claimed_by"]),
                 )
-            return len(rows)
+            return recovered_ingress + len(rows)
 
     def retry_outbox(self, outbox_id: str) -> bool:
         now_text = iso(self._now())
@@ -602,6 +864,7 @@ class ProjectAIngestService:
             "shadow_mode": self.config.mode == "SHADOW", "live_execution": False,
             "order_placement": False, "enabled_symbol": self.config.enabled_symbol,
             "ingest_port": self.config.ingest_port, "reserved_capture_port": 4999,
+            "v1_ingest_enabled": self.config.v1_ingest_enabled,
             "errors": errors, "detail": detail,
         }
 

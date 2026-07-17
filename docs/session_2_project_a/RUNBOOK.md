@@ -11,7 +11,13 @@ py -m ingest.project_a.admin init
 py -m ingest.project_a.admin health
 ```
 
-Initialization transactionally applies migration 1 and records its checksum. For a disposable clean start, stop the service, preserve any existing database, set `PROJECT_A_DB` to a new path, then run `init`. Never delete an active database.
+Initialization transactionally applies migrations 1 and 2, records both
+checksums, and verifies SQLite integrity. For a disposable clean start, stop the
+service, preserve any existing database, set `PROJECT_A_DB` to a new path, then
+run `init`. Never delete an active database.
+
+Wire Event V1 ingest is disabled by default. Offline test profiles may set
+`PROJECT_A_V1_INGEST_ENABLED=true`; do not treat that as runtime activation.
 
 ## Start and verify routing
 
@@ -56,7 +62,13 @@ py -m ingest.project_a.admin inspect outbox --limit 20
 py -m ingest.project_a.admin inspect dead-letters --limit 20
 ```
 
-Use a SQLite read-only client for deeper queries. Relevant tables are `project_a_raw_receipts`, `project_a_receipt_processing`, `project_a_canonical_events`, `project_a_setup_state`, `project_a_setup_state_history`, `project_a_outbox`, `project_a_outbox_attempts`, and `project_a_dead_letters`.
+Use a SQLite read-only client for deeper queries. Relevant tables include
+`project_a_raw_receipts`, `project_a_receipt_transactions`,
+`project_a_exact_dedupe`, `project_a_semantic_dedupe`,
+`project_a_receipt_processing`, `project_a_canonical_events`,
+`project_a_setup_state`, `project_a_setup_state_v1`,
+`project_a_setup_state_history`, `project_a_outbox`,
+`project_a_outbox_attempts`, and `project_a_dead_letters`.
 
 ## Outbox retry/recovery
 
@@ -66,6 +78,10 @@ py -m ingest.project_a.admin recover-claims
 ```
 
 Session 3 consumers use `ProjectAIngestService.claim_outbox(worker_id)`, `deliver_outbox(outbox_id, worker_id)`, and `fail_outbox(...)`. They must deduplicate on `dispatch_key`.
+
+`recover-claims` also marks stale V1 ingress claims `ABANDONED`.
+`COMMIT_UNKNOWN` and abandoned V1 outboxes remain unclaimable; never manually
+flip `release_authorized`.
 
 ## Replay
 
@@ -78,6 +94,9 @@ py -m ingest.project_a.replay --setup setup_REPLACE_WITH_ID --limit 100
 py -m ingest.project_a.replay --batch --limit 100
 py -m ingest.project_a.replay --fixture fixtures\project_a\event_cases.json --case accepted_alert
 ```
+
+Replay detects stored Event V0.2 versus Wire Event V1 bytes. V1 replay enables
+only the isolated replay service; it does not enable the HTTP endpoint.
 
 Committed replay requires explicit authority and remains idempotent:
 
@@ -97,7 +116,11 @@ Copy-Item -LiteralPath $env:PROJECT_A_DB -Destination "$env:PROJECT_A_DB.$stamp.
 py -c "import sqlite3,os; c=sqlite3.connect(os.environ['PROJECT_A_DB']); print(c.execute('PRAGMA integrity_check').fetchone()[0]); c.close()"
 ```
 
-Code rollback: stop writers, record the branch SHA and database schema version, restore the previous known-good integration commit, and keep the Project A database untouched. Older code that does not know schema version 1 must not write it. Because this is a dedicated additive database, rollback does not require mutating legacy `trading.db`.
+Code rollback: stop writers, record the branch SHA and database schema version,
+restore the previous known-good integration commit, and keep the Project A
+database untouched. Older code that does not know schema version 2 must not
+write it. Because this is a dedicated additive database, rollback does not
+require mutating legacy `trading.db`.
 
 If readiness reports an incompatible/partial schema, stop ingestion, back up the database, preserve raw records, and escalate to Session 0. Do not edit the ledger or run improvised destructive SQL.
 

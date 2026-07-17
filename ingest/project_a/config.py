@@ -19,12 +19,26 @@ def _integer(name: str, default: int, *, minimum: int) -> int:
     return value
 
 
+def _boolean(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean")
+
+
 @dataclass(frozen=True)
 class ProjectAConfig:
     database_path: Path
     ingest_host: str = "0.0.0.0"
     ingest_port: int = 8000
     endpoint: str = "/project-a/v0.2/events"
+    v1_endpoint: str = "/project-a/v1/events"
+    v1_ingest_enabled: bool = False
     max_body_bytes: int = 262_144
     future_tolerance_seconds: int = 5
     stale_after_seconds: int = 1_800
@@ -48,6 +62,7 @@ class ProjectAConfig:
                 "PROJECT_A_DB", str(ROOT / "storage" / "project_a.db"))),
             ingest_host=os.getenv("PROJECT_A_INGEST_HOST", "0.0.0.0"),
             ingest_port=_integer("PROJECT_A_INGEST_PORT", port_default, minimum=1),
+            v1_ingest_enabled=_boolean("PROJECT_A_V1_INGEST_ENABLED", False),
             max_body_bytes=_integer("PROJECT_A_MAX_BODY_BYTES", 262_144, minimum=1),
             future_tolerance_seconds=_integer(
                 "PROJECT_A_FUTURE_TOLERANCE_SECONDS", 5, minimum=0),

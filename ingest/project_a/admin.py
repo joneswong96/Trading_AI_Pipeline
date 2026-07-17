@@ -8,6 +8,7 @@ from contextlib import closing
 from pathlib import Path
 
 from .config import ProjectAConfig
+from .database import SCHEMA_VERSION
 from .service import ProjectAIngestService
 
 _INSPECT = {
@@ -37,7 +38,11 @@ def main(argv=None) -> int:
     try:
         service = ProjectAIngestService(config)
         if args.command == "init":
-            result = {"ok": True, "database": str(config.database_path), "schema_version": 1}
+            result = {
+                "ok": True,
+                "database": str(config.database_path),
+                "schema_version": SCHEMA_VERSION,
+            }
         elif args.command == "health":
             result = service.health()
         elif args.command == "inspect":

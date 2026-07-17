@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -10,10 +12,18 @@ from ingest.project_a.service import ProjectAIngestService
 from .test_session_2_project_a_runtime import ready, wire
 
 
-def build_client(tmp_path, *, max_body=262_144):
-    config = ProjectAConfig(database_path=tmp_path / "api.db", max_body_bytes=max_body)
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def build_client(tmp_path, *, max_body=262_144, v1_enabled=False,
+                 at=datetime(2026, 7, 16, 0, 0, 5, tzinfo=timezone.utc)):
+    config = ProjectAConfig(
+        database_path=tmp_path / "api.db",
+        max_body_bytes=max_body,
+        v1_ingest_enabled=v1_enabled,
+    )
     service = ProjectAIngestService(
-        config, clock=lambda: datetime(2026, 7, 16, 0, 0, 5, tzinfo=timezone.utc))
+        config, clock=lambda: at)
     configure_service(service)
     app = FastAPI()
     app.include_router(router)
@@ -52,3 +62,36 @@ def test_legacy_and_project_a_routes_coexist_without_fallback():
     assert client.get("/health").status_code == 200
     assert client.get("/project-a/v0.2/health/live").status_code == 200
     assert client.get("/project-a/v0.2/events").status_code == 405
+
+
+def test_v1_endpoint_is_disabled_by_default_and_can_be_explicitly_test_enabled(tmp_path):
+    vector = json.loads(
+        (ROOT / "fixtures/project_a/event_v1_known_vectors.json").read_text(
+            encoding="utf-8"
+        )
+    )["documents"]["rejection_ready"]
+    body = json.dumps(vector, separators=(",", ":")).encode()
+    disabled, _ = build_client(
+        tmp_path / "disabled",
+        at=datetime(2026, 7, 16, 1, 1, 2, tzinfo=timezone.utc),
+    )
+    response = disabled.post(
+        "/project-a/v1/events",
+        content=body,
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 503
+    assert response.json()["result_code"] == "V1_INGEST_DISABLED"
+
+    enabled, _ = build_client(
+        tmp_path / "enabled",
+        v1_enabled=True,
+        at=datetime(2026, 7, 16, 1, 1, 2, tzinfo=timezone.utc),
+    )
+    accepted = enabled.post(
+        "/project-a/v1/events",
+        content=body,
+        headers={"content-type": "application/json"},
+    )
+    assert accepted.status_code == 202
+    assert accepted.json()["result_code"] == "ACCEPTED"
