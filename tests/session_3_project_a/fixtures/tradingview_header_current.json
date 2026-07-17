@@ -1,0 +1,44 @@
+{
+  "fixture_version": "1",
+  "scope": "active-chart-header-only",
+  "old_selector": "[data-name=\"legend-source-title\"], [data-name=\"legend-source-description\"]",
+  "old_selector_visible_matches": 0,
+  "header_identity": {
+    "status": "OK",
+    "strategy": "ACCESSIBLE_HEADER_CONTROLS",
+    "chart_region_count": 1,
+    "old_selector_visible_matches": 0,
+    "candidates": [
+      {
+        "kind": "symbol",
+        "channel": "accessible_header_controls",
+        "scope": "active_chart_header",
+        "raw": "Gold Spot / U.S. Dollar",
+        "visible": true
+      },
+      {
+        "kind": "timeframe",
+        "channel": "accessible_header_controls",
+        "scope": "active_chart_header",
+        "raw": "1",
+        "visible": true
+      },
+      {
+        "kind": "feed",
+        "channel": "accessible_header_controls",
+        "scope": "active_chart_header",
+        "raw": "IC Markets",
+        "visible": true
+      }
+    ],
+    "supplementary": [
+      {
+        "kind": "canvas_label",
+        "channel": "accessible_canvas_label",
+        "scope": "active_chart_canvas",
+        "raw": "Chart for ICMARKETS:XAUUSD, 1 minute",
+        "visible": true
+      }
+    ]
+  }
+}

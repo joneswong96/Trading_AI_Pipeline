@@ -25,7 +25,7 @@ class Driver(AbstractContextManager):
 def capture_event(canonical_event: dict, analysis_adapter: dict,
                   profile: CaptureProfile, pin: TabPin,
                   store: ArtifactStore, probe: Probe,
-                  driver_factory: Callable[[CaptureProfile], Driver], *,
+                  driver_factory: Callable[[CaptureProfile, TabPin], Driver], *,
                   dispatch_id: str, retry_count: int,
                   now: Callable[[], datetime],
                   capture_method: str = "PROJECT_A_CDP",
@@ -51,7 +51,7 @@ def capture_event(canonical_event: dict, analysis_adapter: dict,
     driver = None
     try:
         endpoint, targets = probe.inspect(profile)
-        with driver_factory(profile) as driver:
+        with driver_factory(profile, pin) as driver:
             try:
                 initial = driver.inspect()
                 preflight = verify_preflight(

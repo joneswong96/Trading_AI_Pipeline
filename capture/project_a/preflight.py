@@ -48,11 +48,15 @@ class ChartState:
     header_timeframe: str
     available_timeframes: tuple[str, ...]
     data_status: str
-    last_bar_at: datetime
-    last_update_at: datetime
+    last_bar_at: datetime | None
+    last_update_at: datetime | None
     modal_blocking: bool = False
     disconnected: bool = False
     loading: bool = False
+    header_identity_evidence: dict | None = None
+    target_id: str = ""
+    target_match_count: int = 1
+    transition_evidence: dict | None = None
 
 
 def verify_endpoint(profile: CaptureProfile, endpoint: EndpointInfo) -> None:
@@ -133,6 +137,8 @@ def verify_chart_state(profile: CaptureProfile, authority: AnalysisAuthority,
     missing = sorted(set(profile.required_timeframes) - set(state.available_timeframes))
     if missing:
         raise Session3Error("MISSING_TIMEFRAME", "unavailable: " + ", ".join(missing))
+    if state.last_bar_at is None or state.last_update_at is None:
+        raise Session3Error("CHART_NOT_READY", "structured last bar timestamp is unavailable")
     bar_at = state.last_bar_at.astimezone(timezone.utc)
     update_at = state.last_update_at.astimezone(timezone.utc)
     if bar_at + timedelta(seconds=TIMEFRAME_SECONDS[expected_timeframe]) <= authority.bar_time:
@@ -152,6 +158,9 @@ def verify_chart_state(profile: CaptureProfile, authority: AnalysisAuthority,
         "required_timeframes_available": True,
         "streaming_verified": True,
         "source_bar_covered": True,
+        "header_identity_evidence": state.header_identity_evidence or {},
+        "target_id": state.target_id,
+        "transition_evidence": state.transition_evidence or {},
     }
 
 
@@ -171,7 +180,7 @@ def verify_preflight(profile: CaptureProfile, pin: TabPin, endpoint: EndpointInf
         "endpoint_verified": True,
         "local_only_verified": True,
         "process_verified": True,
-        "target_id": selected.target_id,
         "destination_writable": True,
         **verification,
+        "target_id": selected.target_id,
     }

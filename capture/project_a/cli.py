@@ -30,6 +30,31 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _configure_utf8_stream(stream) -> None:
+    """Make Windows console JSON Unicode-safe without changing canonical artifact bytes."""
+    reconfigure = getattr(stream, "reconfigure", None)
+    if callable(reconfigure):
+        try:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (AttributeError, OSError, ValueError):
+            pass
+
+
+def _write_json(payload: dict, stream, *, pretty: bool = False) -> None:
+    options = {"ensure_ascii": False, "sort_keys": True}
+    if pretty:
+        options["indent"] = 2
+    rendered = json.dumps(payload, **options) + "\n"
+    try:
+        stream.write(rendered)
+    except UnicodeEncodeError:
+        buffer = getattr(stream, "buffer", None)
+        if buffer is not None:
+            buffer.write(rendered.encode("utf-8"))
+        else:
+            stream.write(json.dumps(payload, ensure_ascii=True, sort_keys=True) + "\n")
+
+
 def _atomic_state(path: Path, document: dict) -> None:
     path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -152,7 +177,7 @@ def run(argv=None) -> dict:
             analysis_adapter,
             require_compiler_fields=True,
         )
-        with PlaywrightPinnedDriver(profile) as driver:
+        with PlaywrightPinnedDriver(profile, pin) as driver:
             result = verify_preflight(profile, pin, endpoint, targets, driver.inspect(), authority,
                                       observed_at=_now(), destination_writable=store.writable())
         return {"ok": True, "preflight": result}
@@ -180,14 +205,16 @@ def run(argv=None) -> dict:
 
 
 def main(argv=None) -> int:
+    _configure_utf8_stream(sys.stdout)
+    _configure_utf8_stream(sys.stderr)
     try:
-        print(json.dumps(run(argv), ensure_ascii=False, indent=2, sort_keys=True))
+        _write_json(run(argv), sys.stdout, pretty=True)
         return 0
     except (Session3Error, OSError, ValueError, KeyError, RuntimeError) as exc:
         payload = exc.as_dict() if isinstance(exc, Session3Error) else {
             "code": "MCP_UNAVAILABLE", "detail": str(exc)[:500], "retryable": False,
         }
-        print(json.dumps({"ok": False, "error": payload}, ensure_ascii=False), file=sys.stderr)
+        _write_json({"ok": False, "error": payload}, sys.stderr)
         return 2
 
 

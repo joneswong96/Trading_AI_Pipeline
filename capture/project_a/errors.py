@@ -27,6 +27,7 @@ FAILURE_POLICIES = {
     "WRONG_LAYOUT": FailurePolicy(True, "Load the exact allowlisted layout in the pinned tab."),
     "MISSING_TIMEFRAME": FailurePolicy(True, "Make every required timeframe available in the pinned chart."),
     "CHART_NOT_READY": FailurePolicy(True, "Wait for the deterministic chart-ready condition, then retry before expiry."),
+    "TIMEFRAME_STABILIZATION_TIMEOUT": FailurePolicy(True, "Preserve bounded transition evidence and restore 1m before retrying with fresh authority."),
     "STALE_CHART": FailurePolicy(True, "Restore a streaming chart whose update covers the source bar, then retry before expiry."),
     "MODAL_BLOCKING": FailurePolicy(True, "Dismiss the modal/login/loading overlay manually and retry."),
     "DESTINATION_UNWRITABLE": FailurePolicy(True, "Restore write access to the configured artifact root."),
