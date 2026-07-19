@@ -1,0 +1,194 @@
+# Project A proposed Product Input Authority V1
+
+Status: **PROPOSED — JONES APPROVAL REQUIRED**
+
+Owner: Project A Session 0
+
+Scope: documentation only; no source below is declared `ACTIVE` or
+`PRODUCTION_APPROVED`
+
+## 1. Authority rules
+
+Project A V1 proposes a hybrid, numeric-first evidence stack. Structured reads
+provide numeric authority; Pine events provide event-native facts; screenshots
+provide visual context. A screenshot may not replace a numeric value that an
+approved structured source can provide.
+
+Port authority is explicit and fail-closed:
+
+- `9333` is the primary deterministic XAUUSD, MACD, DXY 15m, and higher-timeframe
+  price/structure route.
+- `9222` is the supplemental read-only Renko/chart route and the supplemental
+  DXY 1m route.
+- `4999` is isolated acceptance/test only and is forbidden as production
+  evidence.
+- A failed or incomplete read on one port must not silently fall back to another
+  port.
+
+The runtime-status vocabulary in this document is limited to:
+`SAVED_NOT_MATERIALIZED`, `LOADED_UNVALIDATED`, `PROPOSED`, and `TEST_ONLY`.
+These statuses do not imply approval.
+
+## 2. Proposed authority summary
+
+| Authority ID | Exact identity | Purpose | Route and timeframe | Runtime status |
+|---|---|---|---|---|
+| `LIQ_V2_R9` | `Liquidity Levels V2 — 5m Body × MTF Confluence`; owner `Jonesy_Wong`; private revision 9; source SHA-256 `d08576886140222f71f0125428b9974abd4db9b95168c91342178edc1d76ef9e` | Liquidity location, approach, touch, reaction and break lifecycle | Pine event/structured study state when materialized; 5m anchor with 15m/30m/60m confluence; no current production layout | `SAVED_NOT_MATERIALIZED` |
+| `EXP_V3_R5` | Saved as `Expansion Leg Signal V3`; Pine title `Expansion Leg Signal V3 Stable`; owner `Jonesy_Wong`; private revision 5; source hash not independently pinned | Confirmed expansion trigger | Pine event on its materialized chart timeframe; proposed decision timeframe is 5m unless Jones approves another | `SAVED_NOT_MATERIALIZED` |
+| `EXP_SCANNER_R6` | `③ Expansion Scanner [SNR3.0]`; owner `Jonesy_Wong`; private revision 6; source hash not independently pinned | Expansion quality classification only | Pine state/event on the same decision timeframe as `EXP_V3_R5` | `SAVED_NOT_MATERIALIZED` |
+| `MACD_TV_9333_12_26_9` | TradingView standard `Moving Average Convergence Divergence`; TradingView built-in; close, EMA 12/26/9 | Price-MACD setup, confirmation and context | `9333`; layouts `cpPWuLlN` and `avpCVaw2`; 1m/5m/15m/30m | `LOADED_UNVALIDATED` |
+| `DXY_TVC_9333_15M` | `TVC:DXY`; TradingView data; no custom indicator | Primary DXY evidence and grade cap | `9333`; layout `n9qjfufV`; 15m closed bar with SMA20 | `LOADED_UNVALIDATED` |
+| `DXY_TVC_9222_1M` | `TVC:DXY`; TradingView data; no custom indicator | Supplemental short-horizon DXY evidence | `9222`; layout `ocVwlz2C`; 1m | `LOADED_UNVALIDATED` |
+| `RENKO_V3_SNIPER_R1` | `Renko V3 — V2 Preserved + 5s Sniper Dashboard`; owner `Jonesy_Wong`; private revision 1; source SHA-256 `327c5043f9ca53f531b8d8e8aa89e6b72d649a527339432bbeeef5bcb463f003` | E1/E2/Main maturity and 5s Sniper FIRE timing | Proposed `9222` Renko route; production layout not yet materialized; intended Sniper decision timeframe 5s | `SAVED_NOT_MATERIALIZED` |
+| `STRUCTURE_9333_XAU_HTF` | `ICMARKETS:XAUUSD` deterministic price structure | Higher-timeframe direction and structure | `9333`; layout `pNqcbOmu`; 4H/D/W closed bars | `LOADED_UNVALIDATED` |
+| `SR_MTF_V10_CONTEXT` | `SR MTF Pro V10`; owner `Jonesy_Wong`; private saved revision 14; source SHA-256 `9f34462babbd00d7952c87a8c2abc078bcf465c21445a3298bb524c71a1fcb42` | Visual/supporting context only for V1 | `9222`; layout `paH6jur7`; current MTF trend rows 5m/15m/1H/4H/D/W | `LOADED_UNVALIDATED` |
+| `ACCEPTANCE_4999` | `ProjectA-XAUUSD-4999`, layout `gwnVPYuQ`, target `F2F27AAA3050DC8F9769939CB9B2E84C` | Isolated compile and visual acceptance | `4999`; XAUUSD 1m | `TEST_ONLY` |
+
+All candidate-source standing is `PROPOSED`, regardless of runtime status.
+
+## 3. Exact route identities observed during the factual audit
+
+CDP target IDs are process-lifetime identities. They are recorded here for
+lineage, but every future capture must bind the target read-only to the pinned
+port and layout ID again. A target-ID change must fail the capture preflight
+until the new mapping is recorded; it is not permission to use another port.
+
+| Port | CDP target observed | TradingView layout ID | Required content |
+|---:|---|---|---|
+| 9333 | `1BFD5343A964E20E4A32CAA1BA59ADDA` | `cpPWuLlN` (`g4_5m_1m`) | ICMARKETS:XAUUSD 5m/1m and standard MACD |
+| 9333 | `3A1DA8E727112BD7F13732B3A8732DFE` | `avpCVaw2` (`g5_30m`) | ICMARKETS:XAUUSD 30m/15m and standard MACD |
+| 9333 | `3818934C8C5F18141069CF3E7ABAB8E7` | `n9qjfufV` (`g7_DXY`) | TVC:DXY 15m |
+| 9333 | `1E5C0F56E8154C894E36377A6B7A7C0C` | `pNqcbOmu` (`g6_HTF`) | ICMARKETS:XAUUSD 4H/D/W |
+| 9222 | `ACF2304D2914588BDCBED4238C692328` | `paH6jur7` (`g2_renko_wma_15m`) | Current Renko route; candidate V3 is not yet materialized |
+| 9222 | `4D5DE25E24A09C8E51585147B624D85A` | `ocVwlz2C` (`g3_dxy1m_xau15s`) | TVC:DXY 1m and ICMARKETS:XAUUSD 15s |
+| 4999 | `F2F27AAA3050DC8F9769939CB9B2E84C` | `gwnVPYuQ` (`New`) | Acceptance only; forbidden for production evidence |
+
+The other existing 9222 layouts remain supplemental visual charts, not
+substitutes for the proposed 9333 numeric authorities.
+
+## 4. Source details
+
+### 4.1 `LIQ_V2_R9`
+
+- **Primary dimension:** level location and lifecycle.
+- **Secondary dimensions:** 1–4 timeframe confluence, touch count, first-touch
+  status, and PRIME/VALID/WEAK grade.
+- **Confirmed behavior:** pivot and lifecycle updates use confirmed bars and
+  lookahead-off higher-timeframe requests.
+- **Numeric outputs available in source:** scalar `level_price`, side, anchor
+  timeframe, confluence count, touch count, and overlap bounds.
+- **Event outputs:** TOUCH by default; optional READY, REJECT, BREAK and PRIME.
+- **Known gaps:** current market value is not a separate event field; the
+  existing event field named `price` means level value. Band width, reaction
+  magnitude, event timestamp, distance, and source revision/hash are absent from
+  the event payload. Those gaps are `MISSING_REQUIRES_PRODUCER_CHANGE`.
+- **Legacy replacement:** proposed replacement for `levelEngine/1`; there is no
+  parity between them.
+
+Its conventional side meaning is `ASK` for a high/resistance level and `BID`
+for a low/support level. The Product Input contract must normalize the source's
+ambiguous event field to `level_price` and separately snapshot
+`current_market_price`.
+
+### 4.2 `EXP_V3_R5` and `EXP_SCANNER_R6`
+
+`EXP_V3_R5` is the proposed confirmed trigger. Its default logic uses a five-bar
+leg, ATR14, minimum 1.2 ATR displacement, minimum 0.60 path efficiency, a
+five-bar cooldown, and confirmed-bar gating. It supplies direction,
+displacement, ATR-normalized displacement, and path efficiency internally. Its
+text event includes ticker, timeframe, direction, and `signal_price` after
+normalization.
+
+`EXP_SCANNER_R6` is quality classification only. It distinguishes CLEAN/WEAK and
+too-extended movement using displacement/range, candle-body quality and opposing
+bars. It is not a second trigger authority.
+
+Known gaps across the pair are explicit expansion start value, speed, age,
+exhaustion lifecycle, and a revision-pinned numeric payload. Missing values are
+`MISSING_REQUIRES_PRODUCER_CHANGE`. `expDetector/1` is not parity with either
+source and is not the proposed authority.
+
+### 4.3 `MACD_TV_9333_12_26_9`
+
+- **Primary dimension:** price momentum by timeframe.
+- **Secondary dimensions:** histogram slope, weakening, flip and MTF alignment.
+- **Settings:** close, fast EMA 12, slow EMA 26, signal EMA 9.
+- **Numeric outputs:** closed-bar close, MACD line, signal line, histogram,
+  previous histogram, histogram delta, sign and source-bar time.
+- **Event outputs:** Project A derives deterministic expansion/weakening/flip
+  states from closed numeric bars; no Pine JSON is authoritative.
+- **Confirmation:** only the latest fully closed source bar is admissible.
+- **Known gap:** 5s timing is not supplied.
+
+`macdVol/1` is directional-volume logic and is not the standard 9333 price-MACD
+authority.
+
+### 4.4 DXY authorities
+
+`DXY_TVC_9333_15M` is primary. It supplies the latest confirmed 15m close,
+previous close, change, SMA20, distance from SMA20, source-bar time and freshness.
+`DXY_TVC_9222_1M` is supplemental and may add short-horizon price/change context.
+
+DXY is evidence and may cap a grade when materially conflicting. It is not a
+universal hard veto. `dxyReader/3` remains optional supporting divergence logic,
+not current runtime authority. No DXY source may silently replace missing XAU,
+MACD or Renko evidence.
+
+### 4.5 `RENKO_V3_SNIPER_R1`
+
+- **Primary dimension:** maturity from E1 to E2 to Main and final 5s FIRE timing.
+- **Secondary dimensions:** WMA/EMA alignment, fade/touch/MACD-turn score, power,
+  mode and transfer state.
+- **Dependencies:** EMA45; WMA 7/14/21/34/55/80; source box-size input; Sniper
+  WMA45 and ATR logic.
+- **Events:** Main direction event and Sniper FIRE event.
+- **Confirmation:** FIRE is explicitly confirmed. E1/E2 drawing state lacks an
+  event-level confirmation field.
+- **Known gaps:** E1/E2 event value, source-bar time, age, event identity and TTL
+  are not exported. Main lacks a producer event identity and explicit event
+  timestamp. All are `MISSING_REQUIRES_PRODUCER_CHANGE`.
+
+The current 9222 chart instead loads an older Renko V2 revision. Therefore this
+candidate must not be called runtime-active. `rekoArrow/1` is not Renko V3
+parity.
+
+### 4.6 Structure and visual context
+
+`STRUCTURE_9333_XAU_HTF` is the proposed numeric authority for confirmed 4H/D/W
+direction and price structure. Trend/range classification, break identity and
+nearest-obstacle outputs require deterministic definitions before use; absent
+values are `MISSING_REQUIRES_PRODUCER_CHANGE`.
+
+`SR_MTF_V10_CONTEXT` remains visual/supporting context only in V1. Its currently
+loaded settings disable most structure, confirmation, confluence, gate and
+MACD-volume surfaces, so it must not silently become numeric authority.
+`structState/1` is a legacy regime derived from `levelEngine/1`, not the proposed
+structure source.
+
+## 5. Legacy-source disposition
+
+| Legacy source | Proposed disposition |
+|---|---|
+| `levelEngine/1` | Not Liquidity V2 parity; legacy/reference only |
+| `expDetector/1` | Not Expansion V3 parity; legacy/reference only |
+| `macdVol/1` | Not the standard 9333 MACD authority |
+| `rekoArrow/1` | Not Renko V3 parity; lacks E1/E2/Main/Sniper mapping |
+| `dxyReader/3` | Optional supporting logic, not current runtime authority |
+| `structState/1` | Legacy derived regime; not 9333 structure authority |
+
+No existing frozen contract, fixture, reader or historical event is re-labelled
+by this proposal.
+
+## 6. Fail-closed authority behavior
+
+- Every observation carries `authority_id`, port, layout ID, target ID, source
+  revision/hash where available, source-bar time, receipt time, and confirmation
+  status.
+- An identity mismatch, unavailable port, stale source bar, non-finite number,
+  missing required evidence, or unexpected timeframe produces an explicit
+  unavailable/error state. It never produces a substituted value.
+- A missing numeric field is `null` and is listed with reason
+  `MISSING_REQUIRES_PRODUCER_CHANGE`; zero is never a missing-value sentinel.
+- Provisional evidence cannot satisfy a confirmed gate unless a Jones-approved
+  rule explicitly permits it.
+- `4999` evidence is always rejected from production state construction.
