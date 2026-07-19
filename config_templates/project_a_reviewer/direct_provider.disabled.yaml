@@ -1,0 +1,17 @@
+direct_provider:
+  enabled: false
+  provider: null
+  model: null
+  endpoint: null
+  api_version: null
+  credential_ref: null
+  fallback_enabled: false
+  fallback_models: []
+  redirects_enabled: false
+  environment_proxy_enabled: false
+  tools_enabled: false
+  tool_declarations: []
+  browser_enabled: false
+  exec_enabled: false
+  streaming_enabled: false
+  external_outputs_enabled: false
