@@ -1,6 +1,10 @@
-# Project A proposed Numeric Market State V1
+# Project A Numeric Market State V1
 
-Status: **PROPOSED — JONES APPROVAL REQUIRED**
+Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE**
+
+The authority composition and field semantics are approved. Exact freshness
+thresholds, producer changes, runtime validation and executable schema work remain
+pending and fail closed.
 
 This document defines a data contract, not an executable JSON Schema or producer.
 
@@ -27,7 +31,7 @@ This document defines a data contract, not an executable JSON Schema or producer
 
 | Field | Type/unit | Requirement |
 |---|---|---|
-| `schema_version` | string | Proposed value `project_a.numeric_market_state/1.0`; not executable until approved |
+| `schema_version` | string | Contract label `project_a.numeric_market_state/1.0`; no executable schema is authorized by this approval |
 | `state_id` | string | Deterministic identifier from the canonical snapshot content and lineage |
 | `setup_id` | string | Stable identity for one setup lifecycle; never reused after reset/expiry/invalidation |
 | `symbol` | string | `XAUUSD` for Project A V1 |

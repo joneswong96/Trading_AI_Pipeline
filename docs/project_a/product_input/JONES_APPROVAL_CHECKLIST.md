@@ -1,101 +1,119 @@
 # Jones approval checklist — Product Input Authority V1
 
-Status: **ALL ITEMS UNAPPROVED**
+Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE — PENDING ITEMS UNAPPROVED**
 
-Checking an item is a product decision, not runtime activation. Activation,
-producer changes, schemas, tests and external writers require separate tasks.
+Approval date: 2026-07-20 Australia/Sydney. A checked item records Jones's
+explicit Product Input policy approval. It does not activate an indicator,
+producer, schema, adapter, provider or writer.
 
 ## 1. Factual findings
 
-These findings were observed read-only and do not require policy approval:
-
-- Port 9333 currently contains deterministic XAUUSD 1m/5m/15m/30m standard MACD,
+- Port 9333 contains deterministic XAUUSD 1m/5m/15m/30m standard MACD,
   XAUUSD 4H/D/W charts and TVC:DXY 15m.
-- Port 9222 currently contains the supplemental Renko/chart environment and
-  TVC:DXY 1m.
-- Port 4999 is the isolated acceptance profile.
+- Port 9222 contains the supplemental Renko/chart environment and TVC:DXY 1m.
+- Port 4999 is isolated acceptance/test only.
 - Liquidity V2 revision 9, Expansion V3 revision 5, Expansion Scanner revision 6
-  and Renko V3 Sniper revision 1 are saved but not materialized in the proposed
+  and Renko V3 Sniper revision 1 are saved but not materialized in approved
   production layouts.
-- The currently loaded 9222 Renko script is an older Renko V2, not the proposed
-  Renko V3 Sniper authority.
+- The currently loaded 9222 Renko script is an older Renko V2 and is not Renko V3
+  Sniper parity.
 - Current bid/ask/spread lack a trusted approved source.
-- The six legacy private libraries are not parity substitutes for the proposed
-  authorities.
+- The six legacy private libraries are not parity substitutes for the approved
+  V1 authorities.
 
-## 2. Proposed authority decisions
+## 2. Approved authority decisions
 
-- [ ] Approve `Liquidity Levels V2 — 5m Body × MTF Confluence`, private revision
-      9, as the proposed Liquidity authority.
-- [ ] Approve `Expansion Leg Signal V3`, private revision 5, as the confirmed
-      expansion trigger, with `③ Expansion Scanner [SNR3.0]`, private revision 6,
-      used only for CLEAN/WEAK/too-extended quality classification.
-- [ ] Approve TradingView standard price MACD, close EMA 12/26/9, using exact
-      9333 closed-bar values for 1m/5m/15m/30m.
-- [ ] Approve 9333 TVC:DXY 15m as primary and 9222 TVC:DXY 1m as supplemental,
-      used as evidence/grade cap rather than a universal hard veto.
-- [ ] Approve `Renko V3 — V2 Preserved + 5s Sniper Dashboard`, private revision
+- [x] Approve `Liquidity Levels V2 — 5m Body × MTF Confluence`, owner
+      `Jonesy_Wong`, private revision 9, as the V1 Liquidity authority. Preserve
+      conventional ASK/resistance and BID/support semantics, MTF confluence,
+      touch count, PRIME/VALID/WEAK grade, lifecycle and first confirmed touch.
+- [x] Approve `Expansion Leg Signal V3`, private revision 5, as the confirmed
+      trigger/direction authority and `③ Expansion Scanner [SNR3.0]`, private
+      revision 6, as quality evidence only. Together they form one Expansion
+      Evidence object, not two votes.
+- [x] Approve TradingView standard price MACD, close EMA 12/26/9, using exact
+      9333 closed-bar values: 5m setup, 1m confirmation, and 15m/30m context.
+- [x] Approve 9333 TVC:DXY 15m as primary and 9222 TVC:DXY 1m as supplemental,
+      used as confirmation/conflict evidence and a possible grade cap, not a
+      universal hard veto.
+- [x] Approve `Renko V3 — V2 Preserved + 5s Sniper Dashboard`, private revision
       1, source SHA-256
       `327c5043f9ca53f531b8d8e8aa89e6b72d649a527339432bbeeef5bcb463f003`,
-      as the proposed Renko authority.
-- [ ] Approve deterministic 9333 XAUUSD 4H/D/W price structure as numeric
-      structure/regime authority and keep SR MTF Pro V10 as visual/supporting
-      context only for V1.
+      as the V1 Renko authority candidate with status `SAVED_NOT_MATERIALIZED`.
+- [x] Approve deterministic 9333 XAUUSD 4H/D/W price structure as V1 numeric
+      structure/regime authority and retain SR MTF Pro V10 as visual/supporting
+      context only.
 
-## 3. Proposed route and transport decisions
+## 3. Approved route and transport decisions
 
-- [ ] Approve hybrid Pine events plus direct 9333/9222 structured reads.
-- [ ] Approve port 9333 as primary deterministic data/capture authority.
-- [ ] Approve port 9222 as explicit supplemental read-only Renko/chart authority.
-- [ ] Confirm port 4999 remains test/acceptance only and forbidden for production
+- [x] Approve hybrid Pine state-transition events plus direct 9333/9222
+      structured reads; screenshots are visual context only.
+- [x] Approve port 9333 as primary deterministic production data/capture
+      authority.
+- [x] Approve port 9222 as explicit supplemental read-only Renko/chart and DXY 1m
+      authority.
+- [x] Confirm port 4999 remains `TEST_ONLY` and is forbidden for production
       evidence.
-- [ ] Approve no silent fallback between ports, layouts, targets or sources.
-- [ ] Approve the proposed freshness and source-bar-alignment rules in
-      `CAPTURE_AUTHORITY_V1.md`, including market-closure fail-closed behavior.
+- [x] Approve no silent fallback between ports, layouts, targets, timeframes or
+      sources. Target rebinding after restart requires explicit identity
+      verification.
+- [ ] Approve exact freshness thresholds per timeframe. **Pending; fail closed.**
 
-## 4. Proposed maturity and notification decisions
+## 4. Approved maturity and notification decisions
 
-- [ ] Approve E1 as earliest/B-building evidence, E2 as stronger B-to-A candidate
-      evidence, Main as reversal confirmation, and Sniper FIRE as final 5s timing.
-- [ ] Confirm E1 is not required before E2.
-- [ ] Approve the `B_TO_A_CANDIDATE` capture trigger and the Make-Sense transition
-      gates.
-- [ ] Approve exactly-once B-to-A notification only for prior grade B, current
-      grade A, verdict APPROVE/MODIFY, valid 5m thesis, confirmed 1m, and a new
-      matching Sniper FIRE.
-- [ ] Confirm a persistent A state never repeats the notification and a new
-      notification requires a new setup, reset/invalidation/expiry boundary, new
-      B-to-A transition and new matching entry event.
+- [x] Approve E1 as early/B-building evidence, E2 as stronger maturity and
+      possible B-to-A candidate evidence, Main as confirmed Renko direction, and
+      Sniper FIRE as final 5s execution-timing candidate.
+- [x] Confirm E1 is not required before E2; E2 or Main may occur without a
+      recorded earlier stage.
+- [x] Approve the Make-Sense state family: `NO_STORY`, `C_INSUFFICIENT`,
+      `B_BUILDING`, `B_TO_A_CANDIDATE`, `A_CONFIRMED`, `WAITING_5S_ENTRY`,
+      `INVALIDATED`, and `EXPIRED`.
+- [x] Approve entry into `B_TO_A_CANDIDATE` as the complete-capture trigger.
+- [x] Approve exactly-once B-to-A notification only for prior grade B, current
+      grade A, verdict APPROVE/MODIFY, valid 5m thesis, confirmed 1m direction,
+      and a new matching Sniper FIRE.
+- [x] Confirm persistent A, retries, duplicate FIRE events and process restarts do
+      not repeat a logical notification. A new one requires a new setup boundary,
+      B-to-A transition and matching entry event.
 
-## 5. Producer-gap decisions
+## 5. Pending producer, algorithm and runtime decisions
 
-- [ ] Authorize a later Pine-producer proposal for Liquidity event time, current
-      market value, band/reaction data and unambiguous field names. No change is
-      authorized by this checklist alone.
-- [ ] Authorize a later producer proposal for Expansion numeric start,
-      displacement, ATR, efficiency, body quality, opposing bars, speed and age.
-- [ ] Authorize a later producer proposal for E1/E2/Main event identities,
-      dimensioned signal values, source-bar times, confirmation and reset/validity
-      data.
-- [ ] Decide the deterministic structure regime/break/obstacle definitions.
-- [ ] Decide and approve a trusted bid/ask/spread source before any spread gate can
-      pass.
+- [ ] Approve an exact Liquidity near-touch distance. **Pending; fail closed.**
+- [ ] Approve an exact Expansion speed formula. **Pending; fail closed.**
+- [ ] Approve an exact Expansion exhaustion formula. **Pending; fail closed.**
+- [ ] Approve an exact E1/E2 event TTL. **Pending; fail closed.**
+- [ ] Approve an exact structure/range algorithm. **Pending; fail closed.**
+- [ ] Approve an exact nearest-obstacle calculation. **Pending; fail closed.**
+- [ ] Approve a trusted bid/ask/spread authority. **Pending; unavailable.**
+- [ ] Approve production TradingView layout materialization, including Renko V3
+      Sniper. **Pending; `SAVED_NOT_MATERIALIZED`.**
+- [ ] Approve Pine producer changes for missing Liquidity, Expansion and Renko
+      numeric/event fields. **Pending; `PENDING_PRODUCER_CHANGE`.**
+- [ ] Approve provider runtime activation. **Pending; disabled.**
+- [ ] Approve a real SHADOW model call. **Pending; not authorized.**
+- [ ] Approve Telegram, Notion or MT5 Demo output activation. **Pending; writers
+      disabled.**
 
-## 6. Explicit non-decisions
+## 6. Approved execution boundary
 
-Approval of this checklist does not by itself:
+- [x] Preserve `mode=SHADOW` and `environment=MT5_DEMO`.
+- [x] Preserve `live_execution=false`, `order_placed=false`, and
+      `writer_enablement=DISABLED`.
+- [x] Confirm this approval does not authorize live broker execution, real-account
+      orders, a provider call, MT5 connection, TradingView alert creation, Pine
+      publication, runtime materialization or credential creation.
 
-- mark a source runtime-active or production-approved;
-- load an indicator or edit Pine;
-- create or edit an alert;
-- approve an executable schema or JSON producer;
-- enable OpenAI, Telegram, Notion, webhook, MT5, broker or order actions;
-- alter frozen Event V0.2/Event V1 contracts, fixtures or historical records; or
-- authorize a merge into `project-a/integration-v1`.
+## 7. Legacy/reference disposition
 
-## 7. Required approval record
+- [x] Liquidity V1 revision 11 is `LEGACY_REFERENCE`, not the V1 authority.
+- [x] `expDetector/1`, `macdVol/1`, `dxyReader/3`, `rekoArrow/1`,
+      `structState/1`, current Renko V2, the standalone E1/E2 test source and
+      Renko V3 revision 4 without Sniper are reference/supporting sources only as
+      specified in the authority contract.
 
-Jones's approval record should identify the reviewed commit SHA, list each checked
-item, record any changed wording or threshold, and explicitly state whether the
-next task is producer-contract design or another documentation correction. Any
-unchecked item remains unapproved and fails closed.
+## 8. Approval record and next boundary
+
+The controlling approval record is `APPROVAL_RECORD.md`. Every unchecked item
+remains unapproved. The next task requires a new explicit instruction and must not
+be inferred from this checklist.

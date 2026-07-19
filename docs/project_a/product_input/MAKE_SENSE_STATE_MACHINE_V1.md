@@ -1,6 +1,10 @@
-# Project A proposed Make-Sense State Machine V1
+# Project A Make-Sense State Machine V1
 
-Status: **PROPOSED — JONES APPROVAL REQUIRED**
+Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE**
+
+The state family, qualitative maturity mapping, B-to-A capture trigger and
+exactly-once concept are approved. Numeric freshness, near-touch, speed,
+exhaustion, E1/E2 TTL and structure rules remain pending and fail closed.
 
 Purpose: build a deterministic numeric whole-picture story before final review or
 notification. This document does not activate a runtime transition.
@@ -116,7 +120,7 @@ The setup is closed because `valid_until`, evidence freshness or an approved
 setup lifetime elapsed without a valid entry transition. It is terminal for the
 current setup ID.
 
-## 3. Proposed transition table
+## 3. Approved qualitative transition table
 
 | From | To | Required transition evidence |
 |---|---|---|

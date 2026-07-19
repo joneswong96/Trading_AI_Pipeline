@@ -1,6 +1,10 @@
-# Project A proposed Final Review and Notification V1
+# Project A Final Review and Notification V1
 
-Status: **PROPOSED — JONES APPROVAL REQUIRED**
+Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE**
+
+The separate verdict/grade model and exactly-once B-to-A notification concept are
+approved. Provider execution, real SHADOW calls and every external writer remain
+disabled and require separate approval.
 
 This contract defines review and notification semantics only. It does not enable
 an AI provider, writer, Telegram, Notion, webhook, broker or order path.

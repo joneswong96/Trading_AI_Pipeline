@@ -1,11 +1,13 @@
-# Project A proposed Product Input Authority V1
+# Project A Product Input Authority V1
 
-Status: **PROPOSED — JONES APPROVAL REQUIRED**
+Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE**
 
 Owner: Project A Session 0
 
-Scope: documentation only; no source below is declared `ACTIVE` or
-`PRODUCTION_APPROVED`
+Approval: Jones Wong, 2026-07-20 Australia/Sydney
+
+Scope: documentation only; no source, indicator, producer, adapter, layout or
+runtime below is declared active
 
 ## 1. Authority rules
 
@@ -25,26 +27,37 @@ Port authority is explicit and fail-closed:
 - A failed or incomplete read on one port must not silently fall back to another
   port.
 
-The runtime-status vocabulary in this document is limited to:
-`SAVED_NOT_MATERIALIZED`, `LOADED_UNVALIDATED`, `PROPOSED`, and `TEST_ONLY`.
-These statuses do not imply approval.
+The status vocabulary distinguishes authority approval from runtime state:
 
-## 2. Proposed authority summary
+- `APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE`: Jones approved the source/policy role,
+  but did not activate runtime use.
+- `SAVED_NOT_MATERIALIZED`: approved Pine candidate exists only as saved source.
+- `PENDING_RUNTIME_VALIDATION`: source/chart exists, but Product Input runtime
+  validation and activation remain pending.
+- `PENDING_PRODUCER_CHANGE`: an approved contract field is not exposed by its
+  present producer.
+- `TEST_ONLY`: acceptance evidence is forbidden as production evidence.
+- `LEGACY_REFERENCE`: historical or supporting context, not V1 numeric authority.
+
+## 2. Approved authority summary
 
 | Authority ID | Exact identity | Purpose | Route and timeframe | Runtime status |
 |---|---|---|---|---|
 | `LIQ_V2_R9` | `Liquidity Levels V2 — 5m Body × MTF Confluence`; owner `Jonesy_Wong`; private revision 9; source SHA-256 `d08576886140222f71f0125428b9974abd4db9b95168c91342178edc1d76ef9e` | Liquidity location, approach, touch, reaction and break lifecycle | Pine event/structured study state when materialized; 5m anchor with 15m/30m/60m confluence; no current production layout | `SAVED_NOT_MATERIALIZED` |
-| `EXP_V3_R5` | Saved as `Expansion Leg Signal V3`; Pine title `Expansion Leg Signal V3 Stable`; owner `Jonesy_Wong`; private revision 5; source hash not independently pinned | Confirmed expansion trigger | Pine event on its materialized chart timeframe; proposed decision timeframe is 5m unless Jones approves another | `SAVED_NOT_MATERIALIZED` |
+| `EXP_V3_R5` | Saved as `Expansion Leg Signal V3`; Pine title `Expansion Leg Signal V3 Stable`; owner `Jonesy_Wong`; private revision 5; source hash not independently pinned | Confirmed expansion trigger | Pine event on its materialized chart timeframe; exact production timeframe remains pending | `SAVED_NOT_MATERIALIZED` |
 | `EXP_SCANNER_R6` | `③ Expansion Scanner [SNR3.0]`; owner `Jonesy_Wong`; private revision 6; source hash not independently pinned | Expansion quality classification only | Pine state/event on the same decision timeframe as `EXP_V3_R5` | `SAVED_NOT_MATERIALIZED` |
-| `MACD_TV_9333_12_26_9` | TradingView standard `Moving Average Convergence Divergence`; TradingView built-in; close, EMA 12/26/9 | Price-MACD setup, confirmation and context | `9333`; layouts `cpPWuLlN` and `avpCVaw2`; 1m/5m/15m/30m | `LOADED_UNVALIDATED` |
-| `DXY_TVC_9333_15M` | `TVC:DXY`; TradingView data; no custom indicator | Primary DXY evidence and grade cap | `9333`; layout `n9qjfufV`; 15m closed bar with SMA20 | `LOADED_UNVALIDATED` |
-| `DXY_TVC_9222_1M` | `TVC:DXY`; TradingView data; no custom indicator | Supplemental short-horizon DXY evidence | `9222`; layout `ocVwlz2C`; 1m | `LOADED_UNVALIDATED` |
-| `RENKO_V3_SNIPER_R1` | `Renko V3 — V2 Preserved + 5s Sniper Dashboard`; owner `Jonesy_Wong`; private revision 1; source SHA-256 `327c5043f9ca53f531b8d8e8aa89e6b72d649a527339432bbeeef5bcb463f003` | E1/E2/Main maturity and 5s Sniper FIRE timing | Proposed `9222` Renko route; production layout not yet materialized; intended Sniper decision timeframe 5s | `SAVED_NOT_MATERIALIZED` |
-| `STRUCTURE_9333_XAU_HTF` | `ICMARKETS:XAUUSD` deterministic price structure | Higher-timeframe direction and structure | `9333`; layout `pNqcbOmu`; 4H/D/W closed bars | `LOADED_UNVALIDATED` |
-| `SR_MTF_V10_CONTEXT` | `SR MTF Pro V10`; owner `Jonesy_Wong`; private saved revision 14; source SHA-256 `9f34462babbd00d7952c87a8c2abc078bcf465c21445a3298bb524c71a1fcb42` | Visual/supporting context only for V1 | `9222`; layout `paH6jur7`; current MTF trend rows 5m/15m/1H/4H/D/W | `LOADED_UNVALIDATED` |
+| `MACD_TV_9333_12_26_9` | TradingView standard `Moving Average Convergence Divergence`; TradingView built-in; close, EMA 12/26/9 | Price-MACD setup, confirmation and context | `9333`; layouts `cpPWuLlN` and `avpCVaw2`; 1m/5m/15m/30m | `PENDING_RUNTIME_VALIDATION` |
+| `DXY_TVC_9333_15M` | `TVC:DXY`; TradingView data; no custom indicator | Primary DXY evidence and grade cap | `9333`; layout `n9qjfufV`; 15m closed bar with SMA20 | `PENDING_RUNTIME_VALIDATION` |
+| `DXY_TVC_9222_1M` | `TVC:DXY`; TradingView data; no custom indicator | Supplemental short-horizon DXY evidence | `9222`; layout `ocVwlz2C`; 1m | `PENDING_RUNTIME_VALIDATION` |
+| `RENKO_V3_SNIPER_R1` | `Renko V3 — V2 Preserved + 5s Sniper Dashboard`; owner `Jonesy_Wong`; private revision 1; source SHA-256 `327c5043f9ca53f531b8d8e8aa89e6b72d649a527339432bbeeef5bcb463f003` | E1/E2/Main maturity and 5s Sniper FIRE timing | Approved supplemental route role `9222`; production layout not yet materialized; intended Sniper decision timeframe 5s | `SAVED_NOT_MATERIALIZED` |
+| `STRUCTURE_9333_XAU_HTF` | `ICMARKETS:XAUUSD` deterministic price structure | Higher-timeframe direction and structure | `9333`; layout `pNqcbOmu`; 4H/D/W closed bars | `PENDING_RUNTIME_VALIDATION` |
+| `SR_MTF_V10_CONTEXT` | `SR MTF Pro V10`; owner `Jonesy_Wong`; private saved revision 14; source SHA-256 `9f34462babbd00d7952c87a8c2abc078bcf465c21445a3298bb524c71a1fcb42` | Visual/supporting context only for V1 | `9222`; layout `paH6jur7`; current MTF trend rows 5m/15m/1H/4H/D/W | `LEGACY_REFERENCE` |
 | `ACCEPTANCE_4999` | `ProjectA-XAUUSD-4999`, layout `gwnVPYuQ`, target `F2F27AAA3050DC8F9769939CB9B2E84C` | Isolated compile and visual acceptance | `4999`; XAUUSD 1m | `TEST_ONLY` |
 
-All candidate-source standing is `PROPOSED`, regardless of runtime status.
+Every V1 authority above has standing
+`APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE`. The final column records the separate
+materialization/validation state. Approval does not authorize producer changes,
+layout materialization, alerts, writers, provider calls or external actions.
 
 ## 3. Exact route identities observed during the factual audit
 
@@ -64,7 +77,7 @@ until the new mapping is recorded; it is not permission to use another port.
 | 4999 | `F2F27AAA3050DC8F9769939CB9B2E84C` | `gwnVPYuQ` (`New`) | Acceptance only; forbidden for production evidence |
 
 The other existing 9222 layouts remain supplemental visual charts, not
-substitutes for the proposed 9333 numeric authorities.
+substitutes for the approved 9333 numeric authorities.
 
 ## 4. Source details
 
@@ -82,7 +95,8 @@ substitutes for the proposed 9333 numeric authorities.
   existing event field named `price` means level value. Band width, reaction
   magnitude, event timestamp, distance, and source revision/hash are absent from
   the event payload. Those gaps are `MISSING_REQUIRES_PRODUCER_CHANGE`.
-- **Legacy replacement:** proposed replacement for `levelEngine/1`; there is no
+- **Legacy replacement:** approved V1 replacement authority for `levelEngine/1`;
+  there is no
   parity between them.
 
 Its conventional side meaning is `ASK` for a high/resistance level and `BID`
@@ -92,7 +106,7 @@ ambiguous event field to `level_price` and separately snapshot
 
 ### 4.2 `EXP_V3_R5` and `EXP_SCANNER_R6`
 
-`EXP_V3_R5` is the proposed confirmed trigger. Its default logic uses a five-bar
+`EXP_V3_R5` is the approved confirmed trigger authority. Its default logic uses a five-bar
 leg, ATR14, minimum 1.2 ATR displacement, minimum 0.60 path efficiency, a
 five-bar cooldown, and confirmed-bar gating. It supplies direction,
 displacement, ATR-normalized displacement, and path efficiency internally. Its
@@ -106,7 +120,7 @@ bars. It is not a second trigger authority.
 Known gaps across the pair are explicit expansion start value, speed, age,
 exhaustion lifecycle, and a revision-pinned numeric payload. Missing values are
 `MISSING_REQUIRES_PRODUCER_CHANGE`. `expDetector/1` is not parity with either
-source and is not the proposed authority.
+source and is not the V1 authority.
 
 ### 4.3 `MACD_TV_9333_12_26_9`
 
@@ -154,7 +168,7 @@ parity.
 
 ### 4.6 Structure and visual context
 
-`STRUCTURE_9333_XAU_HTF` is the proposed numeric authority for confirmed 4H/D/W
+`STRUCTURE_9333_XAU_HTF` is the approved numeric authority for confirmed 4H/D/W
 direction and price structure. Trend/range classification, break identity and
 nearest-obstacle outputs require deterministic definitions before use; absent
 values are `MISSING_REQUIRES_PRODUCER_CHANGE`.
@@ -162,19 +176,19 @@ values are `MISSING_REQUIRES_PRODUCER_CHANGE`.
 `SR_MTF_V10_CONTEXT` remains visual/supporting context only in V1. Its currently
 loaded settings disable most structure, confirmation, confluence, gate and
 MACD-volume surfaces, so it must not silently become numeric authority.
-`structState/1` is a legacy regime derived from `levelEngine/1`, not the proposed
+`structState/1` is a legacy regime derived from `levelEngine/1`, not the approved
 structure source.
 
 ## 5. Legacy-source disposition
 
-| Legacy source | Proposed disposition |
+| Legacy source | V1 disposition |
 |---|---|
-| `levelEngine/1` | Not Liquidity V2 parity; legacy/reference only |
-| `expDetector/1` | Not Expansion V3 parity; legacy/reference only |
-| `macdVol/1` | Not the standard 9333 MACD authority |
-| `rekoArrow/1` | Not Renko V3 parity; lacks E1/E2/Main/Sniper mapping |
-| `dxyReader/3` | Optional supporting logic, not current runtime authority |
-| `structState/1` | Legacy derived regime; not 9333 structure authority |
+| `levelEngine/1` | `LEGACY_REFERENCE`; not Liquidity V2 parity |
+| `expDetector/1` | `LEGACY_REFERENCE`; not Expansion V3 parity |
+| `macdVol/1` | `LEGACY_REFERENCE`; not the standard 9333 MACD authority |
+| `rekoArrow/1` | `LEGACY_REFERENCE`; not Renko V3 parity and lacks E1/E2/Main/Sniper mapping |
+| `dxyReader/3` | `LEGACY_REFERENCE`; optional supporting logic, not current runtime authority |
+| `structState/1` | `LEGACY_REFERENCE`; derived regime, not 9333 structure authority |
 
 No existing frozen contract, fixture, reader or historical event is re-labelled
 by this proposal.

@@ -1,6 +1,10 @@
-# Project A proposed Capture Authority V1
+# Project A Capture Authority V1
 
-Status: **PROPOSED — JONES APPROVAL REQUIRED**
+Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE — PENDING_RUNTIME_VALIDATION**
+
+The B-to-A trigger, port roles, hybrid evidence routes, no-fallback rule and
+no-mutation boundary are approved. Exact timeframe freshness thresholds and
+production layout materialization remain pending.
 
 Trigger: entry into `B_TO_A_CANDIDATE`
 
@@ -88,9 +92,10 @@ At candidate time `T`, the bundle must include:
 Bid, ask and spread remain unavailable and block any approved gate that requires
 them.
 
-## 6. Freshness and source-bar alignment
+## 6. Freshness and source-bar alignment — pending
 
-The proposed V1 rule is:
+Status: **PENDING_RUNTIME_VALIDATION**. The following draft thresholds are not
+approved and cannot activate a gate:
 
 1. Every gate uses the most recent fully closed source bar at or before `T`; no
    future or still-forming source bar can satisfy a confirmed field.
@@ -108,7 +113,8 @@ The proposed V1 rule is:
    latest confirmed bar at or before the same capture time `T`. The manifest
    records `T` and every individual bar identity.
 
-These thresholds are proposed policy and require Jones approval before runtime.
+These exact thresholds remain pending Jones approval. Until approved and
+implemented, freshness-dependent capture and promotion fail closed.
 
 ## 7. Bundle integrity
 
