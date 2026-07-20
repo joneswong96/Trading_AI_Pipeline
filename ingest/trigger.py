@@ -56,6 +56,8 @@ def evaluate(event, recent: list[dict], recent_wakes: list[dict] | None = None) 
     recent_wakes = 上次**真 wake**（wake_log，wake=True）記錄，SNR/legacy cooldown 用佢錨定
     （2026-07-07 fix：log-only alert 唔再續命 cooldown）。缺 → []（保守：無真 wake = 唔 cooldown）。"""
     recent_wakes = recent_wakes or []
+    if _telemetry_only(event):
+        return WakeDecision(False, "compatibility adapter telemetry-only → 只 log、永不 wake")
     # MRF (Mean-Reversion Fade) —— 獨立規則，自己嘅 30 分窗 + 15 分 cooldown（自成一路，唔用 recent_wakes）。
     # 只食 EXP/LIQ/MACD/WMA5S；其他 engine 回 None，落既有 SNR/SR/Renko 規則。
     mrf = _mrf_decision(event, recent)
@@ -91,6 +93,8 @@ def should_wake(recent_events, active_thesis, new_event, now=None, recent_wakes=
       → 委派現有 `evaluate`（MRF/SNR/共振/cooldown 行為 byte-identical，零 regress）。
     """
     now = now or datetime.now(timezone.utc)
+    if _telemetry_only(new_event):
+        return False, "compatibility adapter telemetry-only → 只 log、永不 wake"
     if _thesis_active(active_thesis, now):
         tid = active_thesis.get("thesis_id") or "?"
         st = _u(active_thesis.get("status"))
@@ -274,6 +278,8 @@ def _fade_pick(win, engine, fade, key):
 
 def _fade_dir(engine, event, dir_, raw) -> str | None:
     """一個 alert 對應嘅 fade 方向（long/short）。非 MRF-relevant 回 None。"""
+    if isinstance(raw, dict) and raw.get("_telemetry_only") is True:
+        return None
     e, ev = _u(engine), _u(event)
     if e == "EXP":
         if ev == "EXP_UP":
@@ -367,6 +373,11 @@ def _loads(s) -> dict:
         return json.loads(s) if s else {}
     except (json.JSONDecodeError, TypeError):
         return {}
+
+
+def _telemetry_only(event) -> bool:
+    raw = getattr(event, "raw", None)
+    return isinstance(raw, dict) and raw.get("_telemetry_only") is True
 
 
 def _snr_line(raw: dict) -> str | None:

@@ -1,20 +1,24 @@
 """Phase 1 ingest：raw webhook body -> AlertEvent。
 
-容錯食 JSON / SNR pipe / 純文字。認得：
+容錯食 JSON / SNR pipe / 有界純文字。認得：
 - SNR Pure V2.0 原生（top-level "type"：FIRE / ENTRY_PIPELINE(stage) / HALT / CLOSE）
 - SNR DD30 雙線（pipe 行 + JSON 行）同淨 pipe（SNR|sym|tf|DIR|…）
 - 現有手砌 schema（engine/event/dir）—— 向後兼容，原邏輯不變
-- SR MTF（engine=SR / GRADE_*）；Renko 純文字（方向+box+score）
+- SR MTF（engine=SR / GRADE_*）；Expansion V3 純文字；Renko 純文字（方向+box+score）
 - MRF 4 engine（EXP / LIQ / MACD / WMA5S）—— 獨立 passthrough，額外欄位全入 raw
+- Liquidity V2 JSON（engine=LIQ_V2）—— level price 語義 + telemetry-only 標記
 
-解析優先序：先 "type"（SNR native）→ MRF 4 engine → legacy engine/event → fallback pipe/text。
+解析優先序：先 "type"（SNR native）→ LIQ_V2 → MRF 4 engine → legacy engine/event
+→ fallback SNR pipe / bounded Expansion/Renko text。
 dir 一律 lower()。SNR 冇 close/price，用 entry 當 price（log 用，唔影響 wake）。原生冇 time
 → 用 server 收到時間。認唔到先至 UNKNOWN。
 """
 from __future__ import annotations
 
 import json
+import math
 import re
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -30,6 +34,35 @@ class AlertEvent:
     price: float | None
     raw: dict = field(default_factory=dict)   # 原始 payload + 所有額外欄位
 
+    def _canonical(self, key: str):
+        metadata = self.raw.get("_canonical") if isinstance(self.raw, dict) else None
+        return metadata.get(key) if isinstance(metadata, dict) else None
+
+    @property
+    def trade_dir(self) -> str | None:
+        """Compatibility alias: legacy ``dir`` is always trade direction."""
+        return self.dir
+
+    @property
+    def move_dir(self) -> str | None:
+        return self._canonical("move_dir")
+
+    @property
+    def symbol(self) -> str | None:
+        return self._canonical("symbol")
+
+    @property
+    def market_price(self) -> float | None:
+        return self._canonical("market_price")
+
+    @property
+    def level_price(self) -> float | None:
+        return self._canonical("level_price")
+
+    @property
+    def signal_price(self) -> float | None:
+        return self._canonical("signal_price")
+
 
 # ENTRY_PIPELINE 唔 wake 嘅 stage（只 log）
 _SNR_LOG_ONLY_STAGES = {"SCANNING", "APPROACHING", "BLOCKED"}
@@ -37,29 +70,112 @@ _SNR_LOG_ONLY_STAGES = {"SCANNING", "APPROACHING", "BLOCKED"}
 # MRF (Mean-Reversion Fade) 4 個新 engine —— 由 TradingView alert() 直送 JSON
 _MRF_ENGINES = {"EXP", "LIQ", "MACD", "WMA5S"}
 
+_EXPANSION_V3_RE = re.compile(
+    r"""
+    ^\s*EXP\s+(?P<move_dir>UP|DOWN)\s*
+    \|\s*(?P<symbol>[A-Z0-9][A-Z0-9._-]{0,19}(?::[A-Z0-9][A-Z0-9._-]{0,19})?)\s*
+    \|\s*TF\s+(?P<tf>\d{1,3})\s*
+    \|\s*Price\s+(?P<price>(?:\d+(?:\.\d*)?|\.\d+))\s*$
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+_BOUNDED_EVENT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+_BOUNDED_TF_RE = re.compile(r"^\d{1,3}$")
+_LIQUIDITY_MTF_RE = re.compile(r"^([1-4])/4$")
+
 
 def parse(body: str) -> AlertEvent:
-    """raw body -> AlertEvent。成段 JSON → SNR pipe/DD30 → Renko 文字。"""
-    body = (body or "").strip()
-    payload = _try_json(body)
+    """raw body -> AlertEvent。成段 JSON → SNR pipe/DD30 → bounded text。"""
+    source_body = body or ""
+    normalized = source_body.strip()
+    payload = _try_json(normalized)
     if isinstance(payload, dict):
-        return _parse_json(payload)
-    snr = _parse_snr_pipe(body)
+        return _parse_json(payload, source_body=source_body)
+    snr = _parse_snr_pipe(normalized)
     if snr is not None:
         return snr
-    return _parse_text(body)
+    expansion = _parse_expansion_v3_text(source_body)
+    if expansion is not None:
+        return expansion
+    return _parse_text(source_body)
 
 
-def _parse_json(p: dict) -> AlertEvent:
-    """單段 JSON：SNR native（top-level type）→ MRF 4 engine → legacy engine/event。"""
+def _parse_json(p: dict, *, source_body: str | None = None) -> AlertEvent:
+    """單段 JSON：SNR native → LIQ_V2 → MRF 4 engine → legacy。"""
     if p.get("type"):
         ev = _parse_snr_native(p)
         if ev is not None:
             return ev
+    if str(p.get("engine") or "").strip().upper() == "LIQ_V2":
+        return _parse_liquidity_v2_json(p, source_body=source_body)
     mrf = _parse_mrf_json(p)
     if mrf is not None:
         return mrf
     return _parse_legacy_json(p)
+
+
+def _parse_liquidity_v2_json(p: dict, *, source_body: str | None) -> AlertEvent:
+    """Strict adapter for the exposed Liquidity V2 alert shape.
+
+    The source's bare ``price`` is a liquidity level, never market or signal
+    price.  The original object and exact received text are retained for audit.
+    Invalid LIQ_V2-shaped input fails closed as UNKNOWN instead of falling into
+    the permissive legacy JSON path.
+    """
+    source_payload = deepcopy(p)
+    raw = {
+        **deepcopy(p),
+        "_adapter": "LIQ_V2_JSON",
+        "_telemetry_only": True,
+        "_source_payload": source_payload,
+    }
+    if source_body is not None:
+        raw["_source_text"] = source_body
+
+    event_text = str(p.get("event") or "").strip()
+    side = str(p.get("side") or "").strip().upper()
+    tf = _bounded_timeframe(p.get("tf"))
+    level_price = _positive_finite_number(p.get("price"))
+    mtf = str(p.get("mtf") or "").strip()
+    touches = _nonnegative_integer(p.get("touches"))
+
+    valid = (
+        bool(_BOUNDED_EVENT_RE.fullmatch(event_text))
+        and side in {"ASK", "BID"}
+        and tf is not None
+        and level_price is not None
+        and _LIQUIDITY_MTF_RE.fullmatch(mtf) is not None
+        and touches is not None
+    )
+    if not valid:
+        raw["_adapter"] = "LIQ_V2_JSON_INVALID"
+        return _unknown(raw)
+
+    event = event_text.upper()
+    raw["_canonical"] = {
+        "producer": "LIQ_V2",
+        "event": event,
+        "side": side,
+        "liquidity_role": "RESISTANCE" if side == "ASK" else "SUPPORT",
+        "timeframe": tf,
+        "level_price": level_price,
+        "market_price": None,
+        "signal_price": None,
+        "trade_dir": None,
+        "mtf": mtf,
+        "touches": touches,
+    }
+    return AlertEvent(
+        engine="LIQ_V2",
+        event=event,
+        dir=None,
+        grade=None,
+        tf=tf,
+        time=None,
+        price=level_price,  # legacy alert_log projection; semantic field is level_price
+        raw=raw,
+    )
 
 
 def _parse_mrf_json(p: dict) -> AlertEvent | None:
@@ -218,11 +334,66 @@ def _parse_legacy_json(p: dict) -> AlertEvent:
     )
 
 
+def _parse_expansion_v3_text(body: str) -> AlertEvent | None:
+    """Parse only the bounded Expansion V3 text grammar; otherwise return None."""
+    m = _EXPANSION_V3_RE.fullmatch(body)
+    if m is None:
+        return None
+    price = _positive_finite_number(m.group("price"))
+    tf = _bounded_timeframe(m.group("tf"))
+    if price is None or tf is None:
+        return _unknown({
+            "text": body,
+            "_adapter": "EXP_V3_TEXT_INVALID",
+            "_telemetry_only": True,
+            "_source_payload": body,
+        })
+
+    move_dir = m.group("move_dir").upper()
+    symbol = m.group("symbol").upper()
+    event = f"EXP_{move_dir}"
+    raw = {
+        "text": body,
+        "_adapter": "EXP_V3_TEXT",
+        "_telemetry_only": True,
+        "_source_payload": body,
+        "_canonical": {
+            "producer": "EXP",
+            "event": event,
+            "move_dir": move_dir,
+            "trade_dir": None,
+            "symbol": symbol,
+            "timeframe": tf,
+            "market_price": price,
+            "level_price": None,
+            "signal_price": None,
+        },
+    }
+    return AlertEvent(
+        engine="EXP",
+        event=event,
+        dir=None,
+        grade=None,
+        tf=tf,
+        time=None,
+        price=price,  # legacy alert_log projection; semantic field is market_price
+        raw=raw,
+    )
+
+
 def _parse_text(body: str) -> AlertEvent:
-    """Renko 純文字：方向 + box + score（容錯抽欄位）。"""
+    """Bounded legacy Renko text, otherwise fail closed as UNKNOWN.
+
+    A direction word alone is not a Renko signature.  Keep the supported legacy
+    shape when it has an explicit Renko label or a Renko-specific box/score field.
+    """
     dir_ = _dir_from_text(body)
     box = _search_num(r"box[=:\s]+([\d.]+)", body)
     score = _search_num(r"score[=:\s]+([\d.]+)", body)
+    explicit_renko = re.search(r"\brenko\b", body, re.I) is not None
+    renko_fields = box is not None and score is not None
+    if dir_ is None or not (explicit_renko or renko_fields):
+        return _unknown({"text": body})
     tf = _search_str(r"tf[=:\s]+(\w+)", body)
     price = _search_num(r"price[=:\s]+([\d.]+)", body)
     if price is None:
@@ -237,6 +408,19 @@ def _parse_text(body: str) -> AlertEvent:
         time=None,
         price=price,
         raw={"text": body, "box": box, "score": score, "tf": tf},
+    )
+
+
+def _unknown(raw: dict) -> AlertEvent:
+    return AlertEvent(
+        engine="UNKNOWN",
+        event="UNKNOWN",
+        dir=None,
+        grade=None,
+        tf=None,
+        time=None,
+        price=None,
+        raw=raw,
     )
 
 
@@ -258,6 +442,34 @@ def _f(v) -> float | None:
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _positive_finite_number(v) -> float | None:
+    if isinstance(v, bool):
+        return None
+    value = _f(v)
+    if value is None or not math.isfinite(value) or value <= 0:
+        return None
+    return value
+
+
+def _bounded_timeframe(v) -> str | None:
+    if isinstance(v, bool):
+        return None
+    value = str(v).strip() if v is not None else ""
+    if _BOUNDED_TF_RE.fullmatch(value) is None:
+        return None
+    return value if int(value) > 0 else None
+
+
+def _nonnegative_integer(v) -> int | None:
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v if v >= 0 else None
+    if isinstance(v, str) and re.fullmatch(r"\d+", v.strip()):
+        return int(v.strip())
+    return None
 
 
 def _str_or_none(v) -> str | None:

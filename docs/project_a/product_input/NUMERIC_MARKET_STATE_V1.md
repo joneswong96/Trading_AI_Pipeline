@@ -117,6 +117,13 @@ The source event's bare `price` member is never propagated. It is interpreted as
 `liquidity_level_price`; `liquidity_current_market_price` comes from the bounded
 event-time 9333 snapshot.
 
+The legacy `/alert` LIQ_V2 compatibility adapter makes the same dimensional
+distinction before canonical Product Input materialization exists: it retains the
+source object, exposes the source `price` as adapter metadata `level_price`, and
+leaves `market_price` and `signal_price` null. Its generic `AlertEvent.price`
+column is only a backward-compatible SQLite projection of that level value. No
+distance is calculated without a trusted event-time market value.
+
 ## 5. Expansion state
 
 | Field | Type/unit | Current source availability |
@@ -142,6 +149,14 @@ event-time 9333 snapshot.
 Every V3/Scanner internal numeric output that lacks a producer field remains
 `MISSING_REQUIRES_PRODUCER_CHANGE`; downstream code must not reconstruct it from
 screenshots.
+
+For the bounded Expansion V3 text compatibility grammar, `UP` and `DOWN` are
+observed movement values, not trade directions. The legacy adapter records them
+as `move_dir`, leaves trade `dir` null, and records the text's `Price` as the
+source-reported event `market_price`. It does not populate `signal_price`,
+confirmation status or a source timestamp because those facts are not encoded in
+the received message. This telemetry mapping does not activate or populate the
+approved numeric market-state runtime.
 
 ## 6. MACD state
 

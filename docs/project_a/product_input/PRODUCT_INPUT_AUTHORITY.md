@@ -110,8 +110,10 @@ ambiguous event field to `level_price` and separately snapshot
 leg, ATR14, minimum 1.2 ATR displacement, minimum 0.60 path efficiency, a
 five-bar cooldown, and confirmed-bar gating. It supplies direction,
 displacement, ATR-normalized displacement, and path efficiency internally. Its
-text event includes ticker, timeframe, direction, and `signal_price` after
-normalization.
+text event includes ticker, timeframe, movement direction, and a field labelled
+`Price`. The bounded legacy `/alert` compatibility adapter treats that value as
+the source-reported event `market_price`; it does not promote it to a trade
+`signal_price` or entry price.
 
 `EXP_SCANNER_R6` is quality classification only. It distinguishes CLEAN/WEAK and
 too-extended movement using displacement/range, candle-body quality and opposing
@@ -178,6 +180,37 @@ loaded settings disable most structure, confirmation, confluence, gate and
 MACD-volume surfaces, so it must not silently become numeric authority.
 `structState/1` is a legacy regime derived from `levelEngine/1`, not the approved
 structure source.
+
+### 4.7 Legacy `/alert` compatibility adapter status
+
+The repository parser now has two narrow, telemetry-only compatibility paths:
+
+- Expansion V3 text must match
+  `EXP UP|DOWN | SYMBOL | TF <integer-minutes> | Price <positive-number>`;
+  exchange-qualified symbols such as `ICMARKETS:XAUUSD` are allowed. The adapter
+  emits `EXP_UP` or `EXP_DOWN`, records `move_dir=UP|DOWN`, keeps trade `dir=null`,
+  and records the source-reported event value as `market_price`. It does not
+  derive LONG/SHORT, entry, stop, target, grade, confirmation status or source
+  timestamp.
+- Liquidity V2 JSON must identify `engine=LIQ_V2` and include a bounded event,
+  `side=ASK|BID`, minute timeframe, positive `price`, `mtf=n/4`, and a
+  non-negative touch count. The adapter maps bare source `price` to
+  `level_price`; `market_price` and `signal_price` remain null. `ASK` means the
+  upper/resistance role and `BID` the lower/support role; neither implies trade
+  direction.
+
+Both paths retain the exact received source payload inside legacy `raw`
+evidence and carry an explicit telemetry-only marker. They cannot independently
+wake analysis or satisfy the overlapping legacy EXP/LIQ MRF rule. Malformed or
+unsupported input fails closed as `UNKNOWN`. Existing legacy SNR, SR, Renko and
+MRF formats keep their established behavior.
+
+This repository adapter status is not Product Input runtime activation. A
+currently running non-reload server continues using its pre-change loaded code
+until a separately authorized controlled restart from the integrated revision.
+Previously misclassified SQLite rows remain immutable audit history; no row is
+silently rewritten. Their retained raw text permits a separately reviewed future
+correction/replay process.
 
 ## 5. Legacy-source disposition
 
