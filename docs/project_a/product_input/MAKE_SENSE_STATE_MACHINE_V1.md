@@ -5,6 +5,8 @@ Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE**
 The state family, qualitative maturity mapping, B-to-A capture trigger,
 exactly-once concept and `FRESHNESS_POLICY_V1.md` thresholds are approved.
 Liquidity distance/near-touch follows `LIQUIDITY_DISTANCE_POLICY_V1.md`.
+Stable identity, deterministic competing-level selection, tracked-level lock and
+release follow `LIQUIDITY_LEVEL_IDENTITY_SELECTION_V1.md`.
 Expansion speed, exhaustion, E1/E2 TTL and structure rules remain pending and
 fail closed.
 
@@ -15,6 +17,10 @@ notification. This document does not activate a runtime transition.
 
 - One `setup_id` owns one lifecycle. Reset, expiry or invalidation closes it; a
   later setup receives a new ID.
+- On entry into `B_BUILDING`, one selected `tracked_level_id` and
+  `tracked_level_version` are locked with the full ranking tuple, candidate
+  snapshot, reason, time, Expansion movement and secondary candidates. A newly
+  superior level cannot silently replace them.
 - State is rebuilt deterministically from append-only records. No LLM response
   creates, repairs or suppresses a source fact.
 - All required evidence must identify its authority, source bar, confirmation
@@ -54,6 +60,11 @@ All of the following are required:
 4. There is no deterministic invalidation: broken/expired level, expansion in the
    opposite direction, stale required bar, setup expiry, source conflict, or
    failed identity/integrity gate.
+
+The approach target is selected deterministically before this transition:
+Expansion UP considers ASK/resistance candidates and Expansion DOWN considers
+BID/support candidates. This movement mapping does not infer LONG or SHORT. A
+FAR-only result cannot create the transition from distance alone.
 
 E1 may strengthen B-building evidence, but it is not mandatory and does not by
 itself promote the story.
@@ -154,6 +165,13 @@ current setup ID.
 There is no automatic transition from `A_CONFIRMED` back to B under the same
 setup ID. A material thesis change first invalidates or expires the setup and
 requires a new setup ID.
+
+Tracked-level release is limited to the explicit conditions in
+`LIQUIDITY_LEVEL_IDENTITY_SELECTION_V1.md`: terminal level state or confirmed
+BREAK, invalid identity, source unavailability beyond policy, setup
+invalidation/expiry, story reset, operator-approved reset, or a safely terminated
+source correction/version replacement. Release preserves the old audit history,
+runs a new canonical selection and never reuses the old setup ID.
 
 ## 4. Evidence conflict and missing behavior
 

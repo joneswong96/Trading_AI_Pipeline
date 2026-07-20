@@ -92,7 +92,11 @@ predecessor is `null`, not zero.
 
 | Field | Type/unit | Current source availability |
 |---|---|---|
-| `liquidity_level_id` | string | Producer identity absent: `MISSING_REQUIRES_PRODUCER_CHANGE` |
+| `liquidity_level_id` | string | Producer-stable opaque deterministic identity; absent identity is `MISSING_REQUIRES_PRODUCER_CHANGE` and blocks tracked B/A promotion |
+| `liquidity_level_version` | string/integer | Explicit material revision of immutable or geometry-bearing level data |
+| `liquidity_producer_id` / `liquidity_producer_revision` | string | Exact producer lineage used by stable identity and version audit |
+| `liquidity_source_creation_identity` | string/timestamp | Source pivot time, producer-native sequence or equivalent stable creation identity |
+| `liquidity_created_at_source` / `liquidity_first_observed_at` / `liquidity_last_observed_at` | timestamp | Source creation and observation lineage; receipt time is not level identity |
 | `liquidity_level_side` | enum | `ASK` resistance/high or `BID` support/low from V2; never a trade-direction inference |
 | `liquidity_level_price` | decimal/QUOTE | Available from V2 state/event after normalization |
 | `liquidity_market_price` | decimal/QUOTE | Fresh current XAU observation from an explicit approved structured source |
@@ -125,6 +129,10 @@ predecessor is `null`, not zero.
 | `liquidity_band_low` / `liquidity_band_high` | decimal/QUOTE or null | Use only if the producer exposes an authoritative band; otherwise missing |
 | `liquidity_freshness_status` | enum | Contract-wide freshness values |
 | `liquidity_confirmed` | boolean | True only for a confirmed V2 lifecycle event |
+| `tracked_level_id` / `tracked_level_version` | string | Locked primary identity/version from entry into `B_BUILDING`; no silent replacement |
+| `liquidity_selection_tuple` | ordered record | Zone, grade, descending confluence, ascending ATR distance, ascending confirmed touches, descending source creation time, ascending lexical level ID |
+| `liquidity_selection_time` / `liquidity_selection_reason` | timestamp/string | Audit-visible lock decision |
+| `liquidity_candidate_snapshot` / `liquidity_secondary_candidates` | ordered records | Canonical candidate set, exclusions and secondary levels at selection time |
 
 The source event's bare `price` member is never propagated. It is interpreted as
 `liquidity_level_price`; `liquidity_current_market_price` comes from the bounded
@@ -136,6 +144,14 @@ source object, exposes the source `price` as adapter metadata `level_price`, and
 leaves `market_price` and `signal_price` null. Its generic `AlertEvent.price`
 column is only a backward-compatible SQLite projection of that level value. No
 distance is calculated without a trusted event-time market value.
+
+Stable identity, versioning, candidate eligibility, deterministic selection,
+tracked-level lock and explicit release follow
+`LIQUIDITY_LEVEL_IDENTITY_SELECTION_V1.md`. Mutable distance, grade, touches,
+lifecycle and freshness do not change `liquidity_level_id`; material source or
+geometry corrections require an audit-visible version. The current producer
+does not expose the complete identity contract, so missing fields remain
+`MISSING_REQUIRES_PRODUCER_CHANGE` and runtime promotion remains disabled.
 
 `LIQUIDITY_DISTANCE_POLICY_V1.md` is the controlling distance contract. For
 ASK, signed distance is level minus market and expected movement is UP; for BID,

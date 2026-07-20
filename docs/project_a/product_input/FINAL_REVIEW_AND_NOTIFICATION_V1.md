@@ -35,6 +35,7 @@ Every final review result contains:
 | Field | Requirement |
 |---|---|
 | `setup_id` and `review_id` | Stable setup identity and deterministic review identity |
+| `tracked_level_id` / `tracked_level_version` | Exact locked Liquidity origin/version reviewed |
 | `reviewed_state_id` | Exact Numeric Market State reviewed |
 | `evidence_bundle_id` / `evidence_manifest_sha256` | Immutable capture reference and hash |
 | `verdict` | One allowed verdict |
@@ -61,7 +62,10 @@ entry/SL/TP geometry and a future `valid_until` at decision time.
 An A-grade APPROVE or MODIFY result requires:
 
 1. Current story is `B_TO_A_CANDIDATE` or `WAITING_5S_ENTRY` under the same setup.
-2. Liquidity reaction is valid and confirmed.
+2. Liquidity reaction is valid and confirmed. It belongs to the same locked
+   level identity/version selected under
+   `LIQUIDITY_LEVEL_IDENTITY_SELECTION_V1.md`; another level cannot donate or
+   replace its lifecycle evidence.
 3. Confirmed standard 5m MACD thesis remains valid.
 4. Confirmed standard 1m MACD supports the intended direction.
 5. Confirmed Renko Main matches that direction.
@@ -166,4 +170,6 @@ matching FIRE gates can make a notification eligible.
 The final result and any notification record retain setup/state/review IDs,
 evidence manifest hash, source-event IDs, source revision/hashes, confirmation and
 freshness states, deterministic rule version, notification key, and predecessor
-record references. Secret values and machine-local paths are forbidden.
+record references. Liquidity lineage also retains the locked level ID/version,
+selection tuple and candidate snapshot, plus any explicit release/reselection
+records. Secret values and machine-local paths are forbidden.

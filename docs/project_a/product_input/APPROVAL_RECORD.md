@@ -139,10 +139,33 @@ cannot promote a setup. AI cannot override deterministic freshness.
 - distance alone cannot infer trade direction, HIT, REJECT, BREAK, A, GO,
   geometry, capture or notification.
 
-Each eligible level retains independent stable identity and distance. Ambiguous
-competing levels fail closed for promotion until a later deterministic selection
-policy is approved. This approval is documentation-only and does not implement
-or activate Liquidity V2, capture, providers, outputs or runtime.
+Each eligible level retains independent stable identity and distance. Candidate
+selection is now controlled by the separately approved policy in section 5.2.
+This distance approval is documentation-only and does not implement or activate
+Liquidity V2, capture, providers, outputs or runtime.
+
+## 5.2 Approved Liquidity level identity and selection policy
+
+`LIQUIDITY_LEVEL_IDENTITY_SELECTION_V1.md` is approved. A production level
+requires producer-stable `level_id`, explicit `level_version`, complete producer,
+symbol/feed/timeframe/side/source-creation lineage, dimensioned `level_price`,
+source/observation times, independent lifecycle/grade/confluence/touch state,
+confirmation and freshness. Missing source creation identity is
+`MISSING_REQUIRES_PRODUCER_CHANGE` and blocks tracked B/A promotion.
+
+Eligible same-story candidates use the exact ordered tuple: distance zone
+NEAR_TOUCH/APPROACH/FAR; grade PRIME/VALID; higher MTF confluence; lower
+`distance_atr`; fewer confirmed touches; newer confirmed source creation time;
+then lexicographically smaller `level_id`. Expansion UP ranks ASK/resistance and
+Expansion DOWN ranks BID/support without inferring trade direction. FAR is
+context-only. At `B_BUILDING` the selected identity/version and full decision
+record lock until an explicit approved release; no newly superior or
+opposite-side level may silently replace it. Multiple valid NEAR_TOUCH levels
+select one deterministically and preserve all others as secondary context.
+
+This approval is documentation-only. The identity hash/encoding and producer
+implementation remain pending, and Liquidity V2 remains
+`SAVED_NOT_MATERIALIZED`, not producer-complete and not runtime-active.
 
 ## 6. Approved SHADOW/no-live boundary
 
@@ -164,7 +187,8 @@ The following remain unapproved and fail closed:
 - Liquidity band-width handling, sweep depth, rejection magnitude and break
   close distance;
 - near-touch time persistence;
-- competing-level and nearest-level selection;
+- the `level_id` hash algorithm, exact byte encoding and producer-native source
+  creation identity implementation;
 - exact Expansion speed formula;
 - exact Expansion exhaustion formula;
 - exact E1/E2 event TTL;

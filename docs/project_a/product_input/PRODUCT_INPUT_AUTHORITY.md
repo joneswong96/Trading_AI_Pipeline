@@ -111,6 +111,14 @@ and NEAR_TOUCH above zero through 0.25 ATR. Distance never manufactures HIT,
 REJECT, BREAK, trade direction or grade A. This policy approval does not change
 `SAVED_NOT_MATERIALIZED` or activate Product Input runtime.
 
+`LIQUIDITY_LEVEL_IDENTITY_SELECTION_V1.md` approves producer-stable level
+identity, explicit material versions, per-level lifecycle ownership, the exact
+seven-key competing-level ranking, and a tracked-level lock with explicit
+release. Expansion UP selects only ASK/resistance approach targets and Expansion
+DOWN only BID/support targets; neither mapping implies a trade direction.
+Nearest-obstacle calculation remains pending. This documentation approval does
+not make Liquidity V2 producer-complete, materialized or runtime-active.
+
 ### 4.2 `EXP_V3_R5` and `EXP_SCANNER_R6`
 
 `EXP_V3_R5` is the approved confirmed trigger authority. Its default logic uses a five-bar

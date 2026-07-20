@@ -163,8 +163,9 @@ Eligible lifecycle/quality candidates are:
 
 `WEAK` may remain context but cannot independently promote `B_BUILDING`.
 Broken/invalidated, expired/removed, stale, identity-missing, side-ambiguous or
-price-missing levels are ineligible. This policy does not create a ranking
-algorithm or change source lifecycle.
+price-missing levels are ineligible. Candidate ranking and per-identity
+lifecycle ownership follow `LIQUIDITY_LEVEL_IDENTITY_SELECTION_V1.md`; this
+distance policy does not alter source lifecycle facts.
 
 ## 8. Multiple eligible levels
 
@@ -176,10 +177,13 @@ For every eligible level:
 4. Never silently switch the setup's tracked level.
 5. Keep every candidate audit-visible.
 
-A later deterministic selection policy must select the tracked setup level when
-multiple candidates exist. Until then, competing-level ambiguity fails closed
-for promotion. Nearest-level, competing-level and nearest-obstacle selection are
-not approved here.
+`LIQUIDITY_LEVEL_IDENTITY_SELECTION_V1.md` selects the primary using, in order:
+NEAR_TOUCH/APPROACH/FAR, PRIME/VALID, higher MTF confluence, lower
+`distance_atr`, fewer confirmed touches, newer confirmed source creation time,
+then lexicographically smaller `level_id`. Only the next key is considered on
+equality. Multiple NEAR_TOUCH levels do not fail closed merely because they
+compete: exactly one valid identity is primary and the others remain secondary.
+FAR remains context-only. Nearest-obstacle calculation remains unapproved.
 
 ## 9. Make-Sense state use
 
@@ -244,8 +248,9 @@ This policy does not approve:
 - rejection magnitude;
 - break close distance;
 - near-touch time persistence;
-- competing-level or nearest-level selection;
 - nearest-obstacle calculation;
+- the stable-identity hash algorithm, exact byte encoding and producer-native
+  source creation identity implementation;
 - Expansion speed or exhaustion formula;
 - E1/E2 TTL;
 - structure/range algorithm;

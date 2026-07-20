@@ -77,6 +77,10 @@ producer, schema, adapter, provider or writer.
       NEAR_TOUCH boundaries; zero/crossed fail-closed handling; and no automatic
       HIT, REJECT, BREAK, A or GO inference. This is policy approval only and
       does not activate Liquidity V2 or runtime.
+- [x] Liquidity stable identity and deterministic competing-level selection V1.
+      This includes explicit level versions, per-level lifecycle ownership, the
+      exact seven-key ranking, tracked-level lock and explicit release; it does
+      not activate Liquidity V2 or runtime.
 - [x] Approve exactly-once B-to-A notification only for prior grade B, current
       grade A, verdict APPROVE/MODIFY, valid 5m thesis, confirmed 1m direction,
       and a new matching Sniper FIRE.

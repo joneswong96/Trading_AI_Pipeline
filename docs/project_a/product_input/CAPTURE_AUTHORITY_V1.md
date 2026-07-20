@@ -10,7 +10,8 @@ Trigger: entry into `B_TO_A_CANDIDATE`
 
 `NEAR_TOUCH` is supporting evidence, not a direct capture command. Capture
 occurs only after the complete B-to-A transition passes every independent gate
-in `MAKE_SENSE_STATE_MACHINE_V1.md` and `LIQUIDITY_DISTANCE_POLICY_V1.md`.
+in `MAKE_SENSE_STATE_MACHINE_V1.md`, `LIQUIDITY_DISTANCE_POLICY_V1.md` and
+`LIQUIDITY_LEVEL_IDENTITY_SELECTION_V1.md`.
 
 ## 1. Authority boundary
 
@@ -89,6 +90,9 @@ At candidate time `T`, the bundle must include:
 - Liquidity V2 and Expansion source event lineage plus bounded 9333 event-time
   snapshots, the side-aware Liquidity distance record, and the latest confirmed
   5m ATR(14) source-bar lineage;
+- the locked Liquidity `level_id`/`level_version`, full seven-key selection
+  tuple, selection time/reason, canonical candidate snapshot and every excluded
+  or secondary candidate;
 - Renko E1/E2/Main/FIRE state and event lineage from the validated 9222 candidate;
   and
 - every missing producer field explicitly listed as
@@ -139,6 +143,10 @@ The immutable manifest contains:
 - missing/error records;
 - predecessor bundle/reference when retrying; and
 - one manifest SHA-256 calculated after artifact hashes are fixed.
+
+The captured primary must match the setup's locked level identity/version.
+Candidate reordering, a newly closer level, changed grade/confluence/touches, or
+an opposite-side context level cannot silently replace it.
 
 No machine-local absolute path is part of the production manifest. Storage paths
 are deployment configuration, not evidence identity.
