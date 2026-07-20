@@ -17,9 +17,10 @@ legacy parsing even if strict validation or Section 2 compilation fails.
 
 ## Allowlist and canonical path
 
-The only accepted identities are `LIQ_V2/9`, `EXP_V3/5`, `EXP_SCANNER/6` and
-`RENKO_V3_SNIPER/1` under their committed versioned Liquidity, Expansion and
-Renko schemas. Producer validation stays in `project_a.numeric_state`; ingress
+The active production identities are `LIQ_V2/9`, `EXP_V3/5` and
+`RENKO_V3_SNIPER/1`. The strict `EXP_SCANNER/6` identity remains accepted only
+as dormant compatibility to avoid regression; it is not materialized, alerted
+or required by Section 2. Producer validation stays in `project_a.numeric_state`; ingress
 does not duplicate it. Accepted raw bytes flow through:
 
 `raw receipt → NumericMarketState → MakeSenseCompiler → EvidenceBundleRequest`

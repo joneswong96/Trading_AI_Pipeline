@@ -1,0 +1,29 @@
+{
+  "fixture_schema": "project_a.scanner_compatibility_fixture/1.0",
+  "disposition": "DORMANT_COMPATIBILITY_ONLY",
+  "event": {
+    "schema": "project_a.expansion_event/1.0",
+    "producer_id": "EXP_SCANNER",
+    "producer_revision": "6",
+    "event_id": "fixture-exp-quality-1",
+    "event": "EXP_QUALITY_UPDATE",
+    "symbol": "XAUUSD",
+    "feed": "ICMARKETS",
+    "timeframe": "1m",
+    "source_bar_time": "2026-07-20T01:01:01Z",
+    "confirmed": true,
+    "freshness_status": "FRESH",
+    "direction": "UP",
+    "start_price": "3398.00",
+    "market_price": "3400.00",
+    "displacement": "2.00",
+    "atr": "4.00",
+    "atr_multiple": "0.50",
+    "path_efficiency": null,
+    "body_quality": "0.75",
+    "opposing_bars": 1,
+    "age_bars": 0,
+    "quality": "CLEAN",
+    "too_extended": false
+  }
+}

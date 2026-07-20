@@ -18,10 +18,19 @@ from ingest.project_a.raw_producer_adapter import (
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "project_a" / "section2_producer_events_v1.json"
+SCANNER_COMPAT_FIXTURE = (
+    Path(__file__).parents[1] / "fixtures" / "project_a" / "scanner_compatibility_event_v1.json"
+)
 
 
 def _events() -> list[dict]:
     return json.loads(FIXTURE.read_text(encoding="utf-8"))["events"]
+
+
+def _scanner_event() -> dict:
+    fixture = json.loads(SCANNER_COMPAT_FIXTURE.read_text(encoding="utf-8"))
+    assert fixture["disposition"] == "DORMANT_COMPATIBILITY_ONLY"
+    return fixture["event"]
 
 
 def _raw(event: dict, *, pretty: bool = False) -> bytes:
@@ -51,13 +60,13 @@ def _rows(path: Path, table: str) -> list[sqlite3.Row]:
         return conn.execute(f"SELECT * FROM {table} ORDER BY rowid").fetchall()
 
 
-@pytest.mark.parametrize("index", [2, 0, 1, 3])
-def test_exact_four_producers_precede_and_never_call_legacy_parser(
-    tmp_path, monkeypatch, index,
+@pytest.mark.parametrize("event", [_events()[1], _events()[0], _events()[2], _scanner_event()])
+def test_active_three_and_dormant_scanner_compatibility_precede_legacy_parser(
+    tmp_path, monkeypatch, event,
 ):
     from ingest import webhook_server as server
 
-    path = tmp_path / f"producer-{index}.db"
+    path = tmp_path / f"producer-{event['producer_id']}.db"
     server.configure_raw_producer_adapter(_adapter(path))
     monkeypatch.setattr(
         server, "parse",
@@ -67,12 +76,12 @@ def test_exact_four_producers_precede_and_never_call_legacy_parser(
         server, "_fanout",
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("fanout called")),
     )
-    response = TestClient(server.app).post("/alert", content=_raw(_events()[index]))
+    response = TestClient(server.app).post("/alert", content=_raw(event))
     body = response.json()
     assert response.status_code == 200
     assert body["accepted"] is True and body["deduped"] is False
-    assert body["producer"] == _events()[index]["producer_id"]
-    assert body["event"] == _events()[index]["event"]
+    assert body["producer"] == event["producer_id"]
+    assert body["event"] == event["event"]
     assert body["wake"] is False
     assert body["provider_called"] is False
     assert body["writer_called"] is False
@@ -160,7 +169,7 @@ def test_duplicate_json_key_and_oversized_body_fail_closed(tmp_path):
 def test_liquidity_and_expansion_preserve_dimensions_without_trade_inference(tmp_path):
     path = tmp_path / "semantics.db"
     adapter = _adapter(path)
-    liquidity = _events()[2]
+    liquidity = _events()[1]
     expansion = _events()[0]
     assert adapter.receive(_raw(liquidity)).accepted
     assert adapter.receive(_raw(expansion)).accepted
@@ -180,7 +189,7 @@ def test_liquidity_and_expansion_preserve_dimensions_without_trade_inference(tmp
 
 def _paired_events() -> tuple[dict, dict]:
     expansion = deepcopy(_events()[0])
-    scanner = deepcopy(_events()[1])
+    scanner = deepcopy(_scanner_event())
     scanner["source_bar_time"] = expansion["source_bar_time"]
     scanner["market_price"] = expansion["market_price"]
     return expansion, scanner
@@ -209,7 +218,7 @@ def test_scanner_correlation_is_quality_only_and_receipt_order_independent(tmp_p
 def test_unpaired_scanner_is_nonpromoting_and_exact_retry_is_idempotent(tmp_path):
     path = tmp_path / "scanner.db"
     adapter = _adapter(path)
-    raw = _raw(_events()[1])
+    raw = _raw(_scanner_event())
     first = adapter.receive(raw)
     retry = adapter.receive(raw)
     assert first.telemetry_status == "UNPAIRED_QUALITY_EVIDENCE"
@@ -239,7 +248,7 @@ def test_conflicting_scanner_facts_are_audited_and_fail_closed(tmp_path):
 
 def test_semantic_duplicate_and_restart_replay_are_deterministic(tmp_path):
     path = tmp_path / "restart.db"
-    payload = _events()[2]
+    payload = _events()[1]
     first_adapter = _adapter(path)
     first = first_adapter.receive(_raw(payload))
     semantic_retry = first_adapter.receive(_raw(payload, pretty=True))
@@ -259,7 +268,7 @@ def test_semantic_duplicate_and_restart_replay_are_deterministic(tmp_path):
 def test_renko_stages_remain_evidence_only(tmp_path):
     path = tmp_path / "renko.db"
     adapter = _adapter(path)
-    for event in _events()[3:]:
+    for event in _events()[2:]:
         result = adapter.receive(_raw(event))
         assert result.accepted and result.telemetry_status == "TELEMETRY_STATE_ACCEPTED"
     documents = [json.loads(row["canonical_json"]) for row in _rows(path, "project_a_producer_events")]

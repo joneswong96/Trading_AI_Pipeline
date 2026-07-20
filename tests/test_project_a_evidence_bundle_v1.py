@@ -37,7 +37,7 @@ def sources():
         "xau_htf": source("xau_htf", 9333, "pNqcbOmu", "target-xau-htf", "XAUUSD", "ICMARKETS", ("4H", "D", "W")),
         "dxy_15m": source("dxy_15m", 9333, "n9qjfufV", "target-dxy-15m", "DXY", "TVC", ("15m",)),
         "dxy_1m": source("dxy_1m", 9222, "ocVwlz2C", "target-dxy-1m", "DXY", "TVC", ("1m",)),
-        "renko": source("renko", 9222, "paH6jur7", "target-renko", "XAUUSD", "ICMARKETS", ("RENKO",)),
+        "renko": source("renko", 9333, "YclFo8Ax", "target-renko", "XAUUSD", "ICMARKETS", ("5s",)),
     }
 
 
@@ -121,6 +121,11 @@ def test_e2_with_active_story_requests_full_primary_and_supplemental_bundle(sour
     assert request.promotion_allowed is False
     assert request.runtime_execution_enabled is False
     assert request.writer_enablement == "DISABLED"
+    renko = next(read for read in request.structured_reads if read.read_kind == "RENKO_STATE")
+    assert renko.source.layout_id == "YclFo8Ax"
+    assert renko.source.timeframes == ("5s",)
+    assert renko.source.chart_type == "standard_candles"
+    assert renko.timeframes == ("5s",)
 
 
 def test_main_is_confirmation_and_fire_is_timing_only_never_an_order(sources):
@@ -169,10 +174,18 @@ def test_primary_and_supplemental_adapters_are_request_only_and_port_pinned(sour
     assert not hasattr(ApprovedScreenshotRequestAdapter(), "execute")
     wrong = dict(sources)
     wrong["renko"] = SourceIdentity(
-        "renko", 9333, "paH6jur7", "target-renko", "XAUUSD", "ICMARKETS", ("RENKO",),
+        "renko", 9222, "YclFo8Ax", "target-renko", "XAUUSD", "ICMARKETS", ("5s",),
     )
-    with pytest.raises(EvidenceBundleError, match="port 9222"):
+    with pytest.raises(EvidenceBundleError, match="port 9333"):
         build(wrong, "RENKO_E2", active=True)
+
+
+def test_native_renko_chart_type_is_rejected():
+    with pytest.raises(EvidenceBundleError, match="standard-candle"):
+        SourceIdentity(
+            "renko", 9333, "YclFo8Ax", "target-renko", "XAUUSD", "ICMARKETS",
+            ("5s",), chart_type="renko",
+        )
 
 
 def test_injectable_adapters_are_used_without_live_calls(sources):

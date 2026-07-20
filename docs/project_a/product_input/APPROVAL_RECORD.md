@@ -18,22 +18,21 @@ writer runtime-active.
 
 Jones Wong explicitly approved one controlled materialization on 2026-07-20,
 as recorded in `MATERIALIZATION_APPROVAL_V1.md`. The corrected alert limit is
-exactly four new Project A alerts:
+exactly three new Project A alerts:
 
 - `Project A V1 — LIQ_V2 JSON`
 - `Project A V1 — EXP_V3 JSON`
-- `Project A V1 — EXP_SCANNER JSON`
 - `Project A V1 — RENKO_V3 JSON`
 
-Expansion V3 and Expansion Scanner remain separate Pine producers but form one
-logical Expansion Evidence family, not two directional votes. Scanner evidence
-is quality-only and must be correlated using factual identity fields. Unpaired
-Scanner evidence is context-only and cannot independently wake, promote, call
-AI, notify or act. The two existing legacy alerts remain protected, no source
-combination is required, and no fifth Project A alert is authorized.
+Expansion V3 is the sole active Expansion producer. Expansion Scanner is
+dormant reference/compatibility only and is not materialized, alerted, required
+by Section 2 or counted as a directional vote. If received by the retained
+strict adapter, Scanner evidence remains quality-only, non-waking and
+non-promoting. The two existing legacy alerts remain protected and no fourth
+Project A alert is authorized.
 
 This correction authorizes only the bounded runtime, private-Pine, layout and
-four-alert work in that approval. It does not weaken the SHADOW/no-live boundary
+three-producer work in that approval. It does not weaken the SHADOW/no-live boundary
 or authorize synthetic events, providers, outputs, MT5, brokers or orders.
 
 ## 1. Approved authorities
@@ -48,10 +47,10 @@ or authorize synthetic events, providers, outputs, MT5, brokers or orders.
    `LEGACY_REFERENCE`. `LIQUIDITY_DISTANCE_POLICY_V1.md` is approved as the
    side-aware pre-touch distance policy; this does not materialize or activate
    the producer.
-2. **Expansion:** `Expansion Leg Signal V3`, private revision 5, is the confirmed
-   trigger/direction authority. `③ Expansion Scanner [SNR3.0]`, private revision
-   6, supplies quality classification only. They form one Expansion Evidence
-   object and do not count as two independent votes. Missing numeric outputs stay
+2. **Expansion:** `Expansion Leg Signal V3`, private revision 5, is the sole
+   active confirmed movement trigger/direction authority. `③ Expansion Scanner
+   [SNR3.0]`, private revision 6, is dormant reference/compatibility only and is
+   not required to construct or promote the story. Missing numeric outputs stay
    missing. `expDetector/1` is `LEGACY_REFERENCE`.
 3. **MACD:** TradingView standard price MACD, close EMA 12/26/9, using exact
    closed-bar 9333 values for 1m, 5m, 15m and 30m. The 5m timeframe supplies setup
@@ -64,8 +63,10 @@ or authorize synthetic events, providers, outputs, MT5, brokers or orders.
    `LEGACY_REFERENCE` logic.
 5. **Renko:** `Renko V3 — V2 Preserved + 5s Sniper Dashboard`, private revision 1,
    source SHA-256
-   `327c5043f9ca53f531b8d8e8aa89e6b72d649a527339432bbeeef5bcb463f003`,
-   is the approved V1 authority candidate. It remains
+   `85cd8c8c5a3ec2331b0b90dc1f920dd89c6ed68a1a4ba4779037e15de7f17298`,
+   is the approved V1 authority candidate for layout `YclFo8Ax`,
+   ICMARKETS:XAUUSD, 5-second standard candles. Its synthetic Renko engine does
+   not make native Renko bricks an approved host. It remains
    `SAVED_NOT_MATERIALIZED`. Current Renko V2, `rekoArrow/1`, the standalone E1/E2
    test source and Renko V3 revision 4 without Sniper are not parity.
 6. **Structure/regime:** deterministic 9333 ICMARKETS:XAUUSD 4H/D/W and approved
@@ -232,7 +233,7 @@ This approval does not authorize:
 - an AI-provider call or provider credential change;
 - MT5 connection or output;
 - Telegram, Notion, webhook or other external writer activation;
-- TradingView alert creation beyond the exact four-alert approval, any legacy
+- TradingView alert creation beyond the exact three-alert approval, any legacy
   alert modification, or any test triggering;
 - Pine modification, public publication or producer implementation; private
   candidate saves are limited to `MATERIALIZATION_APPROVAL_V1.md`;

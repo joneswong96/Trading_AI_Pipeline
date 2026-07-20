@@ -113,6 +113,7 @@ class SourceIdentity:
     symbol: str
     feed: str
     timeframes: tuple[str, ...]
+    chart_type: str = "standard_candles"
 
     def __post_init__(self) -> None:
         if self.port not in (9222, 9333):
@@ -121,6 +122,8 @@ class SourceIdentity:
             raise EvidenceBundleError("source identity must be complete")
         if not self.timeframes:
             raise EvidenceBundleError("source identity must declare timeframes")
+        if self.chart_type != "standard_candles":
+            raise EvidenceBundleError("only standard-candle source charts are approved")
 
     def canonical(self) -> dict[str, JsonValue]:
         return {
@@ -131,6 +134,7 @@ class SourceIdentity:
             "symbol": self.symbol,
             "feed": self.feed,
             "timeframes": self.timeframes,
+            "chart_type": self.chart_type,
         }
 
 
@@ -371,6 +375,7 @@ class Port9333RequestAdapter:
         if level is RequestLevel.FULL_B_TO_A_CAPTURE:
             htf = _require_source(sources, "xau_htf", 9333)
             dxy = _require_source(sources, "dxy_15m", 9333)
+            renko = _require_source(sources, "renko", 9333)
             requests.extend((
                 StructuredReadRequest(
                     "read_9333_xau_htf", htf, "CLOSED_OHLC_AND_STRUCTURE",
@@ -381,6 +386,11 @@ class Port9333RequestAdapter:
                     "read_9333_dxy_15m", dxy, "DXY_CONTEXT",
                     ("current", "close", "change", "sma20", "distance", "source_bar_time", "confirmed"),
                     ("15m",), closed_bars_only=True,
+                ),
+                StructuredReadRequest(
+                    "read_9333_renko_5s", renko, "RENKO_STATE",
+                    ("stage", "direction", "signal_price", "source_bar_time", "confirmed", "score", "power", "mode", "transfer"),
+                    ("5s",),
                 ),
             ))
         return tuple(requests)
@@ -397,17 +407,11 @@ class Port9222RequestAdapter:
         if level is not RequestLevel.FULL_B_TO_A_CAPTURE:
             return ()
         dxy = _require_source(sources, "dxy_1m", 9222)
-        renko = _require_source(sources, "renko", 9222)
         return (
             StructuredReadRequest(
                 "read_9222_dxy_1m", dxy, "DXY_SUPPLEMENTAL",
                 ("current", "close", "source_bar_time", "confirmed"), ("1m",),
                 required=False, closed_bars_only=True,
-            ),
-            StructuredReadRequest(
-                "read_9222_renko", renko, "RENKO_STATE",
-                ("stage", "direction", "signal_price", "source_bar_time", "confirmed", "score", "power", "mode", "transfer"),
-                ("RENKO",),
             ),
         )
 
@@ -429,7 +433,7 @@ class ApprovedScreenshotRequestAdapter:
             return ()
         requests = []
         for role in FULL_CAPTURE_SCREENSHOT_ROLES:
-            port = 9222 if role == "renko" else 9333
+            port = 9333
             source = _require_source(sources, role, port)
             requests.append(ScreenshotRequest(
                 request_id=f"screenshot_{port}_{role}",

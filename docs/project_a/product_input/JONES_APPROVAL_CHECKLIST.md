@@ -10,13 +10,15 @@ producer, schema, adapter, provider or writer.
 
 - Port 9333 contains deterministic XAUUSD 1m/5m/15m/30m standard MACD,
   XAUUSD 4H/D/W charts and TVC:DXY 15m.
-- Port 9222 contains the supplemental Renko/chart environment and TVC:DXY 1m.
+- Port 9222 contains the supplemental Renko/chart environment and TVC:DXY 1m;
+  its native-Renko layout is not the Renko V3 Sniper host.
 - Port 4999 is isolated acceptance/test only.
-- Liquidity V2 revision 9, Expansion V3 revision 5, Expansion Scanner revision 6
-  and Renko V3 Sniper revision 1 are saved but not materialized in approved
-  production layouts.
-- The currently loaded 9222 Renko script is an older Renko V2 and is not Renko V3
-  Sniper parity.
+- Liquidity V2 revision 9, Expansion V3 revision 5 and Renko V3 Sniper revision
+  1 are the three active saved candidates. Expansion Scanner revision 6 is
+  dormant reference/compatibility only.
+- The exact Renko V3 Sniper host is layout `YclFo8Ax` on the verified 9333
+  profile: ICMARKETS:XAUUSD, 5-second standard candles. The native-Renko 9222
+  layout is not parity.
 - Current bid/ask/spread lack a trusted approved source.
 - The six legacy private libraries are not parity substitutes for the approved
   V1 authorities.
@@ -27,10 +29,10 @@ producer, schema, adapter, provider or writer.
       `Jonesy_Wong`, private revision 9, as the V1 Liquidity authority. Preserve
       conventional ASK/resistance and BID/support semantics, MTF confluence,
       touch count, PRIME/VALID/WEAK grade, lifecycle and first confirmed touch.
-- [x] Approve `Expansion Leg Signal V3`, private revision 5, as the confirmed
-      trigger/direction authority and `③ Expansion Scanner [SNR3.0]`, private
-      revision 6, as quality evidence only. Together they form one Expansion
-      Evidence object, not two votes.
+- [x] Approve `Expansion Leg Signal V3`, private revision 5, as the sole active
+      Expansion movement trigger/direction authority. Retain `③ Expansion
+      Scanner [SNR3.0]`, private revision 6, only as dormant compatibility and
+      reference; it is not a second vote or a Section 2 dependency.
 - [x] Approve TradingView standard price MACD, close EMA 12/26/9, using exact
       9333 closed-bar values: 5m setup, 1m confirmation, and 15m/30m context.
 - [x] Approve 9333 TVC:DXY 15m as primary and 9222 TVC:DXY 1m as supplemental,
@@ -38,8 +40,9 @@ producer, schema, adapter, provider or writer.
       universal hard veto.
 - [x] Approve `Renko V3 — V2 Preserved + 5s Sniper Dashboard`, private revision
       1, source SHA-256
-      `327c5043f9ca53f531b8d8e8aa89e6b72d649a527339432bbeeef5bcb463f003`,
-      as the V1 Renko authority candidate with status `SAVED_NOT_MATERIALIZED`.
+      `85cd8c8c5a3ec2331b0b90dc1f920dd89c6ed68a1a4ba4779037e15de7f17298`,
+      as the V1 Renko authority candidate for `YclFo8Ax`, ICMARKETS:XAUUSD,
+      5-second standard candles, with status `SAVED_NOT_MATERIALIZED`.
 - [x] Approve deterministic 9333 XAUUSD 4H/D/W price structure as V1 numeric
       structure/regime authority and retain SR MTF Pro V10 as visual/supporting
       context only.
@@ -50,8 +53,8 @@ producer, schema, adapter, provider or writer.
       structured reads; screenshots are visual context only.
 - [x] Approve port 9333 as primary deterministic production data/capture
       authority.
-- [x] Approve port 9222 as explicit supplemental read-only Renko/chart and DXY 1m
-      authority.
+- [x] Approve port 9222 as explicit supplemental read-only chart and DXY 1m
+      authority; the currently verified `YclFo8Ax` production host is on 9333.
 - [x] Confirm port 4999 remains `TEST_ONLY` and is forbidden for production
       evidence.
 - [x] Approve no silent fallback between ports, layouts, targets, timeframes or
@@ -98,12 +101,12 @@ producer, schema, adapter, provider or writer.
 - [ ] Approve a trusted bid/ask/spread authority. **Pending; unavailable.**
 - [x] Approve one controlled production TradingView layout materialization,
       including Renko V3 Sniper, under `MATERIALIZATION_APPROVAL_V1.md`.
-- [x] Approve exactly four new Project A alerts: `LIQ_V2`, `EXP_V3`,
-      `EXP_SCANNER`, and `RENKO_V3`. Expansion V3 and Scanner remain separate
-      producers in one logical Expansion Evidence family, not two directional
-      votes. Scanner alone cannot wake, promote, call AI, notify or act;
-      correlation failure leaves it unpaired/context-only. The two existing
-      legacy alerts remain protected, and no fifth Project A alert is authorized.
+- [x] Approve exactly three new Project A alerts: `LIQ_V2`, `EXP_V3`, and
+      `RENKO_V3`. Expansion V3 is the sole active Expansion producer. Scanner is
+      dormant reference/compatibility only: no chart materialization, alert,
+      directional vote, Section 2 dependency, wake or promotion. The two
+      existing legacy alerts remain protected, and no fourth Project A alert is
+      authorized.
 - [ ] Approve Pine producer changes for missing Liquidity, Expansion and Renko
       numeric/event fields. **Pending; `PENDING_PRODUCER_CHANGE`.**
 - [ ] Approve provider runtime activation. **Pending; disabled.**

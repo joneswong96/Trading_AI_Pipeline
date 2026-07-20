@@ -43,13 +43,13 @@ The status vocabulary distinguishes authority approval from runtime state:
 
 | Authority ID | Exact identity | Purpose | Route and timeframe | Runtime status |
 |---|---|---|---|---|
-| `LIQ_V2_R9` | `Liquidity Levels V2 — 5m Body × MTF Confluence`; owner `Jonesy_Wong`; private revision 9; source SHA-256 `d08576886140222f71f0125428b9974abd4db9b95168c91342178edc1d76ef9e` | Liquidity location, approach, touch, reaction and break lifecycle | Pine event/structured study state when materialized; 5m anchor with 15m/30m/60m confluence; no current production layout | `SAVED_NOT_MATERIALIZED` |
-| `EXP_V3_R5` | Saved as `Expansion Leg Signal V3`; Pine title `Expansion Leg Signal V3 Stable`; owner `Jonesy_Wong`; private revision 5; source hash not independently pinned | Confirmed expansion trigger | Pine event on its materialized chart timeframe; exact production timeframe remains pending | `SAVED_NOT_MATERIALIZED` |
-| `EXP_SCANNER_R6` | `③ Expansion Scanner [SNR3.0]`; owner `Jonesy_Wong`; private revision 6; source hash not independently pinned | Expansion quality classification only | Pine state/event on the same decision timeframe as `EXP_V3_R5` | `SAVED_NOT_MATERIALIZED` |
+| `LIQ_V2_R9` | `Liquidity Levels V2 — 5m Body × MTF Confluence`; owner `Jonesy_Wong`; private revision 9; source SHA-256 `9c635966598c5287aeeb48d65147bf05bbe305a56c9976b18a2c2b6e46070b90` | Liquidity location, approach, touch, reaction and break lifecycle | ICMARKETS:XAUUSD; 5m standard candles | `SAVED_NOT_MATERIALIZED` |
+| `EXP_V3_R5` | Saved as `Expansion Leg Signal V3`; Pine title `Expansion Leg Signal V3 Stable`; owner `Jonesy_Wong`; private revision 5; source SHA-256 `c348c31500fa1596268f65e6457eff72a85e65d5c455fb6aa664bd17131abf4d` | Sole active Expansion movement trigger | ICMARKETS:XAUUSD; 1m standard candles | `SAVED_NOT_MATERIALIZED` |
+| `EXP_SCANNER_R6` | `③ Expansion Scanner [SNR3.0]`; owner `Jonesy_Wong`; private revision 6; source SHA-256 `e1738b33af96b774a7f5a3c9a0ae56608c460aa8ca8a8f393b48006e11532efc` | Dormant quality compatibility/reference only | Not materialized; no chart; no alert; not required by Section 2 | `LEGACY_REFERENCE` |
 | `MACD_TV_9333_12_26_9` | TradingView standard `Moving Average Convergence Divergence`; TradingView built-in; close, EMA 12/26/9 | Price-MACD setup, confirmation and context | `9333`; layouts `cpPWuLlN` and `avpCVaw2`; 1m/5m/15m/30m | `PENDING_RUNTIME_VALIDATION` |
 | `DXY_TVC_9333_15M` | `TVC:DXY`; TradingView data; no custom indicator | Primary DXY evidence and grade cap | `9333`; layout `n9qjfufV`; 15m closed bar with SMA20 | `PENDING_RUNTIME_VALIDATION` |
 | `DXY_TVC_9222_1M` | `TVC:DXY`; TradingView data; no custom indicator | Supplemental short-horizon DXY evidence | `9222`; layout `ocVwlz2C`; 1m | `PENDING_RUNTIME_VALIDATION` |
-| `RENKO_V3_SNIPER_R1` | `Renko V3 — V2 Preserved + 5s Sniper Dashboard`; owner `Jonesy_Wong`; private revision 1; source SHA-256 `327c5043f9ca53f531b8d8e8aa89e6b72d649a527339432bbeeef5bcb463f003` | E1/E2/Main maturity and 5s Sniper FIRE timing | Approved supplemental route role `9222`; production layout not yet materialized; intended Sniper decision timeframe 5s | `SAVED_NOT_MATERIALIZED` |
+| `RENKO_V3_SNIPER_R1` | `Renko V3 — V2 Preserved + 5s Sniper Dashboard`; owner `Jonesy_Wong`; private revision 1; source SHA-256 `85cd8c8c5a3ec2331b0b90dc1f920dd89c6ed68a1a4ba4779037e15de7f17298` | E1/E2/Main maturity and 5s Sniper FIRE timing | `9333`; layout `YclFo8Ax`; ICMARKETS:XAUUSD; 5s standard candles; synthetic Renko engine | `SAVED_NOT_MATERIALIZED` |
 | `STRUCTURE_9333_XAU_HTF` | `ICMARKETS:XAUUSD` deterministic price structure | Higher-timeframe direction and structure | `9333`; layout `pNqcbOmu`; 4H/D/W closed bars | `PENDING_RUNTIME_VALIDATION` |
 | `SR_MTF_V10_CONTEXT` | `SR MTF Pro V10`; owner `Jonesy_Wong`; private saved revision 14; source SHA-256 `9f34462babbd00d7952c87a8c2abc078bcf465c21445a3298bb524c71a1fcb42` | Visual/supporting context only for V1 | `9222`; layout `paH6jur7`; current MTF trend rows 5m/15m/1H/4H/D/W | `LEGACY_REFERENCE` |
 | `ACCEPTANCE_4999` | `ProjectA-XAUUSD-4999`, layout `gwnVPYuQ`, target `F2F27AAA3050DC8F9769939CB9B2E84C` | Isolated compile and visual acceptance | `4999`; XAUUSD 1m | `TEST_ONLY` |
@@ -72,7 +72,8 @@ until the new mapping is recorded; it is not permission to use another port.
 | 9333 | `3A1DA8E727112BD7F13732B3A8732DFE` | `avpCVaw2` (`g5_30m`) | ICMARKETS:XAUUSD 30m/15m and standard MACD |
 | 9333 | `3818934C8C5F18141069CF3E7ABAB8E7` | `n9qjfufV` (`g7_DXY`) | TVC:DXY 15m |
 | 9333 | `1E5C0F56E8154C894E36377A6B7A7C0C` | `pNqcbOmu` (`g6_HTF`) | ICMARKETS:XAUUSD 4H/D/W |
-| 9222 | `ACF2304D2914588BDCBED4238C692328` | `paH6jur7` (`g2_renko_wma_15m`) | Current Renko route; candidate V3 is not yet materialized |
+| 9333 | `4AC3605E3001EE617822C29430967D4E` | `YclFo8Ax` (`G8 - XAUUSD 5s Sniper`) | ICMARKETS:XAUUSD 5s standard candles; verified exact URL host for Renko V3 Sniper |
+| 9222 | `ACF2304D2914588BDCBED4238C692328` | `paH6jur7` (`g2_renko_wma_15m`) | Existing native-Renko/reference layout; never the Renko V3 Sniper host |
 | 9222 | `4D5DE25E24A09C8E51585147B624D85A` | `ocVwlz2C` (`g3_dxy1m_xau15s`) | TVC:DXY 1m and ICMARKETS:XAUUSD 15s |
 | 4999 | `F2F27AAA3050DC8F9769939CB9B2E84C` | `gwnVPYuQ` (`New`) | Acceptance only; forbidden for production evidence |
 
@@ -119,7 +120,7 @@ DOWN only BID/support targets; neither mapping implies a trade direction.
 Nearest-obstacle calculation remains pending. This documentation approval does
 not make Liquidity V2 producer-complete, materialized or runtime-active.
 
-### 4.2 `EXP_V3_R5` and `EXP_SCANNER_R6`
+### 4.2 `EXP_V3_R5` and dormant `EXP_SCANNER_R6` compatibility
 
 `EXP_V3_R5` is the approved confirmed trigger authority. Its default logic uses a five-bar
 leg, ATR14, minimum 1.2 ATR displacement, minimum 0.60 path efficiency, a
@@ -130,9 +131,10 @@ text event includes ticker, timeframe, movement direction, and a field labelled
 the source-reported event `market_price`; it does not promote it to a trade
 `signal_price` or entry price.
 
-`EXP_SCANNER_R6` is quality classification only. It distinguishes CLEAN/WEAK and
-too-extended movement using displacement/range, candle-body quality and opposing
-bars. It is not a second trigger authority.
+`EXP_SCANNER_R6` is dormant reference/compatibility only. If its strict adapter
+receives historical-compatible data, it remains quality-only and non-promoting.
+It is not materialized, alerted, required by Section 2 or a second trigger
+authority.
 
 Known gaps across the pair are explicit expansion start value, speed, age,
 exhaustion lifecycle, and a revision-pinned numeric payload. Missing values are
@@ -179,9 +181,11 @@ MACD or Renko evidence.
   are not exported. Main lacks a producer event identity and explicit event
   timestamp. All are `MISSING_REQUIRES_PRODUCER_CHANGE`.
 
-The current 9222 chart instead loads an older Renko V2 revision. Therefore this
-candidate must not be called runtime-active. `rekoArrow/1` is not Renko V3
-parity.
+The exact approved host is `YclFo8Ax` on the verified 9333 profile,
+ICMARKETS:XAUUSD, 5-second standard candles. The script's synthetic Renko engine
+does not authorize native Renko bricks. Until the candidate and alert are
+verified there, it must not be called runtime-active. `rekoArrow/1` is not Renko
+V3 parity.
 
 ### 4.6 Structure and visual context
 
@@ -237,7 +241,7 @@ identity. Only these tuples enter the Product Input adapter:
 |---|---|---|
 | `project_a.liquidity_event/1.0` | `LIQ_V2` | `9` |
 | `project_a.expansion_event/1.0` | `EXP_V3` | `5` |
-| `project_a.expansion_event/1.0` | `EXP_SCANNER` | `6` |
+| `project_a.expansion_event/1.0` | `EXP_SCANNER` | `6` (dormant compatibility only) |
 | `project_a.renko_event/1.0` | `RENKO_V3_SNIPER` | `1` |
 
 An exact recognized identity is validated and canonicalized by the existing

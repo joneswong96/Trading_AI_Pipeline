@@ -1,4 +1,4 @@
-# Project A four-alert materialization approval
+# Project A three-producer materialization approval
 
 Status: **APPROVED_FOR_CONTROLLED_MATERIALIZATION**
 
@@ -10,22 +10,22 @@ Scope: one controlled SHADOW/no-live runtime and TradingView materialization
 
 ## Approved alert set
 
-Exactly four new Project A alerts are authorized:
+Exactly three new Project A alerts are authorized:
 
 1. `Project A V1 — LIQ_V2 JSON`
 2. `Project A V1 — EXP_V3 JSON`
-3. `Project A V1 — EXP_SCANNER JSON`
-4. `Project A V1 — RENKO_V3 JSON`
+3. `Project A V1 — RENKO_V3 JSON`
 
-No fifth Project A alert is authorized. The two existing legacy Liquidity and
+No fourth Project A alert is authorized. The two existing legacy Liquidity and
 Expansion alerts are protected and must not be deleted, paused, edited,
 recreated or used as new-event validation evidence.
 
-## Expansion evidence family
+## Expansion authority and Scanner compatibility
 
-`EXP_V3_R5` and `EXP_SCANNER_R6` remain separate Pine producers and require
-separate TradingView alerts. They form one logical Expansion Evidence family;
-they do not count as two directional votes. No source combination is required.
+`EXP_V3_R5` is the sole active Expansion producer and directional movement
+evidence stream. `EXP_SCANNER_R6` is dormant reference/compatibility only: it is
+not materialized, added to a chart, assigned an alert, required by Section 2, or
+counted as an independent directional vote.
 
 Scanner output is quality evidence only. It is not an independent directional
 vote, trade direction, setup approval, wake trigger, AI trigger, notification
@@ -42,13 +42,17 @@ story.
 
 ## Materialization and safety boundary
 
-This approval permits the exact committed private candidates to be compiled,
-saved privately, added to the approved 9333/9222 layouts, enabled for Project A
-JSON V1 after Feature-OFF parity, and snapshotted into the four alerts above.
+This approval permits the exact committed LIQ V2, EXP V3 and Renko V3 Sniper
+private candidates to be compiled, saved privately, added to the approved
+production layouts, enabled for Project A JSON V1 after Feature-OFF parity, and
+snapshotted into the three alerts above. Renko V3 Sniper is hosted only on
+layout `YclFo8Ax`, ICMARKETS:XAUUSD, 5-second standard candles; its synthetic
+Renko engine does not authorize a native-Renko host. G4-G7 remain unchanged and
+port 4999 remains test/acceptance only.
 It also permits controlled deployment of the corrected integrated ingest
 runtime.
 
-The four alerts continue to target the existing `POST /alert` webhook; no
+The three alerts continue to target the existing `POST /alert` webhook; no
 webhook-path change is required. The integrated raw-producer adapter takes
 precedence over legacy parsing only for the exact allowlisted producer schema,
 ID and revision tuples. Scanner remains quality-only and non-waking. A
@@ -57,7 +61,7 @@ legacy parser.
 
 Repository integration alone is not deployment. Until the separately approved
 runtime restart/materialization step loads the integrated revision, the running
-server retains its previously loaded behavior and the four alerts must not be
+server retains its previously loaded behavior and the three alerts must not be
 used as proof that the adapter is active.
 
 The following boundary remains mandatory:

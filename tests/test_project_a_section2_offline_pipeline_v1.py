@@ -27,7 +27,7 @@ def _sources():
         "xau_htf": item("xau_htf", 9333, "pNqcbOmu", ("4H", "D", "W")),
         "dxy_15m": item("dxy_15m", 9333, "n9qjfufV", ("15m",), "DXY", "TVC"),
         "dxy_1m": item("dxy_1m", 9222, "ocVwlz2C", ("1m",), "DXY", "TVC"),
-        "renko": item("renko", 9222, "paH6jur7", ("RENKO",)),
+        "renko": item("renko", 9333, "YclFo8Ax", ("5s",)),
     }
 
 
@@ -152,7 +152,7 @@ def test_e2_composes_the_complete_offline_request_chain():
     assert result.make_sense_request.final_trade_direction is None
     assert result.evidence_bundle_request.trigger.level is RequestLevel.FULL_B_TO_A_CAPTURE
     assert {request.source.layout_id for request in result.evidence_bundle_request.structured_reads} >= {
-        "cpPWuLlN", "avpCVaw2", "pNqcbOmu", "n9qjfufV", "ocVwlz2C", "paH6jur7",
+        "cpPWuLlN", "avpCVaw2", "pNqcbOmu", "n9qjfufV", "ocVwlz2C", "YclFo8Ax",
     }
     assert len(result.evidence_bundle_request.screenshot_requests) == 5
     assert result.final_review_request is not None
@@ -230,11 +230,12 @@ def test_versioned_producer_contract_fixture_parses_without_ambiguous_price():
     assert fixture["fixture_schema"] == "project_a.section2_producer_fixture/1.0"
     parsed = [parse_numeric_event(event) for event in fixture["events"]]
     assert [event.event for event in parsed] == [
-        "EXP_UP", "EXP_QUALITY_UPDATE", "LIQ_TOUCH", "RENKO_E1", "RENKO_E2", "RENKO_MAIN", "RENKO_FIRE",
+        "EXP_UP", "LIQ_TOUCH", "RENKO_E1", "RENKO_E2", "RENKO_MAIN", "RENKO_FIRE",
     ]
-    assert [event["producer_id"] for event in fixture["events"][:2]] == ["EXP_V3", "EXP_SCANNER"]
+    assert {event["producer_id"] for event in fixture["events"]} == {
+        "LIQ_V2", "EXP_V3", "RENKO_V3_SNIPER",
+    }
     assert fixture["events"][0]["body_quality"] is None
-    assert fixture["events"][1]["path_efficiency"] is None
-    assert parsed[2].data["level_id"] == fixture["expected_liquidity_level_id"]
+    assert parsed[1].data["level_id"] == fixture["expected_liquidity_level_id"]
     assert all("price" not in event for event in fixture["events"])
     assert all("trade_direction" not in event for event in fixture["events"])

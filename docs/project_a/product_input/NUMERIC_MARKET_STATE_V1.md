@@ -183,11 +183,12 @@ BREAK, A, GO or trade direction.
 | `expansion_source_trigger` | enum | `EXP_UP`, `EXP_DOWN`, or `NONE` |
 | `expansion_signal_price` | decimal/QUOTE | V3 close after normalization |
 
-Every V3/Scanner internal numeric output that lacks a producer field remains
+Every V3 or dormant-Scanner-compatibility internal numeric output that lacks a producer field remains
 `MISSING_REQUIRES_PRODUCER_CHANGE`; downstream code must not reconstruct it from
 screenshots.
 
-Scanner producer events are stored in `scanner_quality_evidence`, not in the
+Dormant compatibility Scanner events, if received, are stored in
+`scanner_quality_evidence`, not in the
 directional `expansion_history`. Pairing is deterministic only when exactly one
 `EXP_V3` event shares symbol, feed, timeframe, source-bar time and movement
 direction context. Receipt order is not part of the key. A match is

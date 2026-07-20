@@ -33,7 +33,8 @@ in `MAKE_SENSE_STATE_MACHINE_V1.md`, `LIQUIDITY_DISTANCE_POLICY_V1.md` and
 | 9333 | `avpCVaw2` | `3A1DA8E727112BD7F13732B3A8732DFE` | `g5_30m`; ICMARKETS:XAUUSD 30m/15m; standard MACD 12/26/9 |
 | 9333 | `pNqcbOmu` | `1E5C0F56E8154C894E36377A6B7A7C0C` | `g6_HTF`; ICMARKETS:XAUUSD 4H/D/W |
 | 9333 | `n9qjfufV` | `3818934C8C5F18141069CF3E7ABAB8E7` | `g7_DXY`; TVC:DXY 15m |
-| 9222 | `paH6jur7` | `ACF2304D2914588BDCBED4238C692328` | `g2_renko_wma_15m`; proposed Renko V3 source must be materialized and independently validated before use |
+| 9333 | `YclFo8Ax` | `4AC3605E3001EE617822C29430967D4E` | ICMARKETS:XAUUSD 5s standard candles; exact Renko V3 Sniper host; target must be rebound after restart |
+| 9222 | `paH6jur7` | `ACF2304D2914588BDCBED4238C692328` | Existing native-Renko/reference layout; not the Renko V3 Sniper host |
 | 9222 | `ocVwlz2C` | `4D5DE25E24A09C8E51585147B624D85A` | `g3_dxy1m_xau15s`; TVC:DXY 1m supplemental evidence |
 
 CDP target IDs may change after a Chrome restart. A read-only preflight must bind
@@ -65,7 +66,7 @@ One bounded bundle requires these exact visual artifacts:
 2. `9333/avpCVaw2`: XAUUSD 30m and 15m with readable standard MACD panes.
 3. `9333/pNqcbOmu`: XAUUSD 4H/D/W big-picture structure.
 4. `9333/n9qjfufV`: TVC:DXY 15m.
-5. `9222/paH6jur7`: the validated Renko V3/Sniper chart.
+5. `9333/YclFo8Ax`: the validated ICMARKETS:XAUUSD 5s standard-candle Renko V3/Sniper chart.
 
 The 9222 DXY 1m layout is a required structured supplemental read but needs a
 screenshot only when a DXY 1m transition materially affects review. SR MTF Pro
@@ -93,7 +94,8 @@ At candidate time `T`, the bundle must include:
 - the locked Liquidity `level_id`/`level_version`, full seven-key selection
   tuple, selection time/reason, canonical candidate snapshot and every excluded
   or secondary candidate;
-- Renko E1/E2/Main/FIRE state and event lineage from the validated 9222 candidate;
+- Renko E1/E2/Main/FIRE state and event lineage from the validated
+  `9333/YclFo8Ax` 5s standard-candle candidate;
   and
 - every missing producer field explicitly listed as
   `MISSING_REQUIRES_PRODUCER_CHANGE`.
