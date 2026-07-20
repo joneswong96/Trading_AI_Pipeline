@@ -14,6 +14,28 @@ This record approves Product Input authority and policy. It does not declare any
 indicator, Pine producer, chart layout, CDP adapter, AI provider or external
 writer runtime-active.
 
+## 0. Controlled materialization correction
+
+Jones Wong explicitly approved one controlled materialization on 2026-07-20,
+as recorded in `MATERIALIZATION_APPROVAL_V1.md`. The corrected alert limit is
+exactly four new Project A alerts:
+
+- `Project A V1 — LIQ_V2 JSON`
+- `Project A V1 — EXP_V3 JSON`
+- `Project A V1 — EXP_SCANNER JSON`
+- `Project A V1 — RENKO_V3 JSON`
+
+Expansion V3 and Expansion Scanner remain separate Pine producers but form one
+logical Expansion Evidence family, not two directional votes. Scanner evidence
+is quality-only and must be correlated using factual identity fields. Unpaired
+Scanner evidence is context-only and cannot independently wake, promote, call
+AI, notify or act. The two existing legacy alerts remain protected, no source
+combination is required, and no fifth Project A alert is authorized.
+
+This correction authorizes only the bounded runtime, private-Pine, layout and
+four-alert work in that approval. It does not weaken the SHADOW/no-live boundary
+or authorize synthetic events, providers, outputs, MT5, brokers or orders.
+
 ## 1. Approved authorities
 
 1. **Liquidity:** `Liquidity Levels V2 — 5m Body × MTF Confluence`, owner
@@ -195,7 +217,8 @@ The following remain unapproved and fail closed:
 - exact structure/range algorithm;
 - exact nearest-obstacle calculation;
 - trusted bid/ask/spread and point-size authority;
-- production TradingView layout materialization;
+- production TradingView layout materialization beyond the bounded approval in
+  `MATERIALIZATION_APPROVAL_V1.md`;
 - Pine producer changes;
 - provider runtime activation;
 - a real SHADOW model call; and
@@ -209,9 +232,12 @@ This approval does not authorize:
 - an AI-provider call or provider credential change;
 - MT5 connection or output;
 - Telegram, Notion, webhook or other external writer activation;
-- TradingView alert creation, modification or test triggering;
-- Pine modification, save, publication or producer implementation;
-- TradingView indicator/layout materialization;
+- TradingView alert creation beyond the exact four-alert approval, any legacy
+  alert modification, or any test triggering;
+- Pine modification, public publication or producer implementation; private
+  candidate saves are limited to `MATERIALIZATION_APPROVAL_V1.md`;
+- TradingView indicator/layout materialization beyond the bounded approval in
+  `MATERIALIZATION_APPROVAL_V1.md`;
 - runtime, schema, fixture, test or configuration changes; or
 - use of port 4999 as production evidence.
 

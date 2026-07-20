@@ -96,8 +96,14 @@ producer, schema, adapter, provider or writer.
 - [ ] Approve an exact structure/range algorithm. **Pending; fail closed.**
 - [ ] Approve an exact nearest-obstacle calculation. **Pending; fail closed.**
 - [ ] Approve a trusted bid/ask/spread authority. **Pending; unavailable.**
-- [ ] Approve production TradingView layout materialization, including Renko V3
-      Sniper. **Pending; `SAVED_NOT_MATERIALIZED`.**
+- [x] Approve one controlled production TradingView layout materialization,
+      including Renko V3 Sniper, under `MATERIALIZATION_APPROVAL_V1.md`.
+- [x] Approve exactly four new Project A alerts: `LIQ_V2`, `EXP_V3`,
+      `EXP_SCANNER`, and `RENKO_V3`. Expansion V3 and Scanner remain separate
+      producers in one logical Expansion Evidence family, not two directional
+      votes. Scanner alone cannot wake, promote, call AI, notify or act;
+      correlation failure leaves it unpaired/context-only. The two existing
+      legacy alerts remain protected, and no fifth Project A alert is authorized.
 - [ ] Approve Pine producer changes for missing Liquidity, Expansion and Renko
       numeric/event fields. **Pending; `PENDING_PRODUCER_CHANGE`.**
 - [ ] Approve provider runtime activation. **Pending; disabled.**
@@ -111,8 +117,9 @@ producer, schema, adapter, provider or writer.
 - [x] Preserve `live_execution=false`, `order_placed=false`, and
       `writer_enablement=DISABLED`.
 - [x] Confirm this approval does not authorize live broker execution, real-account
-      orders, a provider call, MT5 connection, TradingView alert creation, Pine
-      publication, runtime materialization or credential creation.
+      orders, a provider call, MT5 connection, Pine publication or credential
+      creation. TradingView alert creation and runtime materialization are
+      limited to the exact bounded actions in `MATERIALIZATION_APPROVAL_V1.md`.
 
 ## 7. Legacy/reference disposition
 
