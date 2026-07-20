@@ -10,7 +10,7 @@ import base64
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation, localcontext
 from pathlib import Path
 from types import MappingProxyType
@@ -64,8 +64,8 @@ _RENKO_STAGE = {
     "RENKO_E2": "E2",
     "RENKO_MAIN": "MAIN",
     "RENKO_FIRE": "FIRE",
-    "RENKO_RESET": "NONE",
-    "RENKO_INVALIDATED": "NONE",
+    "RENKO_RESET": "RESET",
+    "RENKO_INVALIDATED": "INVALIDATED",
 }
 _RENKO_RANK = {"NONE": 0, "E1": 1, "E2": 2, "MAIN": 3, "FIRE": 4}
 _ZONE_RANK = {"NEAR_TOUCH": 0, "APPROACH": 1, "FAR": 2}
@@ -214,7 +214,27 @@ def _decimal(value: Any, field: str, *, positive: bool = False, nonnegative: boo
     return result
 
 
+def _optional_decimal(
+    obj: Mapping[str, Any],
+    field: str,
+    *,
+    positive: bool = False,
+    nonnegative: bool = False,
+) -> Decimal | None:
+    value = obj.get(field)
+    if value is None:
+        return None
+    return _decimal(value, field, positive=positive, nonnegative=nonnegative)
+
+
 def _timestamp(value: Any, field: str) -> datetime:
+    if isinstance(value, int) and not isinstance(value, bool):
+        if value < 0:
+            _fail("INVALID_TIMESTAMP", field, "epoch milliseconds must be non-negative")
+        try:
+            return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(milliseconds=value)
+        except (OverflowError, ValueError):
+            _fail("INVALID_TIMESTAMP", field, "epoch milliseconds are outside the supported range")
     text = _text(value, field)
     if not text.endswith("Z"):
         _fail("INVALID_TIMESTAMP", field, "must be UTC RFC 3339 ending in Z")
@@ -453,13 +473,32 @@ def _canonicalize_expansion(obj: Mapping[str, Any], data: dict[str, Any]) -> Non
     expected = "UP" if data["event"] == "EXP_UP" else "DOWN" if data["event"] == "EXP_DOWN" else None
     if expected and direction != expected:
         _fail("DIRECTION_EVENT_MISMATCH", "direction", f"{data['event']} requires {expected}")
-    quality = _text(_required(obj, "quality"), "quality", upper=True)
-    if quality not in {"CLEAN", "WEAK"}:
-        _fail("INVALID_QUALITY", "quality", "must be CLEAN or WEAK")
-    path_efficiency = _decimal(_required(obj, "path_efficiency"), "path_efficiency", nonnegative=True)
-    body_quality = _decimal(_required(obj, "body_quality"), "body_quality", nonnegative=True)
-    if path_efficiency > 1 or body_quality > 1:
+    directional = data["event"] in {"EXP_UP", "EXP_DOWN"}
+    quality = None if obj.get("quality") is None else _text(obj["quality"], "quality", upper=True)
+    if quality is not None and quality not in {"CLEAN", "WEAK"}:
+        _fail("INVALID_QUALITY", "quality", "must be CLEAN or WEAK when source evidence exists")
+    path_efficiency = (
+        _decimal(_required(obj, "path_efficiency"), "path_efficiency", nonnegative=True)
+        if directional
+        else _optional_decimal(obj, "path_efficiency", nonnegative=True)
+    )
+    body_quality = (
+        _optional_decimal(obj, "body_quality", nonnegative=True)
+        if directional
+        else _decimal(_required(obj, "body_quality"), "body_quality", nonnegative=True)
+    )
+    if (path_efficiency is not None and path_efficiency > 1) or (
+        body_quality is not None and body_quality > 1
+    ):
         _fail("NUMBER_OUT_OF_RANGE", "quality_ratio", "quality ratios must be between zero and one")
+    opposing_bars = (
+        None if obj.get("opposing_bars") is None else _integer(obj["opposing_bars"], "opposing_bars")
+    )
+    if not directional and opposing_bars is None:
+        _fail("MISSING_REQUIRED_FIELD", "opposing_bars", "scanner quality evidence requires opposing bars")
+    too_extended = None if obj.get("too_extended") is None else _boolean(obj["too_extended"], "too_extended")
+    if not directional and too_extended is None:
+        _fail("MISSING_REQUIRED_FIELD", "too_extended", "scanner quality evidence requires extension status")
     data.update(
         {
             "timeframe": _timeframe(_required(obj, "timeframe"), "timeframe"),
@@ -471,10 +510,10 @@ def _canonicalize_expansion(obj: Mapping[str, Any], data: dict[str, Any]) -> Non
             "atr_multiple": _decimal(_required(obj, "atr_multiple"), "atr_multiple", nonnegative=True),
             "path_efficiency": path_efficiency,
             "body_quality": body_quality,
-            "opposing_bars": _integer(_required(obj, "opposing_bars"), "opposing_bars"),
+            "opposing_bars": opposing_bars,
             "age_bars": _integer(_required(obj, "age_bars"), "age_bars"),
             "quality": quality,
-            "too_extended": _boolean(_required(obj, "too_extended"), "too_extended"),
+            "too_extended": too_extended,
         }
     )
 
@@ -484,29 +523,45 @@ def _canonicalize_renko(obj: Mapping[str, Any], data: dict[str, Any]) -> None:
     supplied_stage = _text(_required(obj, "stage"), "stage", upper=True)
     if supplied_stage == "SNIPER_FIRE":
         supplied_stage = "FIRE"
+    if supplied_stage == "NONE" and stage in {"RESET", "INVALIDATED"}:
+        supplied_stage = stage
     if supplied_stage != stage:
         _fail("STAGE_EVENT_MISMATCH", "stage", f"{data['event']} requires {stage}")
     direction = _text(_required(obj, "direction"), "direction", upper=True)
-    allowed = {"NONE"} if stage == "NONE" else {"UP", "DOWN"}
+    allowed = {"NONE", "UP", "DOWN"} if stage in {"RESET", "INVALIDATED"} else {"UP", "DOWN"}
     if direction not in allowed:
         _fail("INVALID_MOVEMENT_DIRECTION", "direction", f"must be one of {sorted(allowed)}")
+    cycle_id = obj.get("cycle_id", obj.get("cycle_identity"))
     data.update(
         {
             "timeframe": _timeframe(_required(obj, "timeframe"), "timeframe"),
             "stage": stage,
             "direction": direction,
             "event_sequence": _integer(_required(obj, "event_sequence"), "event_sequence"),
-            "cycle_id": None if obj.get("cycle_id") is None else _text(obj["cycle_id"], "cycle_id"),
-            "signal_price": None if stage == "NONE" and obj.get("signal_price") is None else _decimal(_required(obj, "signal_price"), "signal_price", positive=True),
+            "cycle_id": None if cycle_id is None else _text(cycle_id, "cycle_id"),
+            "signal_price": (
+                None
+                if stage in {"RESET", "INVALIDATED"} and obj.get("signal_price") is None
+                else _decimal(_required(obj, "signal_price"), "signal_price", positive=True)
+            ),
         }
     )
     for age_field in ("e1_age_bars", "e2_age_bars", "main_age_bars"):
         data[age_field] = None if obj.get(age_field) is None else _integer(obj[age_field], age_field)
     if stage == "FIRE":
+        score = _decimal(_required(obj, "score"), "score", nonnegative=True)
+        if score > 100:
+            _fail("NUMBER_OUT_OF_RANGE", "score", "score must be between zero and 100")
+        power_value = _required(obj, "power")
+        power = (
+            _text(power_value, "power")
+            if isinstance(power_value, str)
+            else _decimal(power_value, "power", nonnegative=True)
+        )
         data.update(
             {
-                "score": _integer(_required(obj, "score"), "score", maximum=100),
-                "power": _text(_required(obj, "power"), "power"),
+                "score": score,
+                "power": power,
                 "mode": _text(_required(obj, "mode"), "mode"),
                 "transfer": _text(_required(obj, "transfer"), "transfer"),
                 "fire_reason_components": _freeze(_required(obj, "fire_reason_components")),
@@ -856,7 +911,7 @@ class NumericMarketState:
                     renko_stages.clear()
                 if cycle is not None:
                     renko_cycle = str(cycle)
-                if event.data["stage"] == "NONE":
+                if event.data["stage"] in {"RESET", "INVALIDATED"}:
                     renko_stages.clear()
                 elif event.confirmed and event.freshness_status == "FRESH":
                     renko_stages.add(str(event.data["stage"]))

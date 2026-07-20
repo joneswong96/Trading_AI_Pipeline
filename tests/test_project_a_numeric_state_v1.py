@@ -284,6 +284,47 @@ def test_versioned_expansion_and_renko_events_parse(factory, family, event):
     assert parsed.confirmed is True and parsed.freshness_status == "FRESH"
 
 
+def test_exact_pine_epoch_milliseconds_and_source_specific_expansion_nulls_parse():
+    v3 = _exp()
+    v3.update(
+        source_bar_time=1752973260000,
+        emitted_at=1752973260123,
+        producer_id="EXP_V3",
+        body_quality=None,
+        opposing_bars=None,
+        quality=None,
+        too_extended=None,
+    )
+    scanner = _exp(event_id="scanner-quality", event="EXP_QUALITY_UPDATE")
+    scanner.update(
+        source_bar_time=1752973260000,
+        emitted_at=1752973260123,
+        producer_id="EXP_SCANNER",
+        producer_revision="6",
+        path_efficiency=None,
+    )
+    parsed_v3 = parse_numeric_event(v3)
+    parsed_scanner = parse_numeric_event(scanner)
+    assert parsed_v3.source_bar_time.isoformat() == "2025-07-20T01:01:00+00:00"
+    assert parsed_v3.data["body_quality"] is None
+    assert parsed_scanner.data["path_efficiency"] is None
+
+
+def test_exact_pine_renko_numeric_power_cycle_alias_and_reset_semantics_parse():
+    fire = _renko("FIRE")
+    fire.pop("cycle_id")
+    fire.update(cycle_identity="RENKO|XAUUSD|5S|DOWN|1752973260000", power=Decimal("0.875"))
+    parsed_fire = parse_numeric_event(fire)
+    assert parsed_fire.data["cycle_id"] == fire["cycle_identity"]
+    assert parsed_fire.data["power"] == Decimal("0.875")
+
+    reset = _renko("RESET")
+    reset.update(stage="RESET", direction="DOWN", signal_price="3400.25")
+    parsed_reset = parse_numeric_event(reset)
+    assert parsed_reset.data["stage"] == "RESET"
+    assert parsed_reset.data["direction"] == "DOWN"
+
+
 @pytest.mark.parametrize(
     ("mutation", "code"),
     [
