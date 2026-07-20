@@ -95,7 +95,32 @@ Every authority has approval standing
   notifies exactly once; persistent A, retries, duplicate FIRE events and process
   restarts do not create duplicates.
 
-## 5. Approved SHADOW/no-live boundary
+## 5. Approved freshness policy
+
+`FRESHNESS_POLICY_V1.md` is approved with statuses `FRESH`, `AGING`, `STALE`,
+`MARKET_CLOSED`, `MISSING`, `CLOCK_INVALID`, `SOURCE_UNAVAILABLE`, and
+`PROVISIONAL`. `AGING` begins at 75% of the maximum and is never relabeled
+`FRESH`. Freshness remains separate from signal validity/TTL.
+
+Approved maximum ages are XAU current 10 seconds, DXY current 30 seconds, 5s
+execution 15 seconds, 15s supplemental 45 seconds, and closed bars: 1m 120, 5m
+420, 15m 1,200, 30m 2,400, 1H 5,400, 4H 18,000, Daily 108,000, and Weekly
+691,200 seconds. Event transport is promotion-eligible through 30 seconds,
+late/non-promoting above 30 through 120 seconds, and stale above 120 seconds.
+
+Capture must complete within 45 seconds; XAU current age at completion is at most
+15 seconds, 1m age at most 120 seconds, screenshot/read skew at most 30 seconds,
+9333/9222 skew at most 30 seconds, and future clock skew at most 10 seconds.
+Final GO requires Sniper FIRE receipt age at most 15 seconds, XAU current age at
+most 10 seconds, and status exactly `FRESH` for matching 1m and 5m evidence.
+
+Critical stale/missing/clock-invalid/source-unavailable/market-closed evidence
+blocks A and GO. Critical provisional evidence cannot establish A or GO. Stale
+or missing DXY, 15m/30m MACD, or 4H/D/W structure caps grade at B without
+reversing direction. Market-closed history is context carry-forward only and
+cannot promote a setup. AI cannot override deterministic freshness.
+
+## 6. Approved SHADOW/no-live boundary
 
 The existing boundary remains mandatory:
 
@@ -107,11 +132,10 @@ The existing boundary remains mandatory:
 
 Authority approval cannot weaken these values or activate an output.
 
-## 6. Pending decisions
+## 7. Pending decisions
 
 The following remain unapproved and fail closed:
 
-- exact freshness thresholds per timeframe;
 - exact Liquidity near-touch distance;
 - exact Expansion speed formula;
 - exact Expansion exhaustion formula;
@@ -125,7 +149,7 @@ The following remain unapproved and fail closed:
 - a real SHADOW model call; and
 - Telegram, Notion or MT5 Demo output activation.
 
-## 7. Explicitly unauthorized actions
+## 8. Explicitly unauthorized actions
 
 This approval does not authorize:
 

@@ -1,10 +1,10 @@
 # Project A Capture Authority V1
 
-Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE — PENDING_RUNTIME_VALIDATION**
+Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE**
 
-The B-to-A trigger, port roles, hybrid evidence routes, no-fallback rule and
-no-mutation boundary are approved. Exact timeframe freshness thresholds and
-production layout materialization remain pending.
+The B-to-A trigger, port roles, hybrid evidence routes, no-fallback rule,
+no-mutation boundary and `FRESHNESS_POLICY_V1.md` thresholds are approved.
+Production layout materialization remains pending.
 
 Trigger: entry into `B_TO_A_CANDIDATE`
 
@@ -92,29 +92,31 @@ At candidate time `T`, the bundle must include:
 Bid, ask and spread remain unavailable and block any approved gate that requires
 them.
 
-## 6. Freshness and source-bar alignment — pending
+## 6. Freshness and source-bar alignment
 
-Status: **PENDING_RUNTIME_VALIDATION**. The following draft thresholds are not
-approved and cannot activate a gate:
+Every source and artifact is classified under `FRESHNESS_POLICY_V1.md`.
 
-1. Every gate uses the most recent fully closed source bar at or before `T`; no
-   future or still-forming source bar can satisfy a confirmed field.
-2. Intraday delivery lag from expected bar close to trusted receipt must not
-   exceed two source-bar durations: 2 minutes for 1m, 10 minutes for 5m, and 30
-   minutes for 15m. The proposed 30m maximum is 30 minutes, not 60 minutes.
-3. Renko 5s FIRE must be confirmed and received no later than 10 seconds after
-   its source-bar close. E1/E2/Main age is unavailable until producer event times
-   exist.
-4. 4H/D/W freshness is calendar-aware and requires the latest closed TradingView
-   bar expected for the feed session, rather than a raw wall-clock age alone.
-5. All records must satisfy `source_bar_time <= observed_at <= received_at`, apart
-   from a separately approved clock-skew tolerance. No tolerance is assumed here.
-6. The 1m, 5m, 15m and 30m bars need not share one timestamp, but each must be the
-   latest confirmed bar at or before the same capture time `T`. The manifest
-   records `T` and every individual bar identity.
-
-These exact thresholds remain pending Jones approval. Until approved and
-implemented, freshness-dependent capture and promotion fail closed.
+1. Every confirmed gate uses the most recent fully closed source bar at or before
+   capture time `T`. A developing bar is `PROVISIONAL`.
+2. `source_bar_time` declares `OPEN` or `CLOSE`; closed-bar age uses
+   `source_bar_close_time`.
+3. Maximum closed-bar ages are 120 seconds (1m), 420 seconds (5m), 1,200 seconds
+   (15m), 2,400 seconds (30m), 5,400 seconds (1H), 18,000 seconds (4H), 108,000
+   seconds (Daily), and 691,200 seconds (Weekly).
+4. One capture operation must complete within 45 seconds. At bundle completion,
+   XAU current-observation age is at most 15 seconds and 1m structured age is at
+   most 120 seconds.
+5. Screenshot-to-corresponding-structured-read skew is at most 30 seconds. The
+   maximum 9333-versus-9222 observation-time skew is 30 seconds.
+6. Future local/source skew is at most 10 seconds. A timestamp further in the
+   future or impossible ordering is `CLOCK_INVALID`; negative durations are
+   forbidden.
+7. The 1m, 5m, 15m and 30m bars need not share one timestamp, but each must be
+   the latest eligible bar at or before `T`. The manifest records all timestamp
+   bases and actual freshness statuses.
+8. The 15-second bundle XAU allowance does not relax the final GO requirement:
+   GO requires XAU age at most 10 seconds, Sniper FIRE receipt age at most 15
+   seconds, and status exactly `FRESH` for matching 1m and 5m evidence.
 
 ## 7. Bundle integrity
 
@@ -140,11 +142,16 @@ are deployment configuration, not evidence identity.
   story does not advance.
 - Optional DXY 1m evidence may be unavailable without substituting 15m or another
   port; its absence is explicit and may lower confidence under approved policy.
-- During a weekend or known market closure, old bars are classified
-  `MARKET_CLOSED_STALE`. A diagnostic bundle may be created for read-path testing,
-  but it cannot trigger final review, `A_CONFIRMED`, or notification.
-- On market reopen, each required intraday timeframe must first produce a fresh
-  fully closed bar. Pre-open bars are not carried forward as fresh evidence.
+- During a deterministically known weekend or market/feed closure, current values
+  are `MARKET_CLOSED`. A diagnostic bundle may retain historical bars only as
+  `CONTEXT_CARRY_FORWARD`; it cannot promote B-to-A, A, waiting-entry, final
+  review or notification.
+- No full holiday calendar is defined here. Until a separately approved
+  deterministic market-open source exists, missing expected bars plus unavailable
+  current values fail closed as `SOURCE_UNAVAILABLE` rather than guessed closure.
+- On reopen, require a new current observation, a new confirmed 1m closed bar and
+  successful source health/freshness verification. Pre-closure setups are not
+  automatically revived.
 
 ## 9. Restoration and no-mutation rules
 

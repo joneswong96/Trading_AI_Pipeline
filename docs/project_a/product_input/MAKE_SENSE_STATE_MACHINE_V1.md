@@ -2,9 +2,10 @@
 
 Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE**
 
-The state family, qualitative maturity mapping, B-to-A capture trigger and
-exactly-once concept are approved. Numeric freshness, near-touch, speed,
-exhaustion, E1/E2 TTL and structure rules remain pending and fail closed.
+The state family, qualitative maturity mapping, B-to-A capture trigger,
+exactly-once concept and `FRESHNESS_POLICY_V1.md` thresholds are approved.
+Near-touch, speed, exhaustion, E1/E2 TTL and structure rules remain pending and
+fail closed.
 
 Purpose: build a deterministic numeric whole-picture story before final review or
 notification. This document does not activate a runtime transition.
@@ -17,6 +18,8 @@ notification. This document does not activate a runtime transition.
   creates, repairs or suppresses a source fact.
 - All required evidence must identify its authority, source bar, confirmation
   status and freshness.
+- Freshness is evaluated exactly under `FRESHNESS_POLICY_V1.md`; it never extends
+  or replaces signal validity/TTL.
 - Port or layout mismatch, stale required evidence, unresolved conflicting
   evidence, missing bundle integrity, or missing risk geometry fails closed.
 - DXY is evidence/grade-cap logic, not a universal veto.
@@ -66,8 +69,11 @@ All of the following are required:
    not a prerequisite.
 4. Confirmed 1m MACD has weakening or flip evidence compatible with the intended
    reaction.
-5. Liquidity, expansion, MACD, DXY, Renko and structure inputs needed for review
-   are fresh and lineage-complete.
+5. Critical candidate inputs are within their approved maximum ages, retain their
+   actual freshness status, and are lineage-complete. Context status is recorded;
+   stale or missing DXY, 15m/30m MACD or 4H/D/W structure does not reverse or
+   silently block the candidate, but it caps the final grade at B. `AGING` is
+   never relabeled `FRESH`.
 6. No deterministic invalidation exists.
 
 Entering this state is the only V1 production capture trigger.
@@ -82,20 +88,22 @@ All of the following are required:
 4. Confirmed 1m MACD supports the intended direction.
 5. Renko Main is confirmed in that direction.
 6. DXY is `CONFIRM` or `NEUTRAL`, or any conflict is below the approved material
-   conflict threshold. There is no universal DXY veto.
+   conflict threshold. Stale or missing DXY caps grade at B, so it cannot support
+   grade-A confirmation. There is no universal DXY veto.
 7. `entry_price`, `stop_loss_price`, `take_profit_price`, invalidation rule and
    `valid_until` are complete and valid.
 8. The complete evidence bundle passes identity, freshness, alignment and hash
    integrity checks.
 
-A matching, fresh Sniper FIRE may enter `A_CONFIRMED` directly from
-`B_TO_A_CANDIDATE`. Without it, an otherwise A-eligible result enters
+A matching confirmed Sniper FIRE with receipt age no greater than 15 seconds may
+enter `A_CONFIRMED` directly from `B_TO_A_CANDIDATE` when the XAU, 1m, 5m and
+bundle GO gates also pass. Without it, an otherwise A-eligible result enters
 `WAITING_5S_ENTRY`.
 
 ### `WAITING_5S_ENTRY`
 
-The whole-picture thesis and Renko Main satisfy the A requirements, but a fresh
-matching Sniper FIRE has not yet arrived.
+The whole-picture thesis and Renko Main satisfy the A requirements, but an
+eligible matching Sniper FIRE has not yet arrived.
 
 The state output must contain:
 
@@ -132,8 +140,8 @@ current setup ID.
 | `B_BUILDING` | `C_INSUFFICIENT` | Non-terminal evidence becomes incomplete or stale |
 | `B_TO_A_CANDIDATE` | `B_BUILDING` | Reaction/maturity evidence weakens but setup remains valid and fresh |
 | `B_TO_A_CANDIDATE` | `WAITING_5S_ENTRY` | Final verdict/grade, reaction, 1m, Main, DXY, geometry and bundle all pass; matching FIRE absent |
-| `B_TO_A_CANDIDATE` | `A_CONFIRMED` | Same A gates pass and a fresh matching FIRE is already bound |
-| `WAITING_5S_ENTRY` | `A_CONFIRMED` | A new, confirmed, fresh matching Sniper FIRE arrives before cancellation/expiry |
+| `B_TO_A_CANDIDATE` | `A_CONFIRMED` | Same A gates pass and an eligible matching FIRE is already bound |
+| `WAITING_5S_ENTRY` | `A_CONFIRMED` | A new confirmed matching Sniper FIRE arrives within 15 seconds and all final GO freshness gates pass |
 | Any non-terminal state | `INVALIDATED` | Deterministic invalidation or integrity failure |
 | Any non-terminal state | `EXPIRED` | Approved expiry or freshness limit elapses |
 | `INVALIDATED` or `EXPIRED` | `NO_STORY` | A new setup ID begins; prior history remains immutable |
@@ -154,7 +162,29 @@ requires a new setup ID.
 - A transition stores the exact predecessor state ID and the evidence record IDs
   that caused it.
 
-## 5. Direction semantics
+## 5. Freshness and market-closed effects
+
+- `STALE`, `MISSING`, `CLOCK_INVALID`, `SOURCE_UNAVAILABLE`, or
+  `MARKET_CLOSED` critical evidence blocks `A_CONFIRMED`, GO, every writer and
+  every order action. `PROVISIONAL` critical evidence also cannot establish A or
+  GO.
+- Before an actionable candidate, transient missing/source-unavailable evidence
+  yields `C_INSUFFICIENT`. A setup that loses temporal validity becomes
+  `EXPIRED`; deterministic identity, clock or integrity failure may instead be
+  `INVALIDATED`. The transition records the exact authority and reason.
+- `AGING` remains usable only for gates expressed as maximum-age checks. A gate
+  that explicitly requires `FRESH` rejects it.
+- Stale or missing DXY, 15m/30m MACD, or 4H/D/W structure caps final grade at B;
+  it does not reverse direction. SR MTF visual context cannot override structured
+  evidence.
+- During `MARKET_CLOSED`, there is no B-to-A, A, waiting-entry, GO, provider
+  review for a new actionable setup, or writer action. Historical bars are
+  `CONTEXT_CARRY_FORWARD` only.
+- Reopen requires a new current observation, a new confirmed 1m closed bar and
+  source health/freshness verification. A pre-closure setup is never
+  automatically revived.
+
+## 6. Direction semantics
 
 The intended trade direction is the reaction direction away from the relevant
 liquidity level, not automatically the direction of the incoming expansion.

@@ -2,9 +2,9 @@
 
 Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE**
 
-The authority composition and field semantics are approved. Exact freshness
-thresholds, producer changes, runtime validation and executable schema work remain
-pending and fail closed.
+The authority composition, field semantics and exact freshness thresholds in
+`FRESHNESS_POLICY_V1.md` are approved. Producer changes, runtime validation and
+executable schema work remain pending and fail closed.
 
 This document defines a data contract, not an executable JSON Schema or producer.
 
@@ -42,18 +42,32 @@ This document defines a data contract, not an executable JSON Schema or producer
 | `authority_id` | string | ID from `PRODUCT_INPUT_AUTHORITY.md` |
 | `source_revision` | string/null | Pine saved revision or built-in/settings identity |
 | `source_sha256` | string/null | Lower-case SHA-256 when available |
+| `source_observed_at` | timestamp/null | Source/producer observation or event time; receipt time cannot replace it |
 | `observed_at` | timestamp | When the bounded observation was taken |
-| `source_bar_time` | timestamp | Time identity of the source bar used |
+| `source_bar_time` | timestamp | Source bar identity; semantics must be explicitly `OPEN` or `CLOSE` |
+| `source_bar_time_semantics` | enum | `OPEN` or `CLOSE` |
+| `source_bar_close_time` | timestamp/null | Actual or approved deterministic close time used for closed-bar age |
+| `source_bar_close_time_derived` | boolean | True only when derived from an approved timeframe/session rule |
 | `received_at` | timestamp | Local trusted receipt time |
+| `capture_started_at` | timestamp/null | Trusted bounded-capture start time |
+| `capture_completed_at` | timestamp/null | Trusted bounded-capture completion time |
+| `trusted_now_utc` | timestamp | Trusted UTC evaluation time |
 | `confirmation_status` | enum | `CONFIRMED` or `PROVISIONAL` |
 | `confirmed` | boolean | True only when source-specific close rules pass |
-| `freshness_status` | enum | `FRESH`, `STALE`, `MARKET_CLOSED_STALE`, `FUTURE`, `UNKNOWN` |
-| `freshness_age_seconds` | seconds | `received_at - source_bar_time`, calendar-aware for classification |
+| `freshness_status` | enum | `FRESH`, `AGING`, `STALE`, `MARKET_CLOSED`, `MISSING`, `CLOCK_INVALID`, `SOURCE_UNAVAILABLE`, or `PROVISIONAL` |
+| `freshness_age_seconds` | seconds/null | Non-negative age from the policy-approved timestamp basis |
+| `freshness_maximum_seconds` | seconds/null | Approved maximum for this evidence role |
+| `freshness_aging_boundary_seconds` | seconds/null | Exactly 75% of the approved maximum |
+| `future_skew_seconds` | seconds | Permitted 0–10 second source/local future skew; larger values are `CLOCK_INVALID` |
+| `evidence_usage` | enum | `CURRENT`, `CONTEXT`, or `CONTEXT_CARRY_FORWARD` |
 | `missing_fields` | list | Field names with explicit reason codes; never silently omitted |
 | `errors` | list | Stable code, authority, field, and non-secret diagnostic text |
 
-`observed_at`, `source_bar_time`, and `received_at` are distinct. Client-provided
-receipt time must not override the locally observed receipt time.
+`source_observed_at`, `observed_at`, `source_bar_time`,
+`source_bar_close_time`, and `received_at` are distinct. Client-provided receipt
+time must not override the trusted local receipt time or replace missing source
+time. Closed-bar age uses bar-close time; direct current-observation age uses
+trusted `observed_at`. All calculations use UTC and forbid negative durations.
 
 ## 3. Price-path state
 
@@ -70,9 +84,9 @@ receipt time must not override the locally observed receipt time.
 | `closed_ohlc_by_timeframe` | records/QUOTE | 1m, 5m, 15m, 30m, 4H, D and W as required by the evidence bundle |
 | `price_source_authority_id` | string | Normally `MACD_TV_9333_12_26_9` for 1m–30m and `STRUCTURE_9333_XAU_HTF` for HTF |
 
-Every OHLC record contains timeframe, open/high/low/close, source-bar time,
-confirmation status and freshness. A delta with no valid predecessor is `null`,
-not zero.
+Every OHLC record contains timeframe, open/high/low/close, bar-time semantics,
+source-bar close time, confirmation status and freshness. A delta with no valid
+predecessor is `null`, not zero.
 
 ## 4. Liquidity state
 
@@ -171,8 +185,10 @@ of timeframe states, not a separately guessed score.
 | `dxy_15m_source_bar_time` / `dxy_1m_source_bar_time` | timestamp | Kept separately; no false alignment |
 | `dxy_freshness_status` | enum | Recorded per timeframe |
 
-No DXY value is a universal hard veto. Missing supplemental 1m DXY does not
-replace or invalidate primary 15m DXY, but it is recorded as unavailable.
+No DXY value is a universal hard veto. Missing or stale DXY does not reverse
+direction; it caps final grade at B. Missing supplemental 1m DXY does not replace
+or invalidate primary 15m DXY, and neither route silently substitutes for the
+other.
 
 ## 8. Renko state
 
@@ -292,7 +308,7 @@ setup ID and the resulting state ID.
 - `MISSING_REQUIRES_PRODUCER_CHANGE` means the selected source cannot currently
   expose the field; retries alone cannot cure it.
 - `SOURCE_UNAVAILABLE`, `IDENTITY_MISMATCH`, `STALE_SOURCE_BAR`,
-  `FUTURE_SOURCE_BAR`, `UNIT_AMBIGUOUS`, `NON_FINITE_VALUE`, and
+  `CLOCK_INVALID`, `MARKET_CLOSED`, `UNIT_AMBIGUOUS`, `NON_FINITE_VALUE`, and
   `CONFIRMATION_REQUIRED` are distinct fail-closed conditions.
 - Partial state may support `C_INSUFFICIENT`; it may not be promoted to a higher
   story state when a required gate is missing.

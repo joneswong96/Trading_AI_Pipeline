@@ -57,7 +57,9 @@ producer, schema, adapter, provider or writer.
 - [x] Approve no silent fallback between ports, layouts, targets, timeframes or
       sources. Target rebinding after restart requires explicit identity
       verification.
-- [ ] Approve exact freshness thresholds per timeframe. **Pending; fail closed.**
+- [x] Approve `FRESHNESS_POLICY_V1.md`: exact maximum ages, 75% `AGING`
+      boundary, event/capture/clock-skew limits, critical/context effects,
+      market-closed handling and final 5s timing requirements.
 
 ## 4. Approved maturity and notification decisions
 

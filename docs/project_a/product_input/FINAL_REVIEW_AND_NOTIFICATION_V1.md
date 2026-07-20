@@ -2,9 +2,10 @@
 
 Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE**
 
-The separate verdict/grade model and exactly-once B-to-A notification concept are
-approved. Provider execution, real SHADOW calls and every external writer remain
-disabled and require separate approval.
+The separate verdict/grade model, exactly-once B-to-A notification concept and
+`FRESHNESS_POLICY_V1.md` thresholds are approved. Provider execution, real
+SHADOW calls and every external writer remain disabled and require separate
+approval.
 
 This contract defines review and notification semantics only. It does not enable
 an AI provider, writer, Telegram, Notion, webhook, broker or order path.
@@ -48,6 +49,7 @@ Every final review result contains:
 | `invalidation_condition` | Deterministic rule and optional `invalidation_level_price` |
 | `valid_until` | UTC timestamp; required for APPROVE/MODIFY |
 | `evidence_references` | Ordered source-event, snapshot, transition and manifest IDs |
+| `freshness_references` | Ordered critical/context freshness results, measured ages and maximums |
 | `missing_fields` / `errors` | Explicit fail-closed records |
 
 The bare field name `price` is forbidden. Geometry uses dimensioned field names.
@@ -63,9 +65,12 @@ An A-grade APPROVE or MODIFY result requires:
 3. Confirmed standard 5m MACD thesis remains valid.
 4. Confirmed standard 1m MACD supports the intended direction.
 5. Confirmed Renko Main matches that direction.
-6. DXY is not materially conflicting under the approved grade-cap policy.
-7. Structure evidence, expansion trigger/quality and all mandatory source
-   identities are present and fresh.
+6. DXY is not materially conflicting under the approved grade-cap policy. Stale
+   or missing DXY caps grade at B rather than reversing direction.
+7. Critical structure, expansion, source identity and timestamp evidence passes
+   `FRESHNESS_POLICY_V1.md`. `STALE`, `MISSING`, `CLOCK_INVALID`,
+   `SOURCE_UNAVAILABLE`, `MARKET_CLOSED`, or critical `PROVISIONAL` evidence
+   cannot establish A.
 8. Capture manifest and every referenced artifact hash validate.
 9. Entry/SL/TP, invalidation and expiry are complete and deterministic.
 10. No required risk field is silently guessed. If an approved spread gate exists
@@ -76,8 +81,8 @@ reviewer may not repair source data.
 
 ## 4. Waiting for the 5s event
 
-When all A requirements except a fresh matching Sniper FIRE pass, the story is
-`WAITING_5S_ENTRY`. Its output repeats:
+When all A requirements except an eligible matching Sniper FIRE pass, the story
+is `WAITING_5S_ENTRY`. Its output repeats:
 
 - the confirmed 5m setup direction;
 - the 1m confirmation status;
@@ -85,9 +90,11 @@ When all A requirements except a fresh matching Sniper FIRE pass, the story is
 - the exact cancellation condition; and
 - `valid_until`.
 
-Only a newly accepted, confirmed, fresh FIRE for the same setup and direction may
-complete the entry transition. An older FIRE cannot be borrowed from another
-setup or from before the candidate transition.
+Only a newly accepted and confirmed FIRE for the same setup and direction with
+receipt age no greater than 15 seconds may complete the entry transition. Final
+GO also requires XAU current-observation age no greater than 10 seconds and
+matching 1m/5m status exactly `FRESH`. An older FIRE cannot be borrowed from
+another setup or from before the candidate transition.
 
 ## 5. Exactly-once B-to-A notification
 
@@ -97,11 +104,13 @@ A notification is eligible only when all conditions are true:
 2. The current final grade is `A`.
 3. Verdict is `APPROVE` or `MODIFY`.
 4. The setup remains valid and unexpired.
-5. The 5m thesis remains valid.
-6. The 1m confirmation is confirmed and matching.
-7. A new, confirmed, fresh Sniper FIRE matches the setup direction.
+5. The 5m thesis remains valid and has status exactly `FRESH`.
+6. The 1m confirmation is confirmed, matching and has status exactly `FRESH`.
+7. A new, confirmed Sniper FIRE matches the setup direction and has receipt age
+   no greater than 15 seconds.
 8. The evidence bundle and final review pass integrity checks.
-9. This semantic transition has not already been notified.
+9. Current XAU observation age is no greater than 10 seconds.
+10. This semantic transition has not already been notified.
 
 The deterministic notification key is the SHA-256 of the notification-contract
 version, setup ID, prior grade, current grade, verdict, final review ID, matching
@@ -123,6 +132,11 @@ A new notification requires all of:
 No delivery channel is authorized by this documentation. Telegram, Notion and
 other external writers remain disabled until separately approved.
 
+During `MARKET_CLOSED`, no new actionable provider review, waiting-entry
+promotion, A confirmation or notification is allowed. AI cannot override stale,
+provisional, missing, clock-invalid, source-unavailable or market-closed
+deterministic evidence.
+
 ## 6. Rejection, expiry and modification behavior
 
 - `REJECT` and `EXPIRED` never generate a B-to-A notification.
@@ -133,6 +147,8 @@ other external writers remain disabled until separately approved.
 - If a source later reconciles provisional evidence into conflicting confirmed
   evidence, append an invalidation/reconciliation record. Never overwrite the
   original review or notification.
+- Stale or missing 15m/30m MACD or 4H/D/W structure caps grade at B. Visual-only
+  SR MTF context cannot override exact structured evidence.
 
 ## 7. Audit lineage
 
