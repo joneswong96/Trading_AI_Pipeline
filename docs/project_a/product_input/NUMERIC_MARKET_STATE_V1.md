@@ -93,12 +93,25 @@ predecessor is `null`, not zero.
 | Field | Type/unit | Current source availability |
 |---|---|---|
 | `liquidity_level_id` | string | Producer identity absent: `MISSING_REQUIRES_PRODUCER_CHANGE` |
-| `liquidity_side` | enum | `ASK` resistance/high or `BID` support/low from V2 |
+| `liquidity_level_side` | enum | `ASK` resistance/high or `BID` support/low from V2; never a trade-direction inference |
 | `liquidity_level_price` | decimal/QUOTE | Available from V2 state/event after normalization |
-| `liquidity_current_market_price` | decimal/QUOTE | Bounded 9333 snapshot at event time |
-| `liquidity_distance_quote` | decimal/QUOTE | Market value minus level value; signed |
-| `liquidity_distance_points` | decimal/points | Absolute distance divided by an approved point size |
-| `liquidity_distance_atr` | decimal/ATR multiples | Absolute distance divided by matched-timeframe ATR |
+| `liquidity_market_price` | decimal/QUOTE | Fresh current XAU observation from an explicit approved structured source |
+| `liquidity_signed_distance_price` | decimal/QUOTE | ASK: level minus market; BID: market minus level |
+| `liquidity_absolute_distance_price` | decimal/QUOTE | Absolute value of the side-aware signed distance; not directional authority |
+| `liquidity_distance_points` | decimal/points or null | Absolute distance divided by an explicit approved positive point size; null while point-size authority is unavailable |
+| `liquidity_confirmed_5m_atr14` | decimal/QUOTE | Latest confirmed 5m ATR(14), finite, positive and status exactly `FRESH` |
+| `liquidity_distance_atr` | decimal/ATR multiples or null | Absolute distance divided by confirmed 5m ATR(14); null when any calculation gate fails |
+| `liquidity_distance_zone` | enum/null | `FAR`, `APPROACH`, `NEAR_TOUCH`, or null for unavailable/zero/crossed observations |
+| `liquidity_distance_status` | enum | `AVAILABLE`, `UNAVAILABLE`, `HIT_INTERSECTION_EVALUATION_REQUIRED`, or `CROSSED_PENDING_CLASSIFICATION` |
+| `liquidity_expected_approach_move_dir` | enum | ASK expects `UP`; BID expects `DOWN` |
+| `liquidity_observed_expansion_move_dir` | enum/null | `UP`, `DOWN`, `FLAT`, or null; movement, never LONG/SHORT trade direction |
+| `liquidity_moving_toward_level` | boolean/null | True only for matching valid movement; false for valid non-matching movement; null when unavailable/invalid |
+| `liquidity_calculation_observed_at` | timestamp | Trusted UTC calculation time |
+| `liquidity_market_price_observed_at` | timestamp | Trusted UTC observation time for current XAU market value |
+| `liquidity_atr_source_bar_time` | timestamp | Confirmed 5m ATR source-bar identity with explicit bar-time semantics |
+| `liquidity_market_price_freshness_status` | enum | Must be exactly `FRESH` for distance-based promotion |
+| `liquidity_atr_freshness_status` | enum | Must be exactly `FRESH` for distance-based promotion |
+| `liquidity_level_freshness_status` | enum | Level evidence status; hard-failure states block calculation/promotion |
 | `liquidity_timeframe` | string | V2 anchor `5m`; MTF contributors recorded separately |
 | `liquidity_mtf_confluence_count` | integer/count | 1–4 |
 | `liquidity_mtf_confluence_total` | integer/count | Exactly 4 for V2 policy |
@@ -123,6 +136,14 @@ source object, exposes the source `price` as adapter metadata `level_price`, and
 leaves `market_price` and `signal_price` null. Its generic `AlertEvent.price`
 column is only a backward-compatible SQLite projection of that level value. No
 distance is calculated without a trusted event-time market value.
+
+`LIQUIDITY_DISTANCE_POLICY_V1.md` is the controlling distance contract. For
+ASK, signed distance is level minus market and expected movement is UP; for BID,
+signed distance is market minus level and expected movement is DOWN. Exactly
+0.50 ATR is APPROACH, exactly 0.25 ATR is NEAR_TOUCH, zero requires HIT/
+intersection evaluation, and a negative signed distance is
+`CROSSED_PENDING_CLASSIFICATION`. Distance alone never creates HIT, REJECT,
+BREAK, A, GO or trade direction.
 
 ## 5. Expansion state
 

@@ -72,6 +72,11 @@ producer, schema, adapter, provider or writer.
       `B_BUILDING`, `B_TO_A_CANDIDATE`, `A_CONFIRMED`, `WAITING_5S_ENTRY`,
       `INVALIDATED`, and `EXPIRED`.
 - [x] Approve entry into `B_TO_A_CANDIDATE` as the complete-capture trigger.
+- [x] Approve `LIQUIDITY_DISTANCE_POLICY_V1.md`: confirmed 5m ATR(14)
+      normalization; side-aware ASK/BID signed distance; exact FAR, APPROACH and
+      NEAR_TOUCH boundaries; zero/crossed fail-closed handling; and no automatic
+      HIT, REJECT, BREAK, A or GO inference. This is policy approval only and
+      does not activate Liquidity V2 or runtime.
 - [x] Approve exactly-once B-to-A notification only for prior grade B, current
       grade A, verdict APPROVE/MODIFY, valid 5m thesis, confirmed 1m direction,
       and a new matching Sniper FIRE.
@@ -81,7 +86,6 @@ producer, schema, adapter, provider or writer.
 
 ## 5. Pending producer, algorithm and runtime decisions
 
-- [ ] Approve an exact Liquidity near-touch distance. **Pending; fail closed.**
 - [ ] Approve an exact Expansion speed formula. **Pending; fail closed.**
 - [ ] Approve an exact Expansion exhaustion formula. **Pending; fail closed.**
 - [ ] Approve an exact E1/E2 event TTL. **Pending; fail closed.**

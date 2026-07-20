@@ -104,6 +104,13 @@ for a low/support level. The Product Input contract must normalize the source's
 ambiguous event field to `level_price` and separately snapshot
 `current_market_price`.
 
+`LIQUIDITY_DISTANCE_POLICY_V1.md` approves side-aware pre-touch distance using a
+fresh current XAU observation and the latest confirmed, exactly-fresh 5m
+ATR(14). It defines FAR above 0.50 ATR, APPROACH above 0.25 through 0.50 ATR,
+and NEAR_TOUCH above zero through 0.25 ATR. Distance never manufactures HIT,
+REJECT, BREAK, trade direction or grade A. This policy approval does not change
+`SAVED_NOT_MATERIALIZED` or activate Product Input runtime.
+
 ### 4.2 `EXP_V3_R5` and `EXP_SCANNER_R6`
 
 `EXP_V3_R5` is the approved confirmed trigger authority. Its default logic uses a five-bar

@@ -4,7 +4,8 @@ Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE**
 
 The state family, qualitative maturity mapping, B-to-A capture trigger,
 exactly-once concept and `FRESHNESS_POLICY_V1.md` thresholds are approved.
-Near-touch, speed, exhaustion, E1/E2 TTL and structure rules remain pending and
+Liquidity distance/near-touch follows `LIQUIDITY_DISTANCE_POLICY_V1.md`.
+Expansion speed, exhaustion, E1/E2 TTL and structure rules remain pending and
 fail closed.
 
 Purpose: build a deterministic numeric whole-picture story before final review or
@@ -43,10 +44,11 @@ invalid. It carries grade C and cannot trigger capture or notification.
 
 All of the following are required:
 
-1. A valid, fresh Liquidity V2 level is in `IDLE` with a bounded approach, or in
-   `APPROACH`.
-2. Expansion V3 is directed toward that level, with a compatible Scanner quality
-   observation when available.
+1. A valid, eligible Liquidity V2 level is in active `IDLE` or `APPROACH` and
+   has an approved distance result. `APPROACH` (`0.25 < distance_atr <= 0.50`)
+   may support this state; `FAR` cannot establish it from distance.
+2. Expansion V3 movement is directed toward that same level under its side-aware
+   rule, with a compatible Scanner quality observation when available.
 3. Confirmed 5m standard MACD supplies setup context. Its direction need not be a
    universal veto, but any conflict is explicit.
 4. There is no deterministic invalidation: broken/expired level, expansion in the
@@ -60,9 +62,12 @@ itself promote the story.
 
 All of the following are required:
 
-1. Liquidity is `HIT` or has source-confirmed sweep/reaction evidence. A bounded
-   near-touch may qualify only if Jones approves a numeric distance threshold;
-   until then, near-touch promotion is disabled.
+1. Liquidity is `HIT`, has source-confirmed sweep/reaction evidence, or is
+   `NEAR_TOUCH` under `LIQUIDITY_DISTANCE_POLICY_V1.md`. NEAR_TOUCH may
+   contribute only with fresh Expansion toward the tracked level, fresh 5m setup
+   evidence, required 1m reaction/weakening, approved Renko maturity, eligible
+   level identity and no deterministic invalidation. It is not HIT or reaction
+   proof.
 2. Expansion is mature, weakening, too extended, or has a numeric reaction fact.
    Scanner quality alone is insufficient.
 3. Renko has E2 or stronger maturity evidence in the intended direction. E1 is
@@ -190,3 +195,10 @@ The intended trade direction is the reaction direction away from the relevant
 liquidity level, not automatically the direction of the incoming expansion.
 Every transition records both `expansion_direction` and `setup_direction` so an
 opposite/reversal relationship is explicit rather than inferred from side names.
+
+Liquidity distance uses movement direction separately: ASK/resistance expects
+Expansion `UP`, while BID/support expects Expansion `DOWN`. If movement is away,
+distance remains context but cannot promote APPROACH or NEAR_TOUCH. Zero requires
+HIT/intersection evaluation; negative signed distance is
+`CROSSED_PENDING_CLASSIFICATION`. No distance zone independently establishes
+`A_CONFIRMED`, `WAITING_5S_ENTRY`, GO, reversal or trade direction.

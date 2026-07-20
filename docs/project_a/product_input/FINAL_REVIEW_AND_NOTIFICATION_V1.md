@@ -79,6 +79,13 @@ An A-grade APPROVE or MODIFY result requires:
 A missing required gate produces grade C or REJECT/EXPIRED as appropriate; the
 reviewer may not repair source data.
 
+FAR, APPROACH and NEAR_TOUCH are pre-touch distance classifications, not final
+reaction evidence. Zero distance requires HIT/intersection evaluation; a
+negative signed distance remains `CROSSED_PENDING_CLASSIFICATION` until producer
+lifecycle evidence resolves it. Distance alone cannot satisfy the confirmed
+liquidity-reaction gate, create HIT/REJECT/BREAK, establish grade A, approve
+geometry, produce GO or authorize notification.
+
 ## 4. Waiting for the 5s event
 
 When all A requirements except an eligible matching Sniper FIRE pass, the story
@@ -136,6 +143,10 @@ During `MARKET_CLOSED`, no new actionable provider review, waiting-entry
 promotion, A confirmation or notification is allowed. AI cannot override stale,
 provisional, missing, clock-invalid, source-unavailable or market-closed
 deterministic evidence.
+
+No FAR/APPROACH/NEAR_TOUCH calculation is itself a B-to-A notification event.
+Only the complete independently approved state, review, freshness, geometry and
+matching FIRE gates can make a notification eligible.
 
 ## 6. Rejection, expiry and modification behavior
 

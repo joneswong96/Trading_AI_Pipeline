@@ -8,6 +8,10 @@ Production layout materialization remains pending.
 
 Trigger: entry into `B_TO_A_CANDIDATE`
 
+`NEAR_TOUCH` is supporting evidence, not a direct capture command. Capture
+occurs only after the complete B-to-A transition passes every independent gate
+in `MAKE_SENSE_STATE_MACHINE_V1.md` and `LIQUIDITY_DISTANCE_POLICY_V1.md`.
+
 ## 1. Authority boundary
 
 - Primary structured numeric source: CDP `9333`.
@@ -83,7 +87,8 @@ At candidate time `T`, the bundle must include:
   9333;
 - TVC:DXY 1m supplemental current/closed values and bar time from 9222;
 - Liquidity V2 and Expansion source event lineage plus bounded 9333 event-time
-  snapshots;
+  snapshots, the side-aware Liquidity distance record, and the latest confirmed
+  5m ATR(14) source-bar lineage;
 - Renko E1/E2/Main/FIRE state and event lineage from the validated 9222 candidate;
   and
 - every missing producer field explicitly listed as
@@ -117,6 +122,9 @@ Every source and artifact is classified under `FRESHNESS_POLICY_V1.md`.
 8. The 15-second bundle XAU allowance does not relax the final GO requirement:
    GO requires XAU age at most 10 seconds, Sniper FIRE receipt age at most 15
    seconds, and status exactly `FRESH` for matching 1m and 5m evidence.
+9. Distance-based B/B-to-A promotion requires status exactly `FRESH` for the XAU
+   current observation and confirmed 5m ATR(14). `AGING` remains context and
+   cannot satisfy those gates.
 
 ## 7. Bundle integrity
 

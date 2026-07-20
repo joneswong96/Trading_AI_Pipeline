@@ -23,7 +23,9 @@ writer runtime-active.
    preserved. The source's ambiguous payload field `price` means level value; a
    later producer contract must use `level_price`, `market_price` and
    `signal_price` as applicable. Liquidity V1 revision 11 is
-   `LEGACY_REFERENCE`.
+   `LEGACY_REFERENCE`. `LIQUIDITY_DISTANCE_POLICY_V1.md` is approved as the
+   side-aware pre-touch distance policy; this does not materialize or activate
+   the producer.
 2. **Expansion:** `Expansion Leg Signal V3`, private revision 5, is the confirmed
    trigger/direction authority. `③ Expansion Scanner [SNR3.0]`, private revision
    6, supplies quality classification only. They form one Expansion Evidence
@@ -120,6 +122,28 @@ or missing DXY, 15m/30m MACD, or 4H/D/W structure caps grade at B without
 reversing direction. Market-closed history is context carry-forward only and
 cannot promote a setup. AI cannot override deterministic freshness.
 
+## 5.1 Approved Liquidity distance policy
+
+`LIQUIDITY_DISTANCE_POLICY_V1.md` is approved with these exact limits:
+
+- latest confirmed, exactly-fresh 5m ATR(14) is the normalization authority;
+- fresh current XAU `market_price` and Liquidity V2 `level_price` remain distinct;
+- ASK/resistance signed distance is level minus market and expects Expansion UP;
+- BID/support signed distance is market minus level and expects Expansion DOWN;
+- above 0.50 ATR is FAR, above 0.25 through 0.50 is APPROACH, and above zero
+  through 0.25 is NEAR_TOUCH;
+- zero requires HIT/intersection evaluation and negative signed distance is
+  `CROSSED_PENDING_CLASSIFICATION`;
+- invalid, missing, provisional or non-fresh required inputs make distance
+  unavailable and block promotion; and
+- distance alone cannot infer trade direction, HIT, REJECT, BREAK, A, GO,
+  geometry, capture or notification.
+
+Each eligible level retains independent stable identity and distance. Ambiguous
+competing levels fail closed for promotion until a later deterministic selection
+policy is approved. This approval is documentation-only and does not implement
+or activate Liquidity V2, capture, providers, outputs or runtime.
+
 ## 6. Approved SHADOW/no-live boundary
 
 The existing boundary remains mandatory:
@@ -136,13 +160,17 @@ Authority approval cannot weaken these values or activate an output.
 
 The following remain unapproved and fail closed:
 
-- exact Liquidity near-touch distance;
+- producer-specific Liquidity HIT tolerance and deterministic intersection rule;
+- Liquidity band-width handling, sweep depth, rejection magnitude and break
+  close distance;
+- near-touch time persistence;
+- competing-level and nearest-level selection;
 - exact Expansion speed formula;
 - exact Expansion exhaustion formula;
 - exact E1/E2 event TTL;
 - exact structure/range algorithm;
 - exact nearest-obstacle calculation;
-- trusted bid/ask/spread authority;
+- trusted bid/ask/spread and point-size authority;
 - production TradingView layout materialization;
 - Pine producer changes;
 - provider runtime activation;
