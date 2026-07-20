@@ -29,6 +29,12 @@ _SCHEMA_FAMILY = {
     EXPANSION_EVENT_SCHEMA: "EXPANSION",
     RENKO_EVENT_SCHEMA: "RENKO",
 }
+RAW_PRODUCER_ALLOWLIST = {
+    (LIQUIDITY_EVENT_SCHEMA, "LIQ_V2"): "9",
+    (EXPANSION_EVENT_SCHEMA, "EXP_V3"): "5",
+    (EXPANSION_EVENT_SCHEMA, "EXP_SCANNER"): "6",
+    (RENKO_EVENT_SCHEMA, "RENKO_V3_SNIPER"): "1",
+}
 _EVENTS = {
     "LIQUIDITY": {
         "LIQ_APPROACH",
@@ -71,6 +77,11 @@ _RENKO_RANK = {"NONE": 0, "E1": 1, "E2": 2, "MAIN": 3, "FIRE": 4}
 _ZONE_RANK = {"NEAR_TOUCH": 0, "APPROACH": 1, "FAR": 2}
 _GRADE_RANK = {"PRIME": 0, "VALID": 1}
 _FORBIDDEN_FIELDS = {"price", "dir", "trade_direction", "entry_price", "stop_loss", "take_profit", "order"}
+_FAMILY_CONFLICTING_FIELDS = {
+    "LIQUIDITY": {"direction", "signal_price", "stage"},
+    "EXPANSION": {"side", "level_price", "signal_price", "stage", "lifecycle"},
+    "RENKO": {"side", "level_price", "market_price", "lifecycle", "grade"},
+}
 
 
 class NumericStateError(ValueError):
@@ -385,14 +396,24 @@ def _common(obj: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
     family = _SCHEMA_FAMILY.get(schema)
     if family is None:
         _fail("UNSUPPORTED_SCHEMA", "schema", "unsupported or unversioned schema")
+    producer_id = _text(_required(obj, "producer_id"), "producer_id")
+    producer_revision = _text(str(_required(obj, "producer_revision")), "producer_revision")
+    expected_revision = RAW_PRODUCER_ALLOWLIST.get((schema, producer_id))
+    if expected_revision is None:
+        _fail("UNSUPPORTED_PRODUCER", "producer_id", "schema and producer identity are not allowlisted")
+    if producer_revision != expected_revision:
+        _fail("UNSUPPORTED_PRODUCER_REVISION", "producer_revision", "producer revision is not allowlisted")
     event = _text(_required(obj, "event"), "event", upper=True)
     if event not in _EVENTS[family]:
         _fail("UNSUPPORTED_EVENT", "event", f"event is not valid for {family}")
     source_time = _timestamp(_required(obj, "source_bar_time"), "source_bar_time")
+    conflicting = sorted(_FAMILY_CONFLICTING_FIELDS[family].intersection(obj))
+    if conflicting:
+        _fail("AMBIGUOUS_OR_ACTION_FIELD", conflicting[0], "field conflicts with the producer family")
     canonical = {
         "schema": schema,
-        "producer_id": _text(_required(obj, "producer_id"), "producer_id"),
-        "producer_revision": _text(str(_required(obj, "producer_revision")), "producer_revision"),
+        "producer_id": producer_id,
+        "producer_revision": producer_revision,
         "event_id": _text(_required(obj, "event_id"), "event_id"),
         "event": event,
         "symbol": _text(_required(obj, "symbol"), "symbol", upper=True),
@@ -723,6 +744,8 @@ class NumericMarketState:
         self._levels: dict[tuple[str, str], LiquidityLevel] = {}
         self._price_path: tuple[PricePoint, ...] = ()
         self._expansion_history: tuple[CanonicalEvent, ...] = ()
+        self._scanner_history: tuple[CanonicalEvent, ...] = ()
+        self._scanner_quality: tuple[Mapping[str, Any], ...] = ()
         self._renko_history: tuple[CanonicalEvent, ...] = ()
         self._current: dict[str, CanonicalEvent] = {}
         self._previous: dict[str, CanonicalEvent] = {}
@@ -753,6 +776,10 @@ class NumericMarketState:
     @property
     def latest_expansion_story(self) -> CanonicalEvent | None:
         return self._expansion_history[-1] if self._expansion_history else None
+
+    @property
+    def scanner_quality_evidence(self) -> tuple[Mapping[str, Any], ...]:
+        return self._scanner_quality
 
     @property
     def renko_state(self) -> RenkoState:
@@ -808,8 +835,11 @@ class NumericMarketState:
         levels: dict[tuple[str, str], LiquidityLevel] = {}
         prices: list[PricePoint] = []
         expansions: list[CanonicalEvent] = []
+        scanners: list[CanonicalEvent] = []
         renko_events: list[CanonicalEvent] = []
-        observations: dict[str, list[CanonicalEvent]] = {family: [] for family in _SCHEMA_FAMILY.values()}
+        observations: dict[str, list[CanonicalEvent]] = {
+            "LIQUIDITY": [], "EXPANSION": [], "EXPANSION_QUALITY": [], "RENKO": [],
+        }
         tracked: tuple[str, str] | None = None
         tracked_tuple: tuple[Any, ...] | None = None
         tracked_at: datetime | None = None
@@ -820,7 +850,8 @@ class NumericMarketState:
         prior_expansion_direction: str | None = None
 
         for event in ordered:
-            observations[event.family].append(event)
+            is_scanner = event.family == "EXPANSION" and event.data["producer_id"] == "EXP_SCANNER"
+            observations["EXPANSION_QUALITY" if is_scanner else event.family].append(event)
             market_price = event.data.get("market_price") if event.family in {"LIQUIDITY", "EXPANSION"} else None
             if market_price is not None:
                 previous = prices[-1] if prices else None
@@ -830,6 +861,9 @@ class NumericMarketState:
                 prices.append(PricePoint(event.canonical_event_id, event.source_bar_time, market_price, delta, delta_pct, direction))
 
             if event.family == "EXPANSION":
+                if is_scanner:
+                    scanners.append(event)
+                    continue
                 expansions.append(event)
                 if event.confirmed and event.freshness_status == "FRESH":
                     direction = str(event.data["direction"])
@@ -958,10 +992,63 @@ class NumericMarketState:
                             )
                         )
 
+        directional_by_key: dict[tuple[Any, ...], list[CanonicalEvent]] = {}
+        for expansion in expansions:
+            key = (
+                expansion.data["symbol"], expansion.data["feed"], expansion.data["timeframe"],
+                expansion.data["source_bar_time"], expansion.data["direction"],
+            )
+            directional_by_key.setdefault(key, []).append(expansion)
+        scanner_facts: dict[tuple[Any, ...], tuple[Any, ...]] = {}
+        scanner_quality: list[Mapping[str, Any]] = []
+        for scanner in scanners:
+            key = (
+                scanner.data["symbol"], scanner.data["feed"], scanner.data["timeframe"],
+                scanner.data["source_bar_time"], scanner.data["direction"],
+            )
+            conflict_key = key + (scanner.event,)
+            facts = (
+                scanner.data.get("quality"), scanner.data.get("too_extended"),
+                scanner.data.get("body_quality"), scanner.data.get("opposing_bars"),
+                scanner.data.get("age_bars"),
+            )
+            previous_facts = scanner_facts.get(conflict_key)
+            if previous_facts is not None and previous_facts != facts:
+                _fail(
+                    "SCANNER_EVIDENCE_CONFLICT", "scanner_quality",
+                    "same factual correlation key and event carry conflicting quality facts",
+                )
+            scanner_facts[conflict_key] = facts
+            matches = directional_by_key.get(key, ())
+            paired = matches[0] if len(matches) == 1 else None
+            scanner_quality.append(_freeze({
+                "scanner_event_id": scanner.canonical_event_id,
+                "producer_event_id": scanner.producer_event_id,
+                "status": (
+                    "PAIRED_QUALITY_EVIDENCE"
+                    if paired is not None else "UNPAIRED_QUALITY_EVIDENCE"
+                ),
+                "expansion_event_id": None if paired is None else paired.canonical_event_id,
+                "correlation_key": {
+                    "symbol": key[0], "feed": key[1], "timeframe": key[2],
+                    "source_bar_time": key[3], "direction_context": key[4],
+                },
+                "event": scanner.event,
+                "quality": scanner.data.get("quality"),
+                "too_extended": scanner.data.get("too_extended"),
+                "body_quality": scanner.data.get("body_quality"),
+                "opposing_bars": scanner.data.get("opposing_bars"),
+                "age_bars": scanner.data.get("age_bars"),
+                "promoting": False,
+                "trade_direction": None,
+            }))
+
         self._ordered = tuple(ordered)
         self._levels = levels
         self._price_path = tuple(prices)
         self._expansion_history = tuple(expansions)
+        self._scanner_history = tuple(scanners)
+        self._scanner_quality = tuple(scanner_quality)
         self._renko_history = tuple(renko_events)
         self._current = {family: items[-1] for family, items in observations.items() if items}
         self._previous = {family: items[-2] for family, items in observations.items() if len(items) > 1}
@@ -1023,6 +1110,7 @@ class NumericMarketState:
             "tracked_level_history": list(self._tracked_history),
             "latest_expansion_story": None if self.latest_expansion_story is None else self.latest_expansion_story.canonical_event_id,
             "expansion_history": [event.canonical_event_id for event in self._expansion_history],
+            "scanner_quality_evidence": list(self._scanner_quality),
             "renko": {
                 "cycle_id": self._renko_state.cycle_id,
                 "maturity": self._renko_state.maturity,

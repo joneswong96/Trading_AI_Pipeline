@@ -227,6 +227,34 @@ Previously misclassified SQLite rows remain immutable audit history; no row is
 silently rewritten. Their retained raw text permits a separately reviewed future
 correction/replay process.
 
+### 4.8 Raw producer transport at `/alert`
+
+`POST /alert` is the single approved TradingView transport boundary. Before the
+legacy parser runs, ingress now checks exact top-level schema and producer
+identity. Only these tuples enter the Product Input adapter:
+
+| Schema | Producer | Revision |
+|---|---|---|
+| `project_a.liquidity_event/1.0` | `LIQ_V2` | `9` |
+| `project_a.expansion_event/1.0` | `EXP_V3` | `5` |
+| `project_a.expansion_event/1.0` | `EXP_SCANNER` | `6` |
+| `project_a.renko_event/1.0` | `RENKO_V3_SNIPER` | `1` |
+
+An exact recognized identity is validated and canonicalized by the existing
+Numeric Market State and offline Section 2 pipeline. It is never passed to the
+legacy parser, trigger or wake fan-out. Invalid recognized payloads fail closed
+with a bounded 4xx response and never fall through to legacy. Other JSON and
+text retain the established legacy path.
+
+The adapter preserves immutable receipt bytes and deterministic state history
+in the configured Project A database. It marks every receipt as ineligible for
+legacy wake, provider, writer and order actions. Recognition is safely enabled
+by default with `PROJECT_A_RAW_PRODUCER_INGEST_ENABLED=true`; this enables only
+telemetry ingestion. Project A V1 ingest, runtime execution, capture, providers,
+writers and orders remain independently disabled. The integrated code does not
+become active in an already running process until a separately authorized
+deployment/restart.
+
 ## 5. Legacy-source disposition
 
 | Legacy source | V1 disposition |

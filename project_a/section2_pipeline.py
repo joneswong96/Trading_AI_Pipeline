@@ -148,6 +148,9 @@ class OfflineSection2Pipeline:
         freshness: Mapping[str, str],
         prior_state: str = StoryState.NO_STORY.value,
         final_review: Mapping[str, Any] | None = None,
+        primary_request_adapter: Any | None = None,
+        supplemental_request_adapter: Any | None = None,
+        screenshot_request_adapter: Any | None = None,
     ) -> Section2PipelineResult:
         if requested_at.tzinfo is None or requested_at.utcoffset() is None:
             raise Section2PipelineError("requested_at must be timezone-aware")
@@ -199,6 +202,9 @@ class OfflineSection2Pipeline:
                 make_sense.state is StoryState.B_TO_A_CANDIDATE
                 and make_sense.full_capture_requested
             ),
+            primary_adapter=primary_request_adapter,
+            supplemental_adapter=supplemental_request_adapter,
+            screenshot_adapter=screenshot_request_adapter,
         )
         dash = disabled_dash_request(make_sense)
         final = None

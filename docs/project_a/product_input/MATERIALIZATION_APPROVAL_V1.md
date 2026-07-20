@@ -48,6 +48,18 @@ JSON V1 after Feature-OFF parity, and snapshotted into the four alerts above.
 It also permits controlled deployment of the corrected integrated ingest
 runtime.
 
+The four alerts continue to target the existing `POST /alert` webhook; no
+webhook-path change is required. The integrated raw-producer adapter takes
+precedence over legacy parsing only for the exact allowlisted producer schema,
+ID and revision tuples. Scanner remains quality-only and non-waking. A
+recognized invalid producer payload fails closed and is not reclassified by the
+legacy parser.
+
+Repository integration alone is not deployment. Until the separately approved
+runtime restart/materialization step loads the integrated revision, the running
+server retains its previously loaded behavior and the four alerts must not be
+used as proof that the adapter is active.
+
 The following boundary remains mandatory:
 
 - `mode=SHADOW`

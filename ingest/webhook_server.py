@@ -24,6 +24,10 @@ from ingest import wake_queue
 from ingest.thesis_store import ThesisStore
 from ingest.project_a.api import router as project_a_router
 from ingest.project_a.config import ProjectAConfig
+from ingest.project_a.raw_producer_adapter import (
+    ProjectARawProducerAdapter,
+    detect_raw_producer,
+)
 from publish.telegram import TelegramPublisher
 from publish.notion_log import NotionLogger
 
@@ -41,6 +45,21 @@ app = FastAPI(title="trading-auto ingest", version="phase1")
 app.include_router(project_a_router)
 _alog = AlertLog()
 _thesis = ThesisStore()
+_raw_producer_adapter: ProjectARawProducerAdapter | None = None
+
+
+def configure_raw_producer_adapter(adapter: ProjectARawProducerAdapter | None) -> None:
+    """Inject or clear the isolated raw-producer adapter (primarily for tests)."""
+
+    global _raw_producer_adapter
+    _raw_producer_adapter = adapter
+
+
+def _get_raw_producer_adapter() -> ProjectARawProducerAdapter:
+    global _raw_producer_adapter
+    if _raw_producer_adapter is None:
+        _raw_producer_adapter = ProjectARawProducerAdapter(ProjectAConfig.from_env())
+    return _raw_producer_adapter
 
 
 def _load_active_thesis(now):
@@ -84,7 +103,35 @@ def health():
 
 @app.post("/alert")
 async def alert(request: Request):
-    body = (await request.body()).decode("utf-8", "replace")
+    raw_body = await request.body()
+    producer = detect_raw_producer(raw_body)
+    if producer.candidate:
+        try:
+            result = _get_raw_producer_adapter().receive(raw_body, detection=producer)
+        except Exception:
+            # Recognized Project A payloads fail closed and never fall through to
+            # the legacy parser. Do not include body or exception details here.
+            log.exception("Project A raw-producer adapter failed closed")
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "accepted": False,
+                    "deduped": False,
+                    "producer": producer.producer,
+                    "event": producer.event,
+                    "telemetry_status": "FAILED_CLOSED",
+                    "state_status": "UNCHANGED",
+                    "wake": False,
+                    "provider_called": False,
+                    "writer_called": False,
+                    "order_placed": False,
+                    "error_code": "PRODUCER_ADAPTER_FAILURE",
+                },
+                status_code=503,
+            )
+        return JSONResponse(result.response(), status_code=result.http_status)
+
+    body = raw_body.decode("utf-8", "replace")
 
     # 1) parse（壞 body 都回 200，唔俾 TradingView 死命重送）
     try:

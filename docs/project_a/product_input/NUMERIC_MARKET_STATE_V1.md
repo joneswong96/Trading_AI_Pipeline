@@ -187,6 +187,16 @@ Every V3/Scanner internal numeric output that lacks a producer field remains
 `MISSING_REQUIRES_PRODUCER_CHANGE`; downstream code must not reconstruct it from
 screenshots.
 
+Scanner producer events are stored in `scanner_quality_evidence`, not in the
+directional `expansion_history`. Pairing is deterministic only when exactly one
+`EXP_V3` event shares symbol, feed, timeframe, source-bar time and movement
+direction context. Receipt order is not part of the key. A match is
+`PAIRED_QUALITY_EVIDENCE`; otherwise the accepted Scanner receipt remains
+`UNPAIRED_QUALITY_EVIDENCE`. Either form has `promoting=false` and
+`trade_direction=null`. Different Scanner facts for the same factual key and
+quality event fail closed as `SCANNER_EVIDENCE_CONFLICT`; duplicates remain
+idempotent.
+
 For the bounded Expansion V3 text compatibility grammar, `UP` and `DOWN` are
 observed movement values, not trade directions. The legacy adapter records them
 as `move_dir`, leaves trade `dir` null, and records the text's `Price` as the

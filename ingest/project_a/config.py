@@ -39,6 +39,7 @@ class ProjectAConfig:
     endpoint: str = "/project-a/v0.2/events"
     v1_endpoint: str = "/project-a/v1/events"
     v1_ingest_enabled: bool = False
+    raw_producer_ingest_enabled: bool = True
     max_body_bytes: int = 262_144
     future_tolerance_seconds: int = 5
     stale_after_seconds: int = 1_800
@@ -63,6 +64,8 @@ class ProjectAConfig:
             ingest_host=os.getenv("PROJECT_A_INGEST_HOST", "0.0.0.0"),
             ingest_port=_integer("PROJECT_A_INGEST_PORT", port_default, minimum=1),
             v1_ingest_enabled=_boolean("PROJECT_A_V1_INGEST_ENABLED", False),
+            raw_producer_ingest_enabled=_boolean(
+                "PROJECT_A_RAW_PRODUCER_INGEST_ENABLED", True),
             max_body_bytes=_integer("PROJECT_A_MAX_BODY_BYTES", 262_144, minimum=1),
             future_tolerance_seconds=_integer(
                 "PROJECT_A_FUTURE_TOLERANCE_SECONDS", 5, minimum=0),

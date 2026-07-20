@@ -33,8 +33,8 @@ def _exp(
 ) -> dict:
     return {
         "schema": EXPANSION_EVENT_SCHEMA,
-        "producer_id": "EXP_V3_SCANNER",
-        "producer_revision": "5+6",
+        "producer_id": "EXP_V3",
+        "producer_revision": "5",
         "event_id": event_id,
         "event": event,
         "symbol": "XAUUSD",
