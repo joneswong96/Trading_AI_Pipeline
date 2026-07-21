@@ -10,7 +10,7 @@ import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -23,6 +23,7 @@ from project_a.numeric_state import (
     canonical_json_bytes,
     parse_numeric_event,
 )
+from project_a.evidence_bundle import approved_source_identities
 from project_a.section2_pipeline import OfflineSection2Pipeline, Section2PipelineError
 
 from .config import ProjectAConfig
@@ -121,6 +122,57 @@ RAW_ADAPTER_SCHEMA_CHECKSUM = "sha256:" + hashlib.sha256(
     RAW_ADAPTER_SCHEMA.encode("utf-8")
 ).hexdigest()
 
+LIQ_RESEARCH_QUEUE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS project_a_liq_research_meta (
+  version INTEGER PRIMARY KEY,
+  checksum TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS project_a_liq_research_requests (
+  canonical_event_id TEXT PRIMARY KEY REFERENCES project_a_producer_events(canonical_event_id),
+  ingest_id TEXT NOT NULL UNIQUE REFERENCES project_a_producer_receipts(ingest_id),
+  evidence_key TEXT NOT NULL UNIQUE,
+  touch_fingerprint_sha256 TEXT NOT NULL,
+  level_id TEXT NOT NULL,
+  touch_count INTEGER NOT NULL CHECK(touch_count >= 1),
+  requested_at TEXT NOT NULL,
+  evidence_acquisition_mode TEXT NOT NULL
+    CHECK(evidence_acquisition_mode='MCP_STRUCTURED_READS_AND_SCREENSHOTS'),
+  evidence_request_json TEXT NOT NULL,
+  evidence_request_sha256 TEXT NOT NULL,
+  target_binding_status TEXT NOT NULL CHECK(target_binding_status='UNBOUND_REQUIRES_PREFLIGHT'),
+  request_status TEXT NOT NULL CHECK(request_status='PENDING'),
+  legacy_wake_eligible INTEGER NOT NULL CHECK(legacy_wake_eligible=0),
+  provider_eligible INTEGER NOT NULL CHECK(provider_eligible=0),
+  writer_eligible INTEGER NOT NULL CHECK(writer_eligible=0),
+  order_eligible INTEGER NOT NULL CHECK(order_eligible=0)
+);
+CREATE TRIGGER IF NOT EXISTS project_a_liq_research_requests_no_update
+  BEFORE UPDATE ON project_a_liq_research_requests
+  BEGIN SELECT RAISE(ABORT, 'project_a_liq_research_requests is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS project_a_liq_research_requests_no_delete
+  BEFORE DELETE ON project_a_liq_research_requests
+  BEGIN SELECT RAISE(ABORT, 'project_a_liq_research_requests is append-only'); END;
+CREATE TABLE IF NOT EXISTS project_a_liq_research_status_history (
+  status_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  canonical_event_id TEXT NOT NULL REFERENCES project_a_liq_research_requests(canonical_event_id),
+  status TEXT NOT NULL CHECK(status IN ('PENDING','CLAIMED','COMPLETED','FAILED')),
+  recorded_at TEXT NOT NULL,
+  worker_id TEXT,
+  result_manifest_sha256 TEXT,
+  detail TEXT
+);
+CREATE TRIGGER IF NOT EXISTS project_a_liq_research_status_no_update
+  BEFORE UPDATE ON project_a_liq_research_status_history
+  BEGIN SELECT RAISE(ABORT, 'project_a_liq_research_status_history is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS project_a_liq_research_status_no_delete
+  BEFORE DELETE ON project_a_liq_research_status_history
+  BEGIN SELECT RAISE(ABORT, 'project_a_liq_research_status_history is append-only'); END;
+"""
+LIQ_RESEARCH_QUEUE_SCHEMA_VERSION = 1
+LIQ_RESEARCH_QUEUE_SCHEMA_CHECKSUM = "sha256:" + hashlib.sha256(
+    LIQ_RESEARCH_QUEUE_SCHEMA.encode("utf-8")
+).hexdigest()
+
 
 def _iso(value: datetime) -> str:
     if value.tzinfo is None or value.utcoffset() is None:
@@ -201,6 +253,8 @@ class RawProducerResult:
     telemetry_status: str
     state_status: str
     error_code: str | None = None
+    research_wake: bool = False
+    evidence_acquisition_requested: bool = False
 
     def response(self) -> dict[str, Any]:
         body: dict[str, Any] = {
@@ -211,7 +265,9 @@ class RawProducerResult:
             "event": self.event,
             "telemetry_status": self.telemetry_status,
             "state_status": self.state_status,
-            "wake": False,
+            "wake": self.research_wake,
+            "wake_scope": "PROJECT_A_RESEARCH" if self.research_wake else "NONE",
+            "evidence_acquisition_requested": self.evidence_acquisition_requested,
             "provider_called": False,
             "writer_called": False,
             "order_placed": False,
@@ -219,16 +275,6 @@ class RawProducerResult:
         if self.error_code is not None:
             body["error_code"] = self.error_code
         return body
-
-
-class _NoExternalRequestAdapter:
-    def compile_requests(self, _sources: Mapping[str, Any], _level: Any) -> tuple[Any, ...]:
-        return ()
-
-
-class _NoScreenshotRequestAdapter:
-    def compile_requests(self, _sources: Mapping[str, Any], _level: Any) -> tuple[Any, ...]:
-        return ()
 
 
 class ProjectARawProducerStore:
@@ -239,7 +285,13 @@ class ProjectARawProducerStore:
         self.database.migrate(applied_at)
         conn = self.database.connect()
         try:
-            conn.executescript("BEGIN IMMEDIATE;\n" + RAW_ADAPTER_SCHEMA + "\nCOMMIT;")
+            conn.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + RAW_ADAPTER_SCHEMA
+                + "\n"
+                + LIQ_RESEARCH_QUEUE_SCHEMA
+                + "\nCOMMIT;"
+            )
             conn.execute(
                 "INSERT OR IGNORE INTO project_a_producer_adapter_meta(version,checksum) VALUES (?,?)",
                 (RAW_ADAPTER_SCHEMA_VERSION, RAW_ADAPTER_SCHEMA_CHECKSUM),
@@ -251,6 +303,17 @@ class ProjectARawProducerStore:
                 (RAW_ADAPTER_SCHEMA_VERSION, RAW_ADAPTER_SCHEMA_CHECKSUM)
             ]:
                 raise RuntimeError("raw producer adapter schema mismatch")
+            conn.execute(
+                "INSERT OR IGNORE INTO project_a_liq_research_meta(version,checksum) VALUES (?,?)",
+                (LIQ_RESEARCH_QUEUE_SCHEMA_VERSION, LIQ_RESEARCH_QUEUE_SCHEMA_CHECKSUM),
+            )
+            research_rows = conn.execute(
+                "SELECT version,checksum FROM project_a_liq_research_meta ORDER BY version"
+            ).fetchall()
+            if [(row["version"], row["checksum"]) for row in research_rows] != [
+                (LIQ_RESEARCH_QUEUE_SCHEMA_VERSION, LIQ_RESEARCH_QUEUE_SCHEMA_CHECKSUM)
+            ]:
+                raise RuntimeError("LIQ research queue schema mismatch")
         finally:
             conn.close()
 
@@ -286,6 +349,91 @@ class ProjectARawProducerStore:
             ).fetchone()
         finally:
             conn.close()
+
+    def pending_research_requests(self) -> tuple[sqlite3.Row, ...]:
+        conn = self.database.connect()
+        try:
+            return tuple(conn.execute(
+                "SELECT q.* FROM project_a_liq_research_requests q "
+                "JOIN project_a_liq_research_status_history s ON s.status_id=("
+                "SELECT MAX(s2.status_id) FROM project_a_liq_research_status_history s2 "
+                "WHERE s2.canonical_event_id=q.canonical_event_id) "
+                "WHERE s.status='PENDING' ORDER BY q.requested_at,q.canonical_event_id"
+            ).fetchall())
+        finally:
+            conn.close()
+
+    def claim_research_request(
+        self, canonical_event_id: str, *, worker_id: str, claimed_at: datetime,
+    ) -> sqlite3.Row | None:
+        if not worker_id:
+            raise ValueError("worker_id is required")
+        with self.database.transaction(immediate=True) as conn:
+            request = conn.execute(
+                "SELECT * FROM project_a_liq_research_requests WHERE canonical_event_id=?",
+                (canonical_event_id,),
+            ).fetchone()
+            if request is None:
+                return None
+            latest = conn.execute(
+                "SELECT status FROM project_a_liq_research_status_history "
+                "WHERE canonical_event_id=? ORDER BY status_id DESC LIMIT 1",
+                (canonical_event_id,),
+            ).fetchone()
+            if latest is None or latest["status"] != "PENDING":
+                return None
+            conn.execute(
+                "INSERT INTO project_a_liq_research_status_history("
+                "canonical_event_id,status,recorded_at,worker_id"
+                ") VALUES (?,?,?,?)",
+                (canonical_event_id, "CLAIMED", _iso(claimed_at), worker_id),
+            )
+            return request
+
+    def record_research_result(
+        self,
+        canonical_event_id: str,
+        *,
+        status: str,
+        recorded_at: datetime,
+        worker_id: str,
+        result_manifest_sha256: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        if status not in {"COMPLETED", "FAILED"}:
+            raise ValueError("research result status must be COMPLETED or FAILED")
+        if not worker_id:
+            raise ValueError("worker_id is required")
+        if status == "COMPLETED":
+            if (
+                not isinstance(result_manifest_sha256, str)
+                or len(result_manifest_sha256) != 64
+                or any(character not in "0123456789abcdef" for character in result_manifest_sha256)
+            ):
+                raise ValueError("COMPLETED research requires a lowercase 64-hex manifest SHA-256")
+        elif result_manifest_sha256 is not None:
+            raise ValueError("FAILED research cannot claim a completed result manifest")
+        with self.database.transaction(immediate=True) as conn:
+            latest = conn.execute(
+                "SELECT status,worker_id FROM project_a_liq_research_status_history "
+                "WHERE canonical_event_id=? ORDER BY status_id DESC LIMIT 1",
+                (canonical_event_id,),
+            ).fetchone()
+            if latest is None or latest["status"] != "CLAIMED" or latest["worker_id"] != worker_id:
+                raise RuntimeError("research request must be claimed by the same worker")
+            conn.execute(
+                "INSERT INTO project_a_liq_research_status_history("
+                "canonical_event_id,status,recorded_at,worker_id,result_manifest_sha256,detail"
+                ") VALUES (?,?,?,?,?,?)",
+                (
+                    canonical_event_id,
+                    status,
+                    _iso(recorded_at),
+                    worker_id,
+                    result_manifest_sha256,
+                    None if detail is None else detail[:240],
+                ),
+            )
 
     def record_rejection(
         self, *, ingest_id: str, raw: bytes, received_at: str,
@@ -345,6 +493,73 @@ class ProjectARawProducerAdapter:
                 return str(item["status"])
         return "UNPAIRED_QUALITY_EVIDENCE"
 
+    @staticmethod
+    def _validate_source_authority(event: Any) -> None:
+        data = event.data
+        producer = str(data.get("producer_id"))
+        timeframe_field = "anchor_timeframe" if producer == "LIQ_V2" else "timeframe"
+        expected_timeframe = {
+            "LIQ_V2": "5m",
+            "EXP_V3": "1m",
+            "EXP_SCANNER": "1m",
+            "RENKO_V3_SNIPER": "5s",
+        }.get(producer)
+        if (
+            data.get("symbol") != "XAUUSD"
+            or data.get("feed") != "ICMARKETS"
+            or expected_timeframe is None
+            or data.get(timeframe_field) != expected_timeframe
+        ):
+            raise NumericStateError(
+                "SOURCE_AUTHORITY_MISMATCH",
+                timeframe_field,
+                "producer source must match approved XAUUSD/feed/timeframe authority",
+            )
+        if producer == "LIQ_V2" and event.event == "LIQ_TOUCH" and int(data.get("touch_count", 0)) < 1:
+            raise NumericStateError(
+                "INVALID_TOUCH_COUNT",
+                "touch_count",
+                "LIQ_TOUCH requires touch_count of at least one",
+            )
+
+    @staticmethod
+    def _is_active_liq_touch(event: Any, observed_at: datetime) -> bool:
+        data = event.data
+        age = observed_at - event.source_bar_time
+        return (
+            data.get("producer_id") == "LIQ_V2"
+            and str(data.get("producer_revision")) == "9"
+            and event.event == "LIQ_TOUCH"
+            and data.get("confirmed") is True
+            and data.get("symbol") == "XAUUSD"
+            and data.get("feed") == "ICMARKETS"
+            and data.get("anchor_timeframe") == "5m"
+            and data.get("freshness_status") == "FRESH"
+            and data.get("level_freshness_status") == "FRESH"
+            and data.get("market_price_freshness_status") == "FRESH"
+            and data.get("atr_freshness_status") == "FRESH"
+            and data.get("atr_confirmed") is True
+            and int(data.get("touch_count", 0)) >= 1
+            and timedelta(0) <= age <= timedelta(minutes=15)
+        )
+
+    @staticmethod
+    def _liq_research_evidence_key(event: Any) -> str:
+        data = event.data
+        identity = {
+            "level_id": data["level_id"],
+            "touch_count": data["touch_count"],
+            "source_bar_time": data["source_bar_time"],
+        }
+        return "sha256:" + hashlib.sha256(canonical_json_bytes(identity)).hexdigest()
+
+    @staticmethod
+    def _liq_touch_fingerprint(event: Any) -> str:
+        evidence = dict(event.data)
+        evidence.pop("event_id", None)
+        evidence.pop("emitted_at", None)
+        return "sha256:" + hashlib.sha256(canonical_json_bytes(evidence)).hexdigest()
+
     def receive(
         self, raw: bytes, *, detection: RawProducerDetection | None = None,
     ) -> RawProducerResult:
@@ -356,7 +571,8 @@ class ProjectARawProducerAdapter:
                 503, False, False, detected.producer, detected.event,
                 "DISABLED", "UNCHANGED", "RAW_PRODUCER_INGEST_DISABLED",
             )
-        received_at = _iso(self.clock())
+        observed_at = self.clock()
+        received_at = _iso(observed_at)
         ingest_id = self._ingest_id(raw)
         existing = self.store.existing_receipt(ingest_id)
         if existing is not None:
@@ -383,6 +599,7 @@ class ProjectARawProducerAdapter:
             )
         try:
             event = parse_numeric_event(raw)
+            self._validate_source_authority(event)
         except NumericStateError as exc:
             self.store.record_rejection(
                 ingest_id=ingest_id, raw=raw, received_at=received_at,
@@ -430,16 +647,12 @@ class ProjectARawProducerAdapter:
                     "ORDER BY e.source_bar_time,e.canonical_event_id"
                 ).fetchall()
                 payloads = [bytes(row["raw_body"]) for row in rows] + [raw]
-                disabled_requests = _NoExternalRequestAdapter()
-                pipeline = OfflineSection2Pipeline({}).compile(
+                pipeline = OfflineSection2Pipeline(approved_source_identities()).compile(
                     producer_events=payloads,
                     trigger_event_id=event.producer_event_id,
-                    requested_at=event.source_bar_time,
+                    requested_at=observed_at,
                     macd={}, dxy={}, htf_context={},
                     freshness=self._missing_freshness(),
-                    primary_request_adapter=disabled_requests,
-                    supplemental_request_adapter=disabled_requests,
-                    screenshot_request_adapter=_NoScreenshotRequestAdapter(),
                 )
                 if pipeline.make_sense_request.full_capture_requested:
                     raise Section2PipelineError("raw producer ingress cannot request capture")
@@ -493,9 +706,100 @@ class ProjectARawProducerAdapter:
                         telemetry, correlation, 0, 0, 0, 0,
                     ),
                 )
+                research_wake = self._is_active_liq_touch(event, observed_at)
+                evidence_key = self._liq_research_evidence_key(event) if research_wake else None
+                touch_fingerprint = self._liq_touch_fingerprint(event) if research_wake else None
+                same_evidence_suppressed = False
+                if evidence_key is not None:
+                    existing_touch = conn.execute(
+                        "SELECT touch_fingerprint_sha256 FROM project_a_liq_research_requests "
+                        "WHERE evidence_key=?",
+                        (evidence_key,),
+                    ).fetchone()
+                    if existing_touch is not None:
+                        if existing_touch["touch_fingerprint_sha256"] != touch_fingerprint:
+                            raise NumericStateError(
+                                "LIQ_TOUCH_EVIDENCE_CONFLICT",
+                                "touch_identity",
+                                "same level/touch/source time has different evidence",
+                            )
+                        same_evidence_suppressed = True
+                        research_wake = False
+                    else:
+                        latest_touch = conn.execute(
+                            "SELECT touch_count,requested_at,canonical_event_id FROM "
+                            "project_a_liq_research_requests WHERE level_id=? "
+                            "ORDER BY touch_count DESC,requested_at DESC LIMIT 1",
+                            (str(event.data["level_id"]),),
+                        ).fetchone()
+                        if latest_touch is not None:
+                            latest_event = conn.execute(
+                                "SELECT source_bar_time FROM project_a_producer_events "
+                                "WHERE canonical_event_id=?",
+                                (latest_touch["canonical_event_id"],),
+                            ).fetchone()
+                            if (
+                                int(event.data["touch_count"]) <= int(latest_touch["touch_count"])
+                                or latest_event is None
+                                or str(event.data["source_bar_time"]) <= str(latest_event["source_bar_time"])
+                            ):
+                                raise NumericStateError(
+                                    "NON_MONOTONIC_LIQ_RETOUCH",
+                                    "touch_count",
+                                    "re-touch must advance both touch count and source time",
+                                )
+                if research_wake:
+                    request_document = pipeline.evidence_bundle_request.document()
+                    request_bytes = canonical_json_bytes(request_document)
+                    request_sha256 = hashlib.sha256(request_bytes).hexdigest()
+                    conn.execute(
+                        "INSERT INTO project_a_liq_research_requests("
+                        "canonical_event_id,ingest_id,evidence_key,touch_fingerprint_sha256,"
+                        "level_id,touch_count,requested_at,evidence_acquisition_mode,"
+                        "evidence_request_json,evidence_request_sha256,target_binding_status,"
+                        "request_status,legacy_wake_eligible,"
+                        "provider_eligible,writer_eligible,order_eligible"
+                        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (
+                            event.canonical_event_id,
+                            ingest_id,
+                            evidence_key,
+                            touch_fingerprint,
+                            str(event.data["level_id"]),
+                            int(event.data["touch_count"]),
+                            received_at,
+                            "MCP_STRUCTURED_READS_AND_SCREENSHOTS",
+                            request_bytes.decode("utf-8"),
+                            request_sha256,
+                            "UNBOUND_REQUIRES_PREFLIGHT",
+                            "PENDING",
+                            0,
+                            0,
+                            0,
+                            0,
+                        ),
+                    )
+                    conn.execute(
+                        "INSERT INTO project_a_liq_research_status_history("
+                        "canonical_event_id,status,recorded_at"
+                        ") VALUES (?,?,?)",
+                        (event.canonical_event_id, "PENDING", received_at),
+                    )
                 return RawProducerResult(
-                    200, True, False, str(event.data["producer_id"]), event.event,
-                    telemetry, pipeline.make_sense_request.state.value,
+                    200, True, same_evidence_suppressed,
+                    str(event.data["producer_id"]), event.event,
+                    (
+                        "LIQ_RESEARCH_WAKE_REQUESTED"
+                        if research_wake
+                        else "LIQ_RESEARCH_DUPLICATE_EVIDENCE_SUPPRESSED"
+                        if same_evidence_suppressed
+                        else "LIQ_RESEARCH_FAILED_CLOSED"
+                        if event.data["producer_id"] == "LIQ_V2" and event.event == "LIQ_TOUCH"
+                        else telemetry
+                    ),
+                    pipeline.make_sense_request.state.value,
+                    research_wake=research_wake,
+                    evidence_acquisition_requested=research_wake,
                 )
         except NumericStateError as exc:
             self.store.record_rejection(
@@ -524,6 +828,7 @@ class ProjectARawProducerAdapter:
 
 __all__ = [
     "APPROVED_PRODUCERS", "APPROVED_SCHEMAS", "ProjectARawProducerAdapter",
-    "ProjectARawProducerStore", "RAW_ADAPTER_SCHEMA_CHECKSUM", "RawProducerDetection",
+    "ProjectARawProducerStore", "RAW_ADAPTER_SCHEMA_CHECKSUM",
+    "LIQ_RESEARCH_QUEUE_SCHEMA_CHECKSUM", "RawProducerDetection",
     "RawProducerResult", "detect_raw_producer",
 ]

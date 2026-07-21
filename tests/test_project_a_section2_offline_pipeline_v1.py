@@ -145,58 +145,69 @@ def _compile(events, trigger, **changes):
     return OfflineSection2Pipeline(_sources()).compile(**values)
 
 
-def test_e2_composes_the_complete_offline_request_chain():
-    result = _compile((_exp(), _liq(), _renko("E2")), "renko-e2-1")
-    assert result.make_sense_request.state is StoryState.B_TO_A_CANDIDATE
-    assert result.make_sense_request.full_capture_requested is True
+def test_liq_touch_composes_the_complete_offline_request_chain():
+    result = _compile((_liq(),), "liq-touch-1")
+    assert result.make_sense_request.state is StoryState.C_INSUFFICIENT
+    assert result.make_sense_request.research_started is True
     assert result.make_sense_request.final_trade_direction is None
-    assert result.evidence_bundle_request.trigger.level is RequestLevel.FULL_B_TO_A_CAPTURE
+    assert result.evidence_bundle_request.trigger.level is RequestLevel.LIQ_RESEARCH_CAPTURE
+    assert result.evidence_bundle_request.trigger.full_capture_requested is True
     assert {request.source.layout_id for request in result.evidence_bundle_request.structured_reads} >= {
         "cpPWuLlN", "avpCVaw2", "pNqcbOmu", "n9qjfufV", "ocVwlz2C", "YclFo8Ax",
     }
+    assert {request.read_kind for request in result.evidence_bundle_request.structured_reads} >= {
+        "CURRENT_FORMING_PRICE", "EXPANSION_CONTEXT", "SNR_HPA_CONTEXT",
+        "STANDARD_MACD", "RENKO_STATE", "DXY_CONTEXT",
+    }
     assert len(result.evidence_bundle_request.screenshot_requests) == 5
-    assert result.final_review_request is not None
-    assert result.final_review_request.dispatch_enabled is False
-    assert result.final_review_request.network_enabled is False
+    assert result.final_review_request is None
+    assert result.grading_preparation_requested is True
     assert result.dash_request.dispatch_enabled is False
     assert result.order_placed is False
     assert result.numeric_state.snapshot()["trade_direction"] is None
 
 
-def test_liq_touch_stops_at_numeric_research_request():
+def test_liq_touch_with_prior_compatibility_evidence_still_owns_the_only_capture_request():
     result = _compile((_exp(), _liq()), "liq-touch-1")
     assert result.make_sense_request.state is StoryState.B_BUILDING
     assert result.make_sense_request.research_started is True
     assert result.make_sense_request.numeric_snapshot_requested is True
-    assert result.evidence_bundle_request.trigger.level is RequestLevel.NUMERIC_RESEARCH
-    assert result.evidence_bundle_request.screenshot_requests == ()
+    assert result.evidence_bundle_request.trigger.level is RequestLevel.LIQ_RESEARCH_CAPTURE
+    assert len(result.evidence_bundle_request.screenshot_requests) == 5
     assert result.final_review_request is None
 
 
-def test_e1_is_prewarm_and_expansion_alone_is_telemetry():
+def test_expansion_and_renko_compatibility_inputs_cannot_wake_or_promote():
     e1 = _compile((_exp(), _liq(), _renko("E1")), "renko-e1-1")
-    assert e1.make_sense_request.state is StoryState.B_BUILDING
-    assert e1.evidence_bundle_request.trigger.level is RequestLevel.PREWARM_ONLY
+    assert e1.make_sense_request.state is StoryState.NO_STORY
+    assert e1.evidence_bundle_request.trigger.level is RequestLevel.TELEMETRY_ONLY
     assert e1.final_review_request is None
+    assert e1.grading_preparation_requested is False
 
     exp = _compile((_exp(),), "exp-1")
     assert exp.make_sense_request.state is StoryState.NO_STORY
     assert exp.evidence_bundle_request.trigger.level is RequestLevel.TELEMETRY_ONLY
     assert exp.make_sense_request.final_trade_direction is None
 
+    e2 = _compile((_exp(), _liq(), _renko("E2")), "renko-e2-1")
+    assert e2.make_sense_request.state is StoryState.NO_STORY
+    assert e2.evidence_bundle_request.trigger.level is RequestLevel.TELEMETRY_ONLY
+    assert e2.final_review_request is None
+    assert e2.grading_preparation_requested is False
 
-def test_stale_or_market_closed_evidence_fails_closed_without_capture():
+
+def test_stale_or_market_closed_evidence_is_recorded_and_cannot_promote_or_grade():
     stale = _fresh()
     stale["xau"] = "MARKET_CLOSED"
     result = _compile(
-        (_exp(), _liq(), _renko("E2")), "renko-e2-1",
+        (_liq(),), "liq-touch-1",
         prior_state=StoryState.B_BUILDING.value,
         freshness=stale,
     )
     assert result.make_sense_request.state is StoryState.EXPIRED
-    assert result.make_sense_request.full_capture_requested is False
-    assert result.evidence_bundle_request.trigger.level is RequestLevel.PREWARM_ONLY
+    assert result.evidence_bundle_request.trigger.level is RequestLevel.LIQ_RESEARCH_CAPTURE
     assert result.evidence_bundle_request.promotion_allowed is False
+    assert any(item.reason == "MARKET_CLOSED" for item in result.evidence_bundle_request.unavailable_evidence)
     assert result.final_review_request is None
 
 
@@ -208,7 +219,7 @@ def test_missing_trigger_or_naive_time_fails_closed():
 
 
 def test_pipeline_models_expose_no_execution_methods():
-    result = _compile((_exp(), _liq(), _renko("E2")), "renko-e2-1")
+    result = _compile((_liq(),), "liq-touch-1")
     for value in (
         result,
         result.make_sense_request,
@@ -229,13 +240,19 @@ def test_versioned_producer_contract_fixture_parses_without_ambiguous_price():
     )
     assert fixture["fixture_schema"] == "project_a.section2_producer_fixture/1.0"
     parsed = [parse_numeric_event(event) for event in fixture["events"]]
-    assert [event.event for event in parsed] == [
-        "EXP_UP", "LIQ_TOUCH", "RENKO_E1", "RENKO_E2", "RENKO_MAIN", "RENKO_FIRE",
-    ]
-    assert {event["producer_id"] for event in fixture["events"]} == {
-        "LIQ_V2", "EXP_V3", "RENKO_V3_SNIPER",
-    }
-    assert fixture["events"][0]["body_quality"] is None
-    assert parsed[1].data["level_id"] == fixture["expected_liquidity_level_id"]
+    assert fixture["disposition"] == "SOLE_ACTIVE_PRODUCTION_TRIGGER"
+    assert [event.event for event in parsed] == ["LIQ_TOUCH"]
+    assert {event["producer_id"] for event in fixture["events"]} == {"LIQ_V2"}
+    assert parsed[0].data["level_id"] == fixture["expected_liquidity_level_id"]
     assert all("price" not in event for event in fixture["events"])
     assert all("trade_direction" not in event for event in fixture["events"])
+
+    compatibility = json.loads(
+        (Path(__file__).parents[1] / "fixtures" / "project_a" / "analysis_compatibility_events_v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert compatibility["disposition"] == "NON_PRODUCTION_NON_WAKING_EVIDENCE_ONLY"
+    assert {event["producer_id"] for event in compatibility["events"]} == {
+        "EXP_V3", "RENKO_V3_SNIPER",
+    }

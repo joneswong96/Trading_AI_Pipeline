@@ -1,62 +1,53 @@
 # Project A raw producer `/alert` adapter V1
 
-Status: integrated repository contract; runtime deployment remains separate.
+Status: **IMPLEMENTED — SINGLE-LIQ RESEARCH TRIGGER, FAIL-CLOSED**
 
-## Boundary and precedence
+TradingView has one approved webhook transport: `POST /alert`. Recognized
+Project A JSON is parsed from the exact raw UTF-8 body before the legacy parser.
+Invalid recognized input returns a bounded 4xx/503 and never falls through to
+legacy routing or fanout.
 
-TradingView has one approved webhook path: `POST /alert`. Ingress reads the raw
-body once and applies this order:
+## Active and compatibility identities
 
-1. Parse JSON only for exact Product Input identity detection.
-2. Route an allowlisted raw producer to the Project A adapter.
-3. Route every other body through the unchanged legacy JSON/text parser.
+`LIQ_V2/9 LIQ_TOUCH` is the only active production research trigger. It must be
+confirmed, `FRESH`, no more than 15 minutes old, not future-dated, and exactly
+ICMARKETS:XAUUSD on the 5m authority. Level, market-price and ATR freshness must
+be `FRESH`, and the 5m ATR must be confirmed.
 
-Detection uses exact top-level schema or producer values, never substrings or an
-arbitrary `producer_id`. Once recognized, a payload cannot fall through to
-legacy parsing even if strict validation or Section 2 compilation fails.
+Strict `EXP_V3/5`, `RENKO_V3_SNIPER/1`, and `EXP_SCANNER/6` interception remains
+for compatibility safety. Those events, plus non-touch LIQ lifecycle events,
+are telemetry-only and cannot wake research, request capture, promote a story,
+call a provider, write output, notify, or place an order.
 
-## Allowlist and canonical path
+## Research intent and dedupe
 
-The active production identities are `LIQ_V2/9`, `EXP_V3/5` and
-`RENKO_V3_SNIPER/1`. The strict `EXP_SCANNER/6` identity remains accepted only
-as dormant compatibility to avoid regression; it is not materialized, alerted
-or required by Section 2. Producer validation stays in `project_a.numeric_state`; ingress
-does not duplicate it. Accepted raw bytes flow through:
+The first valid LIQ touch inserts one append-only
+`project_a_liq_research_requests` row containing the complete, hashed structured
+read and screenshot request, with an explicit unbound-target preflight gate.
+Append-only status history supports `PENDING`, one-worker `CLAIMED`, and terminal
+`COMPLETED`/`FAILED`; completion requires a lowercase 64-hex capture-manifest
+SHA-256. The schema is additive and separately versioned, so the accepted
+raw-receipt V1 checksum and history remain intact.
 
-`raw receipt → NumericMarketState → MakeSenseCompiler → EvidenceBundleRequest`
+The Project A response sets `wake=true` and
+`evidence_acquisition_requested=true` only for that newly queued touch. This is
+a Project A research wake, not the legacy wake/fanout path; receipt rows retain
+`legacy_wake_eligible=0`.
 
-The pipeline is invoked with empty injected structured-read and screenshot
-request adapters. All freshness inputs are `MISSING`, so ingress records only
-deterministic telemetry/state. It performs no read, screenshot, provider call,
-notification, output write, broker connection or order action.
+Exact, formatting-equivalent, semantic same-event, and identical-evidence
+retries do not create another research intent. Conflicting facts for the same
+level/touch/time identity fail closed. A genuine re-touch must monotonically
+advance both touch count and source time; it creates a new evidence key
+immediately, with no fixed cooldown.
 
-## Semantics and correlation
+## Evidence and safety boundary
 
-- LIQ keeps `level_price` separate from event-time `market_price`; ASK/BID is a
-  liquidity side, not trade direction.
-- EXP keeps UP/DOWN as movement and story evidence, never LONG/SHORT.
-- Scanner is stored separately as quality-only, non-promoting evidence. Exact
-  symbol/feed/timeframe/source-bar-time/direction-context matching is
-  receipt-order independent. Missing or ambiguous matches remain unpaired.
-- Renko E1, E2, MAIN, FIRE and RESET remain stage/timing evidence only.
+The queued intent is not a completed Evidence Bundle or Grade. The offline
+Evidence Bundle compiler describes the approved MCP structured reads and
+screenshots; execution belongs to a separately approved capture runtime.
+Missing or stale evidence remains explicit and promotion remains false.
 
-No missing Entry, SL, TP, grade or trade direction is invented.
-
-## Persistence, dedupe and responses
-
-The adapter uses the configured Project A SQLite owner and adds append-only
-adapter receipts, canonical events and state-history tables. Raw bytes are
-immutable. Exact retries and semantic retries are idempotent; event-identity or
-Scanner-fact conflicts are audit-visible. Validation and compilation are
-transactional, so failure produces no partial canonical event or state update.
-
-Valid responses expose only bounded status fields and always report
-`wake=false`, `provider_called=false`, `writer_called=false`, and
-`order_placed=false`. Recognized validation failures return 4xx; internal
-failures return a bounded 503 without paths, payloads or exception detail.
-
-`PROJECT_A_RAW_PRODUCER_INGEST_ENABLED` defaults to `true`. This switch enables
-only safe telemetry recognition. It does not alter the independent disabled V1
-endpoint, SHADOW/MT5_DEMO safety constants, capture, provider, writer or order
-boundaries. A separate controlled deployment is required before a running
-non-reload server uses this adapter.
+All raw-receipt, event, state, and research-intent records are immutable or
+append-only. Provider, writer, broker and order flags are structurally false.
+Project A V1/provider/output paths remain disabled, with SHADOW, MT5_DEMO,
+`live_execution=false`, and `order_placement=false`.

@@ -2,7 +2,7 @@
 
 Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE**
 
-The state family, qualitative maturity mapping, B-to-A capture trigger,
+The state family, qualitative maturity mapping, single-LIQ research trigger,
 exactly-once concept and `FRESHNESS_POLICY_V1.md` thresholds are approved.
 Liquidity distance/near-touch follows `LIQUIDITY_DISTANCE_POLICY_V1.md`.
 Stable identity, deterministic competing-level selection, tracked-level lock and
@@ -12,6 +12,16 @@ fail closed.
 
 Purpose: build a deterministic numeric whole-picture story before final review or
 notification. This document does not activate a runtime transition.
+
+## 0. Single-trigger ruling
+
+One valid `LIQ_V2/9 LIQ_TOUCH` starts research and compiles the full approved
+structured-read and screenshot request even when prior Expansion or Renko facts
+are absent and the story remains `C_INSUFFICIENT`. Acquisition is not promotion
+or proof that the Evidence Bundle is complete. EXP V3, Renko V3 Sniper, and
+Scanner inputs are compatibility evidence only and cannot independently wake,
+capture, promote, grade, notify, or assign trade direction. Renko/5-second
+evidence may be included as context in the LIQ-triggered capture.
 
 ## 1. General invariants
 
@@ -44,7 +54,8 @@ liquidity approach and directed expansion pair has been established.
 
 A possible setup exists, but one or more mandatory B-building facts are missing,
 stale, provisional where confirmation is required, contradictory, or identity
-invalid. It carries grade C and cannot trigger capture or notification.
+invalid. It carries grade C and cannot trigger promotion or notification; a LIQ
+touch may still request capture so the missing evidence can be acquired honestly.
 
 ### `B_BUILDING`
 
@@ -92,7 +103,8 @@ All of the following are required:
    never relabeled `FRESH`.
 6. No deterministic invalidation exists.
 
-Entering this state is the only V1 production capture trigger.
+Entering this state is not a production capture trigger. The sole capture trigger
+is the valid LIQ touch defined above.
 
 ### `A_CONFIRMED`
 
@@ -152,12 +164,12 @@ current setup ID.
 | `NO_STORY` | `B_BUILDING` | All B-building gates pass on fresh evidence |
 | `C_INSUFFICIENT` | `B_BUILDING` | Missing or provisional facts become valid and confirmed |
 | `C_INSUFFICIENT` | `NO_STORY` | Candidate evidence disappears without a setup |
-| `B_BUILDING` | `B_TO_A_CANDIDATE` | All candidate gates pass; append transition and trigger one bounded capture |
+| `B_BUILDING` | `B_TO_A_CANDIDATE` | The LIQ-triggered capture completes and all candidate gates pass; no additional alert |
 | `B_BUILDING` | `C_INSUFFICIENT` | Non-terminal evidence becomes incomplete or stale |
 | `B_TO_A_CANDIDATE` | `B_BUILDING` | Reaction/maturity evidence weakens but setup remains valid and fresh |
-| `B_TO_A_CANDIDATE` | `WAITING_5S_ENTRY` | Final verdict/grade, reaction, 1m, Main, DXY, geometry and bundle all pass; matching FIRE absent |
-| `B_TO_A_CANDIDATE` | `A_CONFIRMED` | Same A gates pass and an eligible matching FIRE is already bound |
-| `WAITING_5S_ENTRY` | `A_CONFIRMED` | A new confirmed matching Sniper FIRE arrives within 15 seconds and all final GO freshness gates pass |
+| `B_TO_A_CANDIDATE` | `WAITING_5S_ENTRY` | Optional captured 5-second timing context is incomplete; no Renko alert is awaited |
+| `B_TO_A_CANDIDATE` | `A_CONFIRMED` | Complete captured evidence and final review pass without counting alerts |
+| `WAITING_5S_ENTRY` | `A_CONFIRMED` | Fresh captured timing/context and all final gates pass; no independent FIRE webhook |
 | Any non-terminal state | `INVALIDATED` | Deterministic invalidation or integrity failure |
 | Any non-terminal state | `EXPIRED` | Approved expiry or freshness limit elapses |
 | `INVALIDATED` or `EXPIRED` | `NO_STORY` | A new setup ID begins; prior history remains immutable |

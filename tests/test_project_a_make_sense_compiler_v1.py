@@ -98,7 +98,7 @@ def test_expansion_alone_is_telemetry_only_and_never_assigns_trade_direction():
     assert result.full_capture_requested is False
     assert result.final_trade_direction is None
     assert result.order_placed is False
-    assert result.reasons == ("EXPANSION_TELEMETRY_ONLY",)
+    assert result.reasons == ("COMPATIBILITY_EVIDENCE_ONLY",)
 
 
 def test_liq_touch_begins_research_retrieves_prior_relevant_expansion_and_requests_snapshot():
@@ -136,50 +136,49 @@ def test_down_expansion_toward_bid_is_only_a_bullish_reversal_hypothesis():
     assert result.final_trade_direction is None
 
 
-def test_e1_is_early_watch_only():
+def test_e1_is_compatibility_evidence_only():
     result = MakeSenseCompiler().compile(_input("RENKO_E1"))
-    assert result.state is StoryState.B_BUILDING
-    assert result.prewarm_requested is True
+    assert result.state is StoryState.NO_STORY
+    assert result.prewarm_requested is False
     assert result.full_capture_requested is False
+    assert result.reasons == ("COMPATIBILITY_EVIDENCE_ONLY",)
 
 
-def test_e2_requests_full_capture_only_with_active_story_and_corroboration():
+def test_e2_cannot_request_full_capture_or_promote_even_with_context():
     passing = MakeSenseCompiler().compile(_input("RENKO_E2"))
-    assert passing.state is StoryState.B_TO_A_CANDIDATE
-    assert passing.full_capture_requested is True
+    assert passing.state is StoryState.NO_STORY
+    assert passing.full_capture_requested is False
 
     failing = MakeSenseCompiler().compile(_input("RENKO_E2", macd={}))
-    assert failing.state is StoryState.C_INSUFFICIENT
+    assert failing.state is StoryState.NO_STORY
     assert failing.full_capture_requested is False
-    assert "confirmed_1m_5m_macd_corroboration" in failing.missing_evidence
 
 
-def test_main_confirms_evidence_but_never_orders():
+def test_main_remains_compatibility_evidence_and_never_orders():
     result = MakeSenseCompiler().compile(_input("RENKO_MAIN"))
-    assert result.state is StoryState.A_REVIEW_REQUIRED
+    assert result.state is StoryState.NO_STORY
     assert result.full_capture_requested is False
     assert result.provider_dispatch_enabled is False
     assert result.order_placed is False
     assert result.final_trade_direction is None
 
 
-def test_fire_cannot_act_without_valid_waiting_5s_thesis():
+def test_fire_cannot_wake_or_act_with_or_without_prior_state():
     result = MakeSenseCompiler().compile(_input("RENKO_FIRE"))
-    assert result.state is StoryState.C_INSUFFICIENT
-    assert "valid_waiting_5s_5m_1m_thesis" in result.missing_evidence
+    assert result.state is StoryState.NO_STORY
     assert result.order_placed is False
 
     valid = MakeSenseCompiler().compile(
         _input("RENKO_FIRE", prior_state=StoryState.WAITING_5S_ENTRY.value)
     )
-    assert valid.state is StoryState.A_REVIEW_REQUIRED
+    assert valid.state is StoryState.NO_STORY
     assert valid.order_placed is False
 
 
 @pytest.mark.parametrize("status", ["STALE", "MISSING", "CLOCK_INVALID", "SOURCE_UNAVAILABLE", "MARKET_CLOSED"])
 def test_hard_freshness_failures_expire_active_story(status):
     result = MakeSenseCompiler().compile(
-        _input("RENKO_E2", prior_state=StoryState.B_BUILDING.value, freshness=_fresh(xau=status))
+        _input("REVIEW_STATE", prior_state=StoryState.B_BUILDING.value, freshness=_fresh(xau=status))
     )
     assert result.state is StoryState.EXPIRED
     assert result.full_capture_requested is False
@@ -192,11 +191,11 @@ def test_terminal_level_fails_closed_as_invalidated():
     assert result.state is StoryState.INVALIDATED
 
 
-def test_approved_review_without_fire_waits_and_does_not_dispatch():
+def test_approved_review_records_review_state_without_waiting_for_fire():
     result = MakeSenseCompiler().compile(
         _input("REVIEW_STATE", final_review={"verdict": "APPROVE", "grade": "A"})
     )
-    assert result.state is StoryState.WAITING_5S_ENTRY
+    assert result.state is StoryState.A_REVIEW_REQUIRED
     assert result.order_placed is False
 
 

@@ -109,6 +109,7 @@ class Section2PipelineResult:
     evidence_bundle_request: Any
     dash_request: ProviderNeutralRequest
     final_review_request: ProviderNeutralRequest | None
+    grading_preparation_requested: bool = False
     runtime_enabled: bool = False
     provider_enabled: bool = False
     writer_enabled: bool = False
@@ -223,6 +224,7 @@ class OfflineSection2Pipeline:
             evidence_bundle_request=bundle,
             dash_request=dash,
             final_review_request=final,
+            grading_preparation_requested=bundle.trigger.full_capture_requested,
         )
 
 

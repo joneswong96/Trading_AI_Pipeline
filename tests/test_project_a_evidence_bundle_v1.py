@@ -32,7 +32,7 @@ def sources():
         return SourceIdentity(role, port, layout, target, symbol, feed, timeframes)
 
     return {
-        "xau_intraday": source("xau_intraday", 9333, "cpPWuLlN", "target-xau-intraday", "XAUUSD", "ICMARKETS", ("1m", "5m", "15m", "30m")),
+        "xau_intraday": source("xau_intraday", 9333, "cpPWuLlN", "target-xau-intraday", "XAUUSD", "ICMARKETS", ("1m", "5m")),
         "xau_30m_15m": source("xau_30m_15m", 9333, "avpCVaw2", "target-xau-30m-15m", "XAUUSD", "ICMARKETS", ("15m", "30m")),
         "xau_htf": source("xau_htf", 9333, "pNqcbOmu", "target-xau-htf", "XAUUSD", "ICMARKETS", ("4H", "D", "W")),
         "dxy_15m": source("dxy_15m", 9333, "n9qjfufV", "target-dxy-15m", "DXY", "TVC", ("15m",)),
@@ -41,11 +41,33 @@ def sources():
     }
 
 
-def build(sources, event="EXP_UP", active=False, **kwargs):
+def build(sources, event="EXP_UP", active=False, trigger_changes=None, **kwargs):
+    trigger = {
+        "event": event,
+        "event_id": "event-001",
+        "source_bar_time": "2026-07-20T03:04:00Z",
+        "confirmed": True,
+    }
+    if event == "LIQ_TOUCH":
+        trigger.update(
+            producer_id="LIQ_V2",
+            producer_revision="9",
+            symbol="XAUUSD",
+            feed="ICMARKETS",
+            anchor_timeframe="5m",
+            freshness_status="FRESH",
+            level_freshness_status="FRESH",
+            market_price_freshness_status="FRESH",
+            atr_freshness_status="FRESH",
+            atr_confirmed=True,
+            touch_count=1,
+        )
+    if trigger_changes:
+        trigger.update(trigger_changes)
     return build_evidence_bundle_request(
         request_id="evidence_request_001",
         requested_at=NOW,
-        triggering_events=({"event": event, "event_id": "event-001", "confirmed": True},),
+        triggering_events=(trigger,),
         event_history=({"event": "EXP_UP", "market_price": "2400.10"},),
         numeric_market_state={"price_path": ["2400.00", "2400.10"], "trade_direction": None},
         sources=sources,
@@ -63,18 +85,45 @@ def test_expansion_alone_is_telemetry_and_requests_no_capture(sources):
     assert request.trigger.order_permitted is False
 
 
-def test_liq_touch_starts_research_and_compiles_numeric_snapshot_only(sources):
+def test_liq_touch_starts_research_and_compiles_complete_capture(sources):
     request = build(sources, "LIQ_TOUCH")
-    assert request.trigger.level is RequestLevel.NUMERIC_RESEARCH
+    assert request.trigger.level is RequestLevel.LIQ_RESEARCH_CAPTURE
     assert request.trigger.research_started is True
+    assert request.trigger.full_capture_requested is True
     assert {item.read_kind for item in request.structured_reads} == {
         "CURRENT_FORMING_PRICE", "CLOSED_OHLC", "STANDARD_MACD",
+        "EXPANSION_CONTEXT", "SNR_HPA_CONTEXT", "CLOSED_OHLC_AND_STRUCTURE",
+        "DXY_CONTEXT", "DXY_SUPPLEMENTAL", "RENKO_STATE", "SHORT_TERM_PRICE_ACTION",
     }
-    assert request.screenshot_requests == ()
+    assert len(request.screenshot_requests) == 5
     macd = [item for item in request.structured_reads if item.read_kind == "STANDARD_MACD"]
     assert len(macd) == 2
     assert all(item.indicator_parameters == (12, 26, 9) for item in macd)
     assert all(item.closed_bars_only is True for item in macd)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"producer_id": "EXP_V3"},
+        {"producer_revision": "8"},
+        {"symbol": "EURUSD"},
+        {"feed": "OANDA"},
+        {"anchor_timeframe": "1m"},
+        {"confirmed": False},
+        {"touch_count": 0},
+        {"freshness_status": "STALE"},
+        {"source_bar_time": "2026-07-20T02:00:00Z"},
+        {"source_bar_time": "2026-07-20T03:05:00Z"},
+    ],
+)
+def test_invalid_liq_trigger_cannot_compile_capture_or_grading_preparation(sources, change):
+    request = build(sources, "LIQ_TOUCH", trigger_changes=change)
+    assert request.trigger.level is RequestLevel.TELEMETRY_ONLY
+    assert request.trigger.research_started is False
+    assert request.trigger.full_capture_requested is False
+    assert request.structured_reads == ()
+    assert request.screenshot_requests == ()
 
 
 def test_intraday_timeframes_are_split_across_exact_9333_layout_identities(sources):
@@ -95,46 +144,31 @@ def test_intraday_timeframes_are_split_across_exact_9333_layout_identities(sourc
     }
 
 
-@pytest.mark.parametrize("event", ["RENKO_E1", "RENKO_E2"])
-def test_e1_and_uncorroborated_e2_are_prewarm_only(sources, event):
+@pytest.mark.parametrize("event", ["EXP_UP", "RENKO_E1", "RENKO_E2", "RENKO_MAIN", "RENKO_FIRE"])
+def test_compatibility_events_are_telemetry_only(sources, event):
     request = build(sources, event)
-    assert request.trigger.level is RequestLevel.PREWARM_ONLY
-    assert request.trigger.prewarm_only is True
+    assert request.trigger.level is RequestLevel.TELEMETRY_ONLY
+    assert request.trigger.research_started is False
+    assert request.trigger.full_capture_requested is False
     assert not request.structured_reads
     assert not request.screenshot_requests
 
 
-def test_e2_with_active_story_requests_full_primary_and_supplemental_bundle(sources):
+def test_e2_with_active_story_cannot_request_or_promote(sources):
     request = build(sources, "RENKO_E2", active=True)
-    assert request.trigger.level is RequestLevel.FULL_B_TO_A_CAPTURE
-    assert request.trigger.b_to_a_candidate is True
-    assert request.trigger.full_capture_requested is True
-    assert {read.source.port for read in request.structured_reads} == {9222, 9333}
-    assert {read.read_kind for read in request.structured_reads} == {
-        "CURRENT_FORMING_PRICE", "CLOSED_OHLC", "STANDARD_MACD",
-        "CLOSED_OHLC_AND_STRUCTURE", "DXY_CONTEXT", "DXY_SUPPLEMENTAL", "RENKO_STATE",
-    }
-    assert len(request.screenshot_requests) == 5
-    assert {shot.source.role for shot in request.screenshot_requests} == {
-        "xau_intraday", "xau_30m_15m", "xau_htf", "dxy_15m", "renko",
-    }
+    assert request.trigger.level is RequestLevel.TELEMETRY_ONLY
+    assert request.structured_reads == ()
+    assert request.screenshot_requests == ()
     assert request.promotion_allowed is False
     assert request.runtime_execution_enabled is False
     assert request.writer_enablement == "DISABLED"
-    renko = next(read for read in request.structured_reads if read.read_kind == "RENKO_STATE")
-    assert renko.source.layout_id == "YclFo8Ax"
-    assert renko.source.timeframes == ("5s",)
-    assert renko.source.chart_type == "standard_candles"
-    assert renko.timeframes == ("5s",)
 
 
-def test_main_is_confirmation_and_fire_is_timing_only_never_an_order(sources):
+def test_main_and_fire_are_context_only_never_an_order(sources):
     main = build(sources, "RENKO_MAIN", active=True)
     fire = build(sources, "RENKO_FIRE", active=True)
-    assert main.trigger.level is RequestLevel.DIRECTION_CONFIRMATION
-    assert main.trigger.direction_confirmation is True
-    assert fire.trigger.level is RequestLevel.ENTRY_TIMING_ONLY
-    assert fire.trigger.entry_timing_only is True
+    assert main.trigger.level is RequestLevel.TELEMETRY_ONLY
+    assert fire.trigger.level is RequestLevel.TELEMETRY_ONLY
     for request in (main, fire):
         assert request.trigger.order_permitted is False
         assert request.trigger.provider_call_permitted is False
@@ -142,7 +176,7 @@ def test_main_is_confirmation_and_fire_is_timing_only_never_an_order(sources):
 
 
 def test_screenshots_are_visual_only_and_cannot_override_or_confirm(sources):
-    request = build(sources, "RENKO_E2", active=True)
+    request = build(sources, "LIQ_TOUCH")
     for screenshot in request.screenshot_requests:
         assert screenshot.authority == "VISUAL_ONLY"
         assert screenshot.may_override_numeric is False
@@ -154,9 +188,9 @@ def test_screenshots_are_visual_only_and_cannot_override_or_confirm(sources):
 
 
 def test_supplemental_dxy_visual_requires_explicit_adapter_opt_in(sources):
-    default = build(sources, "RENKO_E2", active=True)
+    default = build(sources, "LIQ_TOUCH")
     approved = build(
-        sources, "RENKO_E2", active=True,
+        sources, "LIQ_TOUCH",
         screenshot_adapter=ApprovedScreenshotRequestAdapter(
             include_approved_dxy_1m_visual=True,
         ),
@@ -176,8 +210,8 @@ def test_primary_and_supplemental_adapters_are_request_only_and_port_pinned(sour
     wrong["renko"] = SourceIdentity(
         "renko", 9222, "YclFo8Ax", "target-renko", "XAUUSD", "ICMARKETS", ("5s",),
     )
-    with pytest.raises(EvidenceBundleError, match="port 9333"):
-        build(wrong, "RENKO_E2", active=True)
+    with pytest.raises(EvidenceBundleError, match="approved port/layout"):
+        build(wrong, "LIQ_TOUCH")
 
 
 def test_native_renko_chart_type_is_rejected():
@@ -186,6 +220,22 @@ def test_native_renko_chart_type_is_rejected():
             "renko", 9333, "YclFo8Ax", "target-renko", "XAUUSD", "ICMARKETS",
             ("5s",), chart_type="renko",
         )
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        SourceIdentity("xau_intraday", 9333, "wrong", "target", "XAUUSD", "ICMARKETS", ("1m", "5m")),
+        SourceIdentity("xau_intraday", 9333, "cpPWuLlN", "target", "EURUSD", "ICMARKETS", ("1m", "5m")),
+        SourceIdentity("xau_intraday", 9333, "cpPWuLlN", "target", "XAUUSD", "OANDA", ("1m", "5m")),
+        SourceIdentity("xau_intraday", 9333, "cpPWuLlN", "target", "XAUUSD", "ICMARKETS", ("1m",)),
+    ],
+)
+def test_wrong_primary_source_identity_fails_closed(sources, replacement):
+    wrong = dict(sources)
+    wrong["xau_intraday"] = replacement
+    with pytest.raises(EvidenceBundleError, match="approved port/layout"):
+        build(wrong, "LIQ_TOUCH")
 
 
 def test_injectable_adapters_are_used_without_live_calls(sources):
@@ -205,13 +255,13 @@ def test_injectable_adapters_are_used_without_live_calls(sources):
             return ()
 
     request = build(
-        sources, "RENKO_E2", active=True,
+        sources, "LIQ_TOUCH",
         primary_adapter=FakeStructured("primary"),
         supplemental_adapter=FakeStructured("supplemental"),
         screenshot_adapter=FakeScreenshots(),
     )
     assert [item[0] for item in calls] == ["primary", "supplemental", "visual"]
-    assert all(item[2] is RequestLevel.FULL_B_TO_A_CAPTURE for item in calls)
+    assert all(item[2] is RequestLevel.LIQ_RESEARCH_CAPTURE for item in calls)
     assert request.structured_reads == ()
 
 
@@ -263,7 +313,7 @@ def test_direct_model_construction_cannot_enable_provider_order_or_runtime(sourc
 
 def test_freshness_missing_and_unavailable_evidence_are_auditable(sources):
     request = build(
-        sources, "RENKO_E2", active=True,
+        sources, "LIQ_TOUCH",
         freshness=(FreshnessRecord(
             "xau_1m", FreshnessStatus.PROVISIONAL,
             "2026-07-20T03:04:00Z", "2026-07-20T03:04:05Z", False,

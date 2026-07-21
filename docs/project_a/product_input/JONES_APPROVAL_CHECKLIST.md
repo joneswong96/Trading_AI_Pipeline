@@ -13,9 +13,9 @@ producer, schema, adapter, provider or writer.
 - Port 9222 contains the supplemental Renko/chart environment and TVC:DXY 1m;
   its native-Renko layout is not the Renko V3 Sniper host.
 - Port 4999 is isolated acceptance/test only.
-- Liquidity V2 revision 9, Expansion V3 revision 5 and Renko V3 Sniper revision
-  1 are the three active saved candidates. Expansion Scanner revision 6 is
-  dormant reference/compatibility only.
+- Liquidity V2 revision 9 is the sole active production alert candidate.
+  Expansion V3 revision 5, Renko V3 Sniper revision 1, and Expansion Scanner
+  revision 6 are non-production analysis/reference/compatibility sources only.
 - The exact Renko V3 Sniper host is layout `YclFo8Ax` on the verified 9333
   profile: ICMARKETS:XAUUSD, 5-second standard candles. The native-Renko 9222
   layout is not parity.
@@ -29,20 +29,21 @@ producer, schema, adapter, provider or writer.
       `Jonesy_Wong`, private revision 9, as the V1 Liquidity authority. Preserve
       conventional ASK/resistance and BID/support semantics, MTF confluence,
       touch count, PRIME/VALID/WEAK grade, lifecycle and first confirmed touch.
-- [x] Approve `Expansion Leg Signal V3`, private revision 5, as the sole active
-      Expansion movement trigger/direction authority. Retain `③ Expansion
-      Scanner [SNR3.0]`, private revision 6, only as dormant compatibility and
-      reference; it is not a second vote or a Section 2 dependency.
+- [x] Retain `Expansion Leg Signal V3`, private revision 5, as non-production
+      analysis/reference evidence only. Retain `③ Expansion Scanner [SNR3.0]`,
+      private revision 6, only as dormant compatibility/reference. Neither is an
+      alert, wake, independent vote, promotion, or Section 2 prerequisite.
 - [x] Approve TradingView standard price MACD, close EMA 12/26/9, using exact
       9333 closed-bar values: 5m setup, 1m confirmation, and 15m/30m context.
 - [x] Approve 9333 TVC:DXY 15m as primary and 9222 TVC:DXY 1m as supplemental,
       used as confirmation/conflict evidence and a possible grade cap, not a
       universal hard veto.
-- [x] Approve `Renko V3 — V2 Preserved + 5s Sniper Dashboard`, private revision
+- [x] Retain `Renko V3 — V2 Preserved + 5s Sniper Dashboard`, private revision
       1, source SHA-256
       `85cd8c8c5a3ec2331b0b90dc1f920dd89c6ed68a1a4ba4779037e15de7f17298`,
-      as the V1 Renko authority candidate for `YclFo8Ax`, ICMARKETS:XAUUSD,
-      5-second standard candles, with status `SAVED_NOT_MATERIALIZED`.
+      as non-production 5-second timing/context reference for `YclFo8Ax`,
+      ICMARKETS:XAUUSD, 5-second standard candles; no Project A alert or
+      materialization is authorized.
 - [x] Approve deterministic 9333 XAUUSD 4H/D/W price structure as V1 numeric
       structure/regime authority and retain SR MTF Pro V10 as visual/supporting
       context only.
@@ -74,7 +75,8 @@ producer, schema, adapter, provider or writer.
 - [x] Approve the Make-Sense state family: `NO_STORY`, `C_INSUFFICIENT`,
       `B_BUILDING`, `B_TO_A_CANDIDATE`, `A_CONFIRMED`, `WAITING_5S_ENTRY`,
       `INVALIDATED`, and `EXPIRED`.
-- [x] Approve entry into `B_TO_A_CANDIDATE` as the complete-capture trigger.
+- [x] Approve one valid `LIQ_V2/9 LIQ_TOUCH` as the research-capture trigger;
+      no EXP or Renko alert is required before acquisition begins.
 - [x] Approve `LIQUIDITY_DISTANCE_POLICY_V1.md`: confirmed 5m ATR(14)
       normalization; side-aware ASK/BID signed distance; exact FAR, APPROACH and
       NEAR_TOUCH boundaries; zero/crossed fail-closed handling; and no automatic
@@ -99,14 +101,13 @@ producer, schema, adapter, provider or writer.
 - [ ] Approve an exact structure/range algorithm. **Pending; fail closed.**
 - [ ] Approve an exact nearest-obstacle calculation. **Pending; fail closed.**
 - [ ] Approve a trusted bid/ask/spread authority. **Pending; unavailable.**
-- [x] Approve one controlled production TradingView layout materialization,
-      including Renko V3 Sniper, under `MATERIALIZATION_APPROVAL_V1.md`.
-- [x] Approve exactly three new Project A alerts: `LIQ_V2`, `EXP_V3`, and
-      `RENKO_V3`. Expansion V3 is the sole active Expansion producer. Scanner is
-      dormant reference/compatibility only: no chart materialization, alert,
-      directional vote, Section 2 dependency, wake or promotion. The two
-      existing legacy alerts remain protected, and no fourth Project A alert is
-      authorized.
+- [x] Approve one controlled production TradingView materialization under
+      `MATERIALIZATION_APPROVAL_V1.md`: LIQ_V2 on ICMARKETS:XAUUSD 5m standard
+      candles only.
+- [x] Approve exactly one new Project A alert: `Project A V1 — LIQ_V2 — XAUUSD
+      5m`. EXP V3, Renko V3 Sniper, and Scanner have no Project A chart
+      materialization, alert, independent vote, wake, promotion, or prerequisite.
+      Existing alerts remain protected.
 - [ ] Approve Pine producer changes for missing Liquidity, Expansion and Renko
       numeric/event fields. **Pending; `PENDING_PRODUCER_CHANGE`.**
 - [ ] Approve provider runtime activation. **Pending; disabled.**

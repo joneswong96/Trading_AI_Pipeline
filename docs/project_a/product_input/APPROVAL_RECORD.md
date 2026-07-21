@@ -16,24 +16,17 @@ writer runtime-active.
 
 ## 0. Controlled materialization correction
 
-Jones Wong explicitly approved one controlled materialization on 2026-07-20,
-as recorded in `MATERIALIZATION_APPROVAL_V1.md`. The corrected alert limit is
-exactly three new Project A alerts:
+Jones Wong superseded the three-alert plan with a single-trigger ruling. Exactly
+one new Project A alert is authorized: `Project A V1 — LIQ_V2 — XAUUSD 5m`.
+`LIQ_V2/9 LIQ_TOUCH` is the sole production research wake. EXP V3, Renko V3
+Sniper, and Expansion Scanner are compatibility/analysis references only: no
+chart materialization, Project A alert, independent vote, wake, promotion, or
+prerequisite. Existing alerts remain protected.
 
-- `Project A V1 — LIQ_V2 JSON`
-- `Project A V1 — EXP_V3 JSON`
-- `Project A V1 — RENKO_V3 JSON`
-
-Expansion V3 is the sole active Expansion producer. Expansion Scanner is
-dormant reference/compatibility only and is not materialized, alerted, required
-by Section 2 or counted as a directional vote. If received by the retained
-strict adapter, Scanner evidence remains quality-only, non-waking and
-non-promoting. The two existing legacy alerts remain protected and no fourth
-Project A alert is authorized.
-
-This correction authorizes only the bounded runtime, private-Pine, layout and
-three-producer work in that approval. It does not weaken the SHADOW/no-live boundary
-or authorize synthetic events, providers, outputs, MT5, brokers or orders.
+This correction authorizes only the bounded runtime, private LIQ candidate,
+layout and one-alert work in that approval. It does not weaken the SHADOW/no-live
+boundary or authorize synthetic events, providers, outputs, MT5, brokers or
+orders.
 
 ## 1. Approved authorities
 
@@ -47,11 +40,11 @@ or authorize synthetic events, providers, outputs, MT5, brokers or orders.
    `LEGACY_REFERENCE`. `LIQUIDITY_DISTANCE_POLICY_V1.md` is approved as the
    side-aware pre-touch distance policy; this does not materialize or activate
    the producer.
-2. **Expansion:** `Expansion Leg Signal V3`, private revision 5, is the sole
-   active confirmed movement trigger/direction authority. `③ Expansion Scanner
-   [SNR3.0]`, private revision 6, is dormant reference/compatibility only and is
-   not required to construct or promote the story. Missing numeric outputs stay
-   missing. `expDetector/1` is `LEGACY_REFERENCE`.
+2. **Expansion:** `Expansion Leg Signal V3`, private revision 5, is retained as
+   non-production captured/compatibility evidence. `③ Expansion Scanner
+   [SNR3.0]`, private revision 6, is dormant reference/compatibility only. Neither
+   can wake or promote the story. Missing numeric outputs stay missing.
+   `expDetector/1` is `LEGACY_REFERENCE`.
 3. **MACD:** TradingView standard price MACD, close EMA 12/26/9, using exact
    closed-bar 9333 values for 1m, 5m, 15m and 30m. The 5m timeframe supplies setup
    direction, 1m supplies confirmation, and 15m/30m supply context. Developing
@@ -64,10 +57,10 @@ or authorize synthetic events, providers, outputs, MT5, brokers or orders.
 5. **Renko:** `Renko V3 — V2 Preserved + 5s Sniper Dashboard`, private revision 1,
    source SHA-256
    `85cd8c8c5a3ec2331b0b90dc1f920dd89c6ed68a1a4ba4779037e15de7f17298`,
-   is the approved V1 authority candidate for layout `YclFo8Ax`,
-   ICMARKETS:XAUUSD, 5-second standard candles. Its synthetic Renko engine does
-   not make native Renko bricks an approved host. It remains
-   `SAVED_NOT_MATERIALIZED`. Current Renko V2, `rekoArrow/1`, the standalone E1/E2
+   is retained only as non-production timing/context reference for layout
+   `YclFo8Ax`, ICMARKETS:XAUUSD, 5-second standard candles. Its synthetic Renko
+   engine does not make native Renko bricks an approved host, and it receives no
+   Project A alert. Current Renko V2, `rekoArrow/1`, the standalone E1/E2
    test source and Renko V3 revision 4 without Sniper are not parity.
 6. **Structure/regime:** deterministic 9333 ICMARKETS:XAUUSD 4H/D/W and approved
    deterministic price-structure facts are the V1 authority. SR MTF Pro V10 is
@@ -115,10 +108,10 @@ Every authority has approval standing
 - The approved state family is `NO_STORY`, `C_INSUFFICIENT`, `B_BUILDING`,
   `B_TO_A_CANDIDATE`, `A_CONFIRMED`, `WAITING_5S_ENTRY`, `INVALIDATED`, and
   `EXPIRED`.
-- Entry into `B_TO_A_CANDIDATE` triggers complete capture.
-- Final review returns separate verdict and grade. An eligible B-to-A transition
-  notifies exactly once; persistent A, retries, duplicate FIRE events and process
-  restarts do not create duplicates.
+- A valid, confirmed, fresh, non-duplicate `LIQ_TOUCH` triggers bounded evidence
+  acquisition; no EXP or Renko alert is required.
+- Final review returns separate verdict and grade only after the captured bundle
+  passes integrity and freshness checks. Alert counting never determines grade.
 
 ## 5. Approved freshness policy
 
@@ -233,7 +226,7 @@ This approval does not authorize:
 - an AI-provider call or provider credential change;
 - MT5 connection or output;
 - Telegram, Notion, webhook or other external writer activation;
-- TradingView alert creation beyond the exact three-alert approval, any legacy
+- TradingView alert creation beyond the exact single-LIQ approval, any legacy
   alert modification, or any test triggering;
 - Pine modification, public publication or producer implementation; private
   candidate saves are limited to `MATERIALIZATION_APPROVAL_V1.md`;

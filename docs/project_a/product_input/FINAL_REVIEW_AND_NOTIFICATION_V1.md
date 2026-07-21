@@ -59,7 +59,9 @@ entry/SL/TP geometry and a future `valid_until` at decision time.
 
 ## 3. Final-review gates
 
-An A-grade APPROVE or MODIFY result requires:
+Review begins only after a valid LIQ-triggered Evidence Bundle has completed;
+EXP, Renko, and Scanner alert counts are never gates. An A-grade APPROVE or
+MODIFY result requires:
 
 1. Current story is `B_TO_A_CANDIDATE` or `WAITING_5S_ENTRY` under the same setup.
 2. Liquidity reaction is valid and confirmed. It belongs to the same locked
@@ -68,7 +70,9 @@ An A-grade APPROVE or MODIFY result requires:
    replace its lifecycle evidence.
 3. Confirmed standard 5m MACD thesis remains valid.
 4. Confirmed standard 1m MACD supports the intended direction.
-5. Confirmed Renko Main matches that direction.
+5. Available 5-second/Renko evidence is treated as timing/context only. Missing
+   optional timing evidence is recorded and cannot be fabricated or used as an
+   independent wake prerequisite.
 6. DXY is not materially conflicting under the approved grade-cap policy. Stale
    or missing DXY caps grade at B rather than reversing direction.
 7. Critical structure, expansion, source identity and timestamp evidence passes

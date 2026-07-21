@@ -2,21 +2,22 @@
 
 Status: **APPROVED_AUTHORITY_NOT_RUNTIME_ACTIVE**
 
-The B-to-A trigger, port roles, hybrid evidence routes, no-fallback rule,
+The single-LIQ research trigger, port roles, hybrid evidence routes, no-fallback rule,
 no-mutation boundary and `FRESHNESS_POLICY_V1.md` thresholds are approved.
 Production layout materialization remains pending.
 
-Trigger: entry into `B_TO_A_CANDIDATE`
+Trigger: one valid, confirmed, fresh, non-duplicate `LIQ_V2/9 LIQ_TOUCH`
 
-`NEAR_TOUCH` is supporting evidence, not a direct capture command. Capture
-occurs only after the complete B-to-A transition passes every independent gate
-in `MAKE_SENSE_STATE_MACHINE_V1.md`, `LIQUIDITY_DISTANCE_POLICY_V1.md` and
-`LIQUIDITY_LEVEL_IDENTITY_SELECTION_V1.md`.
+`NEAR_TOUCH` remains supporting evidence, not a command. A LIQ touch starts
+bounded evidence acquisition immediately; no EXP or Renko alert is required.
+Acquisition is not promotion: a complete, fresh and integrity-valid bundle is
+still required before analysis or grading.
 
 ## 1. Authority boundary
 
 - Primary structured numeric source: CDP `9333`.
-- Supplemental Renko/chart source: CDP `9222`.
+- 5-second/Renko context source: `9333/YclFo8Ax`, standard candles.
+- Supplemental DXY 1m source: CDP `9222` where available.
 - `4999` is forbidden for production evidence.
 - No port, layout, target, symbol, feed, timeframe or indicator fallback is
   permitted.
@@ -44,13 +45,13 @@ until explicitly rebound; it never authorizes a different layout or port.
 
 ## 3. Trigger and no-duplicate behavior
 
-The sole trigger is an append-only transition into `B_TO_A_CANDIDATE`. The
+The sole trigger is an append-only, valid `LIQ_V2/9 LIQ_TOUCH` research intent. The
 capture idempotency key is the SHA-256 of:
 
 - schema/capture-contract version;
 - setup ID;
-- predecessor and candidate state IDs;
-- transition event ID and source time; and
+- tracked level identity and touch count;
+- LIQ event ID and source time; and
 - the ordered authority/revision/hash set.
 
 An identical key returns the previously committed bundle reference. It does not

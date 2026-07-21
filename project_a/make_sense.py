@@ -279,11 +279,14 @@ class MakeSenseCompiler:
         research = event == "LIQ_TOUCH"
         snapshot = event == "LIQ_TOUCH"
         capture = False
-        prewarm = event == "RENKO_E1"
+        prewarm = False
         state = StoryState.NO_STORY
 
         lifecycle = source.liquidity.get("lifecycle")
-        if event in {"LIQ_BREAK", "LIQ_INVALIDATED", "RENKO_RESET", "RENKO_INVALIDATED"} or lifecycle in {"BREAK", "INVALIDATED", "REMOVED"}:
+        if event.startswith(("EXP_", "RENKO_")):
+            state = StoryState.NO_STORY
+            reasons.append("COMPATIBILITY_EVIDENCE_ONLY")
+        elif event in {"LIQ_BREAK", "LIQ_INVALIDATED"} or lifecycle in {"BREAK", "INVALIDATED", "REMOVED"}:
             state = StoryState.INVALIDATED
             reasons.append("TERMINAL_SOURCE_EVENT")
         elif event == "SETUP_EXPIRED" or (
@@ -292,9 +295,6 @@ class MakeSenseCompiler:
         ):
             state = StoryState.EXPIRED
             reasons.append("CRITICAL_EVIDENCE_NOT_FRESH")
-        elif event.startswith("EXP_"):
-            state = StoryState.NO_STORY
-            reasons.append("EXPANSION_TELEMETRY_ONLY")
         else:
             active_liq = _active_liquidity(source.liquidity)
             if not active_liq:
@@ -314,42 +314,8 @@ class MakeSenseCompiler:
             if event == "LIQ_TOUCH":
                 state = StoryState.B_BUILDING if story_ready else StoryState.C_INSUFFICIENT
                 reasons.append("LIQ_TOUCH_RESEARCH_STARTED")
-            elif event == "RENKO_E1":
-                state = StoryState.B_BUILDING if story_ready else StoryState.C_INSUFFICIENT
-                reasons.append("RENKO_E1_EARLY_WATCH")
-            elif event == "RENKO_E2":
-                if not _is_confirmed(source.trigger_event):
-                    missing.append("confirmed_renko_e2")
-                if not _macd_corroboration(source.macd):
-                    missing.append("confirmed_1m_5m_macd_corroboration")
-                fresh_candidate, candidate_missing = _fresh(source.freshness, "macd_1m", "macd_5m", "renko")
-                missing.extend(candidate_missing)
-                ready = story_ready and _is_confirmed(source.trigger_event) and _macd_corroboration(source.macd) and fresh_candidate
-                state = StoryState.B_TO_A_CANDIDATE if ready else StoryState.C_INSUFFICIENT
-                capture = ready
-                reasons.append("RENKO_E2_FULL_CAPTURE" if ready else "RENKO_E2_CORROBORATION_INCOMPLETE")
-            elif event == "RENKO_MAIN":
-                ready = story_ready and _is_confirmed(source.trigger_event) and _macd_corroboration(source.macd) and source.liquidity.get("reaction_confirmed") is True
-                if not ready:
-                    missing.append("confirmed_reaction_and_1m_5m_thesis")
-                state = StoryState.A_REVIEW_REQUIRED if ready else StoryState.C_INSUFFICIENT
-                reasons.append("RENKO_MAIN_CONFIRMATION_ONLY")
-            elif event == "RENKO_FIRE":
-                thesis_ok = (
-                    source.prior_state == StoryState.WAITING_5S_ENTRY.value
-                    and _is_confirmed(source.trigger_event)
-                    and _macd_corroboration(source.macd)
-                    and source.liquidity.get("reaction_confirmed") is True
-                )
-                fresh_fire, fire_missing = _fresh(source.freshness, "xau", "macd_1m", "macd_5m", "renko_fire")
-                missing.extend(fire_missing)
-                if not thesis_ok:
-                    missing.append("valid_waiting_5s_5m_1m_thesis")
-                state = StoryState.A_REVIEW_REQUIRED if thesis_ok and fresh_fire else StoryState.C_INSUFFICIENT
-                reasons.append("RENKO_FIRE_TIMING_ONLY")
             elif source.final_review.get("verdict") in {"APPROVE", "MODIFY"} and source.final_review.get("grade") == "A":
-                has_fire = source.renko.get("fire_confirmed") is True
-                state = StoryState.A_REVIEW_REQUIRED if has_fire else StoryState.WAITING_5S_ENTRY
+                state = StoryState.A_REVIEW_REQUIRED
                 reasons.append("FINAL_REVIEW_RECORDED_NO_EXECUTION")
             else:
                 state = StoryState.B_BUILDING if story_ready else StoryState.C_INSUFFICIENT

@@ -1,77 +1,69 @@
-# Project A three-producer materialization approval
+# Project A single-LIQ materialization approval
 
 Status: **APPROVED_FOR_CONTROLLED_MATERIALIZATION**
 
-Owner: Project A Session 0
+Product Authority: Jones Wong
 
-Approval: Jones Wong, 2026-07-20 Australia/Sydney
+Supersedes: the 2026-07-20 three-producer/three-alert materialization plan
 
-Scope: one controlled SHADOW/no-live runtime and TradingView materialization
+## Sole production alert
 
-## Approved alert set
+Exactly one new Project A alert is authorized:
 
-Exactly three new Project A alerts are authorized:
+- `Project A V1 — LIQ_V2 — XAUUSD 5m`
 
-1. `Project A V1 — LIQ_V2 JSON`
-2. `Project A V1 — EXP_V3 JSON`
-3. `Project A V1 — RENKO_V3 JSON`
+It uses the exact accepted private Liquidity V2 candidate on
+ICMARKETS:XAUUSD, 5-minute standard candles, `Any alert() function call`,
+script-generated JSON, and
+`https://pureness-fondness-rust.ngrok-free.dev/alert`.
 
-No fourth Project A alert is authorized. The two existing legacy Liquidity and
-Expansion alerts are protected and must not be deleted, paused, edited,
-recreated or used as new-event validation evidence.
+The Project A JSON surface emits `LIQ_TOUCH` only. Each distinct touch or
+re-touch edge may create one research trigger. Approach, prime-hit, reject,
+break, invalidation, or other lifecycle transitions must not create Project A
+production alerts.
 
-## Expansion authority and Scanner compatibility
+Before creation, production Chrome 9333 must positively verify the account,
+symbol, feed, timeframe, chart type, candidate identity, Feature-OFF parity,
+and absence of an exact equivalent Project A LIQ alert. Existing alerts and
+layouts are protected and must not be edited, paused, deleted, retired, or
+recreated.
 
-`EXP_V3_R5` is the sole active Expansion producer and directional movement
-evidence stream. `EXP_SCANNER_R6` is dormant reference/compatibility only: it is
-not materialized, added to a chart, assigned an alert, required by Section 2, or
-counted as an independent directional vote.
+## Compatibility evidence
 
-Scanner output is quality evidence only. It is not an independent directional
-vote, trade direction, setup approval, wake trigger, AI trigger, notification
-trigger or order trigger. It may enrich a corresponding Expansion V3 evidence
-object with CLEAN, WEAK, TOO_EXTENDED, candle-body, opposing-bar, age and
-maturity facts where the producer exposes them.
+`EXP_V3_R5`, `RENKO_V3_SNIPER_R1`, and `EXP_SCANNER_R6` are not production
+alert authorities. They are not materialized, alerted, independent votes,
+wake triggers, promotion triggers, or prerequisites for research. Their strict
+parsers may remain for compatibility and historical evidence, but a receipt
+from any of them is telemetry-only and cannot create a research acquisition
+request.
 
-Scanner evidence must be correlated to Expansion V3 using available factual
-identity fields: symbol, feed, timeframe, source-bar time, event time, producer
-identity and compatible direction/context. Correlation failure leaves Scanner
-evidence unpaired and context-only. An unpaired Scanner event cannot wake,
-promote, call AI, notify or act, and it cannot manufacture a separate market
-story.
+Expansion direction is movement evidence, never automatic trade direction.
+Renko and 5-second evidence are optional captured timing/context evidence.
+Scanner remains dormant reference/compatibility only.
 
-## Materialization and safety boundary
+## LIQ research trigger
 
-This approval permits the exact committed LIQ V2, EXP V3 and Renko V3 Sniper
-private candidates to be compiled, saved privately, added to the approved
-production layouts, enabled for Project A JSON V1 after Feature-OFF parity, and
-snapshotted into the three alerts above. Renko V3 Sniper is hosted only on
-layout `YclFo8Ax`, ICMARKETS:XAUUSD, 5-second standard candles; its synthetic
-Renko engine does not authorize a native-Renko host. G4-G7 remain unchanged and
-port 4999 remains test/acceptance only.
-It also permits controlled deployment of the corrected integrated ingest
-runtime.
+One valid, confirmed, fresh, non-duplicate `LIQ_V2/9 LIQ_TOUCH` from the
+approved XAUUSD/ICMARKETS/5m source creates an append-only Project A research
+intent. It remains isolated from the legacy wake/fanout path. The intent asks
+the approved capture boundary to acquire exact structured reads and screenshots
+covering available price, level, distance, spread, Expansion context, MACD,
+multi-timeframe structure, 5-second context, DXY, SNR/HPA, freshness, integrity,
+and visual evidence.
 
-The three alerts continue to target the existing `POST /alert` webhook; no
-webhook-path change is required. The integrated raw-producer adapter takes
-precedence over legacy parsing only for the exact allowlisted producer schema,
-ID and revision tuples. Scanner remains quality-only and non-waking. A
-recognized invalid producer payload fails closed and is not reclassified by the
-legacy parser.
+The alert is a research trigger, not a Grade, direction, entry, provider call,
+notification, or order. Missing, stale, ambiguous, wrong-source, or invalid
+evidence is recorded and cannot be promoted or fabricated. A completed Evidence
+Bundle remains required before grading or review.
 
-Repository integration alone is not deployment. Until the separately approved
-runtime restart/materialization step loads the integrated revision, the running
-server retains its previously loaded behavior and the three alerts must not be
-used as proof that the adapter is active.
+## Safety boundary
 
-The following boundary remains mandatory:
+This approval does not enable AI/provider dispatch, OAuth, Telegram, Notion,
+MT5, broker connectivity, live execution, order placement, public Pine
+publication, synthetic webhook events, legacy database inspection, use of port
+4999 as production, or G4-G7 mutation. Runtime remains SHADOW, MT5_DEMO,
+`live_execution=false`, and `order_placement=false`.
 
-- `mode=SHADOW`
-- `environment=MT5_DEMO`
-- `live_execution=false`
-- `order_placed=false`
-- `writer_enablement=DISABLED`
+If no natural touch occurs after materialization, record:
 
-This approval does not authorize a synthetic POST, Pine TEST event, provider or
-AI call, Telegram/Notion/MT5 output, broker connection, order, public Pine
-publication, legacy-alert retirement or use of port 4999 as production evidence.
+`NATURAL LIQ ALERT VERIFICATION PENDING`

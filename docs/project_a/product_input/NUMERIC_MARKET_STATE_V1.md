@@ -187,6 +187,12 @@ Every V3 or dormant-Scanner-compatibility internal numeric output that lacks a p
 `MISSING_REQUIRES_PRODUCER_CHANGE`; downstream code must not reconstruct it from
 screenshots.
 
+EXP V3 is not a production alert prerequisite. After `LIQ_TOUCH`, current and
+prior movement/Expansion context is requested through the approved structured
+capture boundary. Any retained EXP event history is compatibility evidence only;
+its absence does not prevent research acquisition and its direction never becomes
+trade direction.
+
 Dormant compatibility Scanner events, if received, are stored in
 `scanner_quality_evidence`, not in the
 directional `expansion_history`. Pairing is deterministic only when exactly one

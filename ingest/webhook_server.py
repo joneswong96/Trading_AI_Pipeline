@@ -122,6 +122,8 @@ async def alert(request: Request):
                     "telemetry_status": "FAILED_CLOSED",
                     "state_status": "UNCHANGED",
                     "wake": False,
+                    "wake_scope": "NONE",
+                    "evidence_acquisition_requested": False,
                     "provider_called": False,
                     "writer_called": False,
                     "order_placed": False,

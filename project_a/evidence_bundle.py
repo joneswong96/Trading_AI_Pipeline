@@ -10,7 +10,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from types import MappingProxyType
@@ -28,10 +28,16 @@ class EvidenceBundleError(ValueError):
 class RequestLevel(str, Enum):
     TELEMETRY_ONLY = "TELEMETRY_ONLY"
     NUMERIC_RESEARCH = "NUMERIC_RESEARCH"
+    LIQ_RESEARCH_CAPTURE = "LIQ_RESEARCH_CAPTURE"
     PREWARM_ONLY = "PREWARM_ONLY"
     FULL_B_TO_A_CAPTURE = "FULL_B_TO_A_CAPTURE"
     DIRECTION_CONFIRMATION = "DIRECTION_CONFIRMATION"
     ENTRY_TIMING_ONLY = "ENTRY_TIMING_ONLY"
+
+
+FULL_EVIDENCE_CAPTURE_LEVELS = frozenset(
+    (RequestLevel.LIQ_RESEARCH_CAPTURE, RequestLevel.FULL_B_TO_A_CAPTURE)
+)
 
 
 class FreshnessStatus(str, Enum):
@@ -290,6 +296,27 @@ class EvidenceBundleRequest:
         object.__setattr__(self, "unavailable_evidence", tuple(self.unavailable_evidence))
         object.__setattr__(self, "hashes", _freeze(self.hashes))
 
+    def document(self) -> dict[str, JsonValue]:
+        return {
+            "schema": self.schema,
+            "request_id": self.request_id,
+            "requested_at": self.requested_at,
+            "trigger": self.trigger.canonical(),
+            "triggering_events": self.triggering_events,
+            "event_history": self.event_history,
+            "numeric_market_state": self.numeric_market_state,
+            "structured_reads": tuple(item.canonical() for item in self.structured_reads),
+            "screenshot_requests": tuple(item.canonical() for item in self.screenshot_requests),
+            "source_identities": tuple(item.canonical() for item in self.source_identities),
+            "freshness": tuple(item.canonical() for item in self.freshness),
+            "missing_evidence": self.missing_evidence,
+            "unavailable_evidence": tuple(item.canonical() for item in self.unavailable_evidence),
+            "hashes": self.hashes,
+            "promotion_allowed": self.promotion_allowed,
+            "runtime_execution_enabled": self.runtime_execution_enabled,
+            "writer_enablement": self.writer_enablement,
+        }
+
 
 class StructuredRequestAdapter(Protocol):
     """Injectable boundary: creates specifications and performs no reads."""
@@ -316,6 +343,30 @@ SUPPLEMENTAL_ROLES = ("dxy_1m", "renko")
 FULL_CAPTURE_SCREENSHOT_ROLES = (
     "xau_intraday", "xau_30m_15m", "xau_htf", "dxy_15m", "renko",
 )
+SOURCE_AUTHORITY = {
+    "xau_intraday": (9333, "cpPWuLlN", "XAUUSD", "ICMARKETS", ("1m", "5m")),
+    "xau_30m_15m": (9333, "avpCVaw2", "XAUUSD", "ICMARKETS", ("15m", "30m")),
+    "xau_htf": (9333, "pNqcbOmu", "XAUUSD", "ICMARKETS", ("4H", "D", "W")),
+    "dxy_15m": (9333, "n9qjfufV", "DXY", "TVC", ("15m",)),
+    "dxy_1m": (9222, "ocVwlz2C", "DXY", "TVC", ("1m",)),
+    "renko": (9333, "YclFo8Ax", "XAUUSD", "ICMARKETS", ("5s",)),
+}
+
+
+def approved_source_identities() -> dict[str, SourceIdentity]:
+    """Return request-only identities; the capture preflight must bind live targets."""
+    return {
+        role: SourceIdentity(
+            role=role,
+            port=authority[0],
+            layout_id=authority[1],
+            target_id=f"UNBOUND_REQUIRES_PREFLIGHT:{role}",
+            symbol=authority[2],
+            feed=authority[3],
+            timeframes=authority[4],
+        )
+        for role, authority in SOURCE_AUTHORITY.items()
+    }
 
 
 def _require_source(
@@ -325,8 +376,16 @@ def _require_source(
         source = sources[role]
     except KeyError as exc:
         raise EvidenceBundleError(f"missing source identity: {role}") from exc
-    if source.role != role or source.port != port:
-        raise EvidenceBundleError(f"source {role} must be pinned to port {port}")
+    expected = SOURCE_AUTHORITY[role]
+    if (
+        source.role != role
+        or source.port != port
+        or (source.port, source.layout_id, source.symbol, source.feed, source.timeframes) != expected
+        or source.chart_type != "standard_candles"
+    ):
+        raise EvidenceBundleError(
+            f"source {role} must match approved port/layout/symbol/feed/timeframe standard-candle authority"
+        )
     return source
 
 
@@ -347,7 +406,12 @@ class Port9333RequestAdapter:
         requests = [
             StructuredReadRequest(
                 "read_9333_xau_current", intraday, "CURRENT_FORMING_PRICE",
-                ("market_price", "source_time", "observed_at"), ("1m",),
+                (
+                    "market_price", "bid", "ask", "spread", "symbol", "feed",
+                    "timeframe", "liquidity_level_id", "liquidity_level_price",
+                    "distance_to_level", "distance_atr", "source_time", "observed_at",
+                ),
+                ("1m",),
             ),
             StructuredReadRequest(
                 "read_9333_xau_closed_ohlc_1m_5m", intraday, "CLOSED_OHLC",
@@ -371,8 +435,25 @@ class Port9333RequestAdapter:
                 ("15m", "30m"), closed_bars_only=True,
                 indicator_parameters=STANDARD_MACD,
             ),
+            StructuredReadRequest(
+                "read_9333_xau_expansion_context", intraday, "EXPANSION_CONTEXT",
+                (
+                    "direction", "start_price", "market_price", "displacement",
+                    "atr", "atr_multiple", "path_efficiency", "body_quality",
+                    "opposing_bars", "source_bar_time", "confirmed",
+                ),
+                ("1m", "5m"), closed_bars_only=True,
+            ),
+            StructuredReadRequest(
+                "read_9333_xau_snr_hpa_context", intraday, "SNR_HPA_CONTEXT",
+                (
+                    "levels", "structure", "momentum", "source_bar_time",
+                    "confirmed",
+                ),
+                ("1m", "5m"), closed_bars_only=True,
+            ),
         ]
-        if level is RequestLevel.FULL_B_TO_A_CAPTURE:
+        if level in FULL_EVIDENCE_CAPTURE_LEVELS:
             htf = _require_source(sources, "xau_htf", 9333)
             dxy = _require_source(sources, "dxy_15m", 9333)
             renko = _require_source(sources, "renko", 9333)
@@ -392,6 +473,14 @@ class Port9333RequestAdapter:
                     ("stage", "direction", "signal_price", "source_bar_time", "confirmed", "score", "power", "mode", "transfer"),
                     ("5s",),
                 ),
+                StructuredReadRequest(
+                    "read_9333_xau_5s_price_action", renko, "SHORT_TERM_PRICE_ACTION",
+                    (
+                        "open", "high", "low", "close", "price_path", "source_bar_time",
+                        "confirmed",
+                    ),
+                    ("5s",), closed_bars_only=True,
+                ),
             ))
         return tuple(requests)
 
@@ -404,7 +493,7 @@ class Port9222RequestAdapter:
         sources: Mapping[str, SourceIdentity],
         level: RequestLevel,
     ) -> tuple[StructuredReadRequest, ...]:
-        if level is not RequestLevel.FULL_B_TO_A_CAPTURE:
+        if level not in FULL_EVIDENCE_CAPTURE_LEVELS:
             return ()
         dxy = _require_source(sources, "dxy_1m", 9222)
         return (
@@ -429,7 +518,7 @@ class ApprovedScreenshotRequestAdapter:
         sources: Mapping[str, SourceIdentity],
         level: RequestLevel,
     ) -> tuple[ScreenshotRequest, ...]:
-        if level is not RequestLevel.FULL_B_TO_A_CAPTURE:
+        if level not in FULL_EVIDENCE_CAPTURE_LEVELS:
             return ()
         requests = []
         for role in FULL_CAPTURE_SCREENSHOT_ROLES:
@@ -455,28 +544,50 @@ def decide_trigger(
     triggering_events: Sequence[Mapping[str, JsonValue]],
     *,
     active_liquidity_expansion_story: bool,
+    requested_at: datetime,
 ) -> TriggerDecision:
     """Apply the fixed trigger policy without inferring a trade direction."""
     names = tuple(str(event.get("event", event.get("event_type", ""))).upper()
                   for event in triggering_events)
-    if any(name == "RENKO_E2" for name in names) and active_liquidity_expansion_story:
-        return TriggerDecision(
-            RequestLevel.FULL_B_TO_A_CAPTURE, research_started=True,
-            b_to_a_candidate=True, full_capture_requested=True,
+    def valid_liq_touch(event: Mapping[str, JsonValue]) -> bool:
+        name = str(event.get("event", event.get("event_type", ""))).upper()
+        source_time = event.get("source_bar_time")
+        if not isinstance(source_time, str):
+            return False
+        try:
+            parsed = datetime.fromisoformat(source_time.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return False
+        age = requested_at.astimezone(timezone.utc) - parsed.astimezone(timezone.utc)
+        touch_count = event.get("touch_count")
+        return (
+            name == "LIQ_TOUCH"
+            and event.get("producer_id") == "LIQ_V2"
+            and str(event.get("producer_revision")) == "9"
+            and event.get("symbol") == "XAUUSD"
+            and event.get("feed") == "ICMARKETS"
+            and event.get("anchor_timeframe", event.get("timeframe")) == "5m"
+            and event.get("confirmed") is True
+            and event.get("freshness_status") == "FRESH"
+            and event.get("level_freshness_status") == "FRESH"
+            and event.get("market_price_freshness_status") == "FRESH"
+            and event.get("atr_freshness_status") == "FRESH"
+            and event.get("atr_confirmed") is True
+            and isinstance(touch_count, int)
+            and not isinstance(touch_count, bool)
+            and touch_count >= 1
+            and timedelta(0) <= age <= timedelta(minutes=15)
         )
-    if any(name == "LIQ_TOUCH" for name in names):
-        return TriggerDecision(RequestLevel.NUMERIC_RESEARCH, research_started=True)
-    if any(name == "RENKO_E1" for name in names):
-        return TriggerDecision(RequestLevel.PREWARM_ONLY, prewarm_only=True)
-    if any(name == "RENKO_E2" for name in names):
-        return TriggerDecision(RequestLevel.PREWARM_ONLY, prewarm_only=True)
-    if any(name == "RENKO_MAIN" for name in names):
+
+    if any(valid_liq_touch(event) for event in triggering_events):
         return TriggerDecision(
-            RequestLevel.DIRECTION_CONFIRMATION, direction_confirmation=True,
+            RequestLevel.LIQ_RESEARCH_CAPTURE,
+            research_started=True,
+            full_capture_requested=True,
         )
-    if any(name == "RENKO_FIRE" for name in names):
-        return TriggerDecision(RequestLevel.ENTRY_TIMING_ONLY, entry_timing_only=True)
-    if any(name.startswith("EXP_") for name in names):
+    if any(name.startswith(("EXP_", "RENKO_")) for name in names):
         return TriggerDecision(RequestLevel.TELEMETRY_ONLY)
     return TriggerDecision(RequestLevel.TELEMETRY_ONLY)
 
@@ -543,6 +654,7 @@ def build_evidence_bundle_request(
     trigger = decide_trigger(
         triggering_events,
         active_liquidity_expansion_story=active_liquidity_expansion_story,
+        requested_at=requested_at,
     )
     primary = primary_adapter or Port9333RequestAdapter()
     supplemental = supplemental_adapter or Port9222RequestAdapter()

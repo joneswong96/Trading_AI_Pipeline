@@ -208,16 +208,18 @@ May contribute to `B_TO_A_CANDIDATE` only when all of the following also pass:
 - eligible identity-complete level and calculation inputs; and
 - no deterministic invalidation.
 
-NEAR_TOUCH may support the complete B-to-A transition and therefore bounded
-capture, but it does not establish `A_CONFIRMED`.
+NEAR_TOUCH may support story construction, but it does not trigger production
+capture or establish `A_CONFIRMED`. The sole capture trigger is a valid
+`LIQ_TOUCH`.
 
 ### `HIT`, `SWEEP`, `REJECT`, `BREAK` and final states
 
 HIT/SWEEP/REJECT require their approved lifecycle/reaction evidence before final
 review. BREAK follows its confirmed producer rule and may invalidate the setup.
 Distance classification alone cannot establish `A_CONFIRMED`, GO,
-`WAITING_5S_ENTRY`, approval, geometry or notification. Those outcomes retain
-the independently approved 5m/1m/Renko/final-review requirements.
+`WAITING_5S_ENTRY`, approval, geometry or notification. Those outcomes use the
+complete LIQ-triggered evidence bundle and final review; no Renko alert is a
+prerequisite.
 
 If Expansion is moving away, distance remains audit-visible but cannot promote
 APPROACH or NEAR_TOUCH. The later implementation may keep context, regress or
