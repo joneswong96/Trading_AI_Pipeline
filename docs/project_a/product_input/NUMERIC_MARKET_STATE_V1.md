@@ -328,8 +328,9 @@ The canonical history consists of immutable `SOURCE_EVENT`, `EVENT_SNAPSHOT`,
 `CLOSED_BAR_SNAPSHOT`, `STATE_TRANSITION`, `RECONCILIATION`, `INVALIDATION`,
 `EXPIRY`, and `NOTIFICATION` records.
 
-Every accepted source event causes a bounded event-time snapshot from 9333 and,
-when Renko is involved, a bounded supplemental 9222 read. Periodic closed-bar
+Every accepted source event causes a bounded event-time snapshot from the approved
+9333 authority. Full bundles obtain Renko state from 9333/YclFo8Ax at 5 seconds on
+standard candles; 9222 is optional DXY 1-minute context only. Periodic closed-bar
 snapshots may occur only at required timeframe closures. Tick-level continuous
 polling is outside V1.
 
