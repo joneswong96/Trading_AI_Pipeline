@@ -305,7 +305,7 @@ def test_fixed_script_contains_no_mutation_or_external_io_primitive():
     assert all(value not in script for value in forbidden)
     normalized = script.replace("\r\n", "\n").encode("utf-8")
     assert hashlib.sha256(normalized).hexdigest() == (
-        "b2ab345bd8ed987a1ef17e17087126a4ddcbcbcacad71e68ab28600eb19390a6"
+        "fe7c686eef2a0790189a22673933f3341da3482a1fe941f17a4d28f4d1107606"
     )
 
 

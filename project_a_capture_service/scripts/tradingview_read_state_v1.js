@@ -28,6 +28,16 @@
   }
 
   function accountMarkers() {
+    var seen = {}, out = [];
+    try {
+      if (window.user && typeof window.user.username === "string") {
+        var globalUsername = bounded(window.user.username, 80);
+        if (globalUsername) {
+          seen["global|" + globalUsername] = true;
+          out.push({href: "", username: globalUsername, aria_label: "", title: "", text: ""});
+        }
+      }
+    } catch (_) {}
     var selectors = [
       "a[href*='/u/']",
       "[data-username]",
@@ -35,7 +45,6 @@
       "button[aria-label*='user' i]",
       "button[title*='user' i]"
     ];
-    var seen = {}, out = [];
     selectors.forEach(function (selector) {
       Array.from(document.querySelectorAll(selector)).filter(visible).slice(0, 12).forEach(function (node) {
         var href = bounded(node.getAttribute && node.getAttribute("href"), 180);

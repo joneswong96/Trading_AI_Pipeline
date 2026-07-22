@@ -24,7 +24,7 @@ from .schemas import CDP_ENDPOINT, EXPECTED_ACCOUNT
 
 SCRIPT_ID = "tradingview_read_state"
 SCRIPT_VERSION = "1.0"
-SCRIPT_SHA256 = "b2ab345bd8ed987a1ef17e17087126a4ddcbcbcacad71e68ab28600eb19390a6"
+SCRIPT_SHA256 = "fe7c686eef2a0790189a22673933f3341da3482a1fe941f17a4d28f4d1107606"
 SCRIPT_PATH = Path(__file__).with_name("scripts") / "tradingview_read_state_v1.js"
 ALLOWED_CDP_METHODS = frozenset({"Runtime.evaluate", "Page.captureScreenshot"})
 MAX_METADATA_BYTES = 1_048_576

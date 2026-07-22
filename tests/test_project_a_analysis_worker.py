@@ -631,7 +631,7 @@ def test_invalid_mcp_image_does_not_poison_corrected_retry(tmp_path):
             "screenshot_requests": json.loads(pending["request_context_json"])["capture"]["accepted_request"]["screenshot_requests"],
         }).encode()).hexdigest(),
         "cdp_endpoint": "http://127.0.0.1:9333",
-        "script_sha256": "b2ab345bd8ed987a1ef17e17087126a4ddcbcbcacad71e68ab28600eb19390a6",
+        "script_sha256": "fe7c686eef2a0790189a22673933f3341da3482a1fe941f17a4d28f4d1107606",
         "immutable_evidence_manifest_sha256": "e" * 64,
         "screenshot_artifacts": [{
             "evidence_id": item["evidence_id"], "sha256": item["sha256"],
