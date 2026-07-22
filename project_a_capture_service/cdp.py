@@ -341,7 +341,12 @@ def validate_view(view: ViewPlan, target: Target, raw: dict[str, Any], *, now: d
         last_at = _epoch(current.get("time"))
         seconds = {"5s": 5, "1m": 60, "5m": 300, "15m": 900, "30m": 1800,
                    "4H": 14400, "D": 86400, "W": 604800}[timeframe]
-        if now - last_at > timedelta(seconds=seconds * 2 + 120) or last_at > now + timedelta(seconds=5):
+        if last_at > now + timedelta(seconds=5):
+            raise CaptureFailure("SOURCE_STALE", f"{view.layout_id}/{timeframe} bar is future-dated")
+        if (
+            actual_chart_type == "standard_candles"
+            and now - last_at > timedelta(seconds=seconds * 2 + 120)
+        ):
             raise CaptureFailure("SOURCE_STALE", f"{view.layout_id}/{timeframe} bar is stale")
         item = dict(chart)
         item["timeframe"] = timeframe

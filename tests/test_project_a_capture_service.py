@@ -337,7 +337,7 @@ def test_target_url_rejects_non_exact_tradingview_authority(url):
     (lambda raw: raw["charts"][0].update(symbol="OTHER:XAUUSD"), "SYMBOL_MISMATCH"),
     (lambda raw: raw["charts"][0].update(interval="99"), "TIMEFRAME_MISMATCH"),
     (lambda raw: raw["charts"][0].update(chart_type=1), "CHART_TYPE_MISMATCH"),
-    (lambda raw: raw["charts"][0]["current_bar"].update(time=(NOW - timedelta(hours=2)).timestamp()), "SOURCE_STALE"),
+    (lambda raw: raw["charts"][1]["current_bar"].update(time=(NOW - timedelta(hours=2)).timestamp()), "SOURCE_STALE"),
 ])
 def test_view_identity_mutations_fail_closed(mutation, code):
     view = VIEWS["xau_intraday"]
@@ -345,6 +345,24 @@ def test_view_identity_mutations_fail_closed(mutation, code):
     raw = raw_state("xau_intraday")
     mutation(raw)
     with pytest.raises(CaptureFailure, match=code):
+        validate_view(view, target, raw, now=NOW)
+
+
+def test_visual_context_only_volume_bar_age_does_not_claim_numeric_staleness():
+    view = VIEWS["xau_intraday"]
+    target = FakeBackend().targets[0]
+    raw = raw_state("xau_intraday")
+    raw["charts"][0]["current_bar"]["time"] = (NOW - timedelta(hours=2)).timestamp()
+    snapshot = validate_view(view, target, raw, now=NOW)
+    assert snapshot.charts[0]["chart_type_name"] == "volume_candles"
+
+
+def test_visual_context_only_volume_future_time_fails_closed():
+    view = VIEWS["xau_intraday"]
+    target = FakeBackend().targets[0]
+    raw = raw_state("xau_intraday")
+    raw["charts"][0]["current_bar"]["time"] = (NOW + timedelta(minutes=1)).timestamp()
+    with pytest.raises(CaptureFailure, match="future-dated"):
         validate_view(view, target, raw, now=NOW)
 
 
