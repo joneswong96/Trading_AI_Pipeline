@@ -91,6 +91,14 @@
       var bars = series.bars();
       var last = bars.lastIndex();
       var info = series.symbolInfo && series.symbolInfo();
+      var seriesSymbol = "";
+      try {
+        seriesSymbol = bounded(
+          (info && (info.pro_name || info.full_name || info.name)) ||
+          (series.symbol && series.symbol()),
+          100
+        );
+      } catch (_) {}
       var quote = null;
       try {
         var lastValue = series.lastValueData && series.lastValueData(false);
@@ -130,7 +138,7 @@
       result.charts.push({
         index: i,
         interval: String(series.interval()),
-        symbol: info ? bounded(info.pro_name || info.full_name || info.name, 100) : "",
+        symbol: seriesSymbol,
         chart_type: chartType,
         last_index: last,
         current_bar: barValue(bars, last),
