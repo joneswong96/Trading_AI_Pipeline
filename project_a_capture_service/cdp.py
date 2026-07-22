@@ -107,7 +107,7 @@ def _layout_id(url: str) -> str:
 
 
 def _script() -> str:
-    raw = SCRIPT_PATH.read_bytes()
+    raw = SCRIPT_PATH.read_bytes().replace(b"\r\n", b"\n")
     if hashlib.sha256(raw).hexdigest() != SCRIPT_SHA256:
         raise CaptureFailure("SCRIPT_INTEGRITY_FAILURE", "fixed read script hash mismatch", retryable=False)
     return raw.decode("utf-8")

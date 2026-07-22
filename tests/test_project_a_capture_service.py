@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import asyncio
+import hashlib
 import socket
 import threading
 import time
@@ -302,6 +303,10 @@ def test_fixed_script_contains_no_mutation_or_external_io_primitive():
         "document.cookie", "fetch(", "XMLHttpRequest", "WebSocket(", "createElement(",
     )
     assert all(value not in script for value in forbidden)
+    normalized = script.replace("\r\n", "\n").encode("utf-8")
+    assert hashlib.sha256(normalized).hexdigest() == (
+        "b2ab345bd8ed987a1ef17e17087126a4ddcbcbcacad71e68ab28600eb19390a6"
+    )
 
 
 def test_duplicate_and_missing_targets_fail_closed():
