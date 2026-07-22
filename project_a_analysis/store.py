@@ -54,6 +54,10 @@ def _audit(conn: sqlite3.Connection, *, at: str, action: str, document: dict,
 
 
 def _active_story(conn: sqlite3.Connection, *, before_source_time: str | None = None) -> sqlite3.Row | None:
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='project_a_producer_events'"
+    ).fetchone() is None:
+        return None
     parameters: tuple[str, ...] = ()
     time_clause = ""
     if before_source_time is not None:

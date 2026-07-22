@@ -185,6 +185,12 @@ def make_system(tmp_path):
     return path, clock, ingest, store, capture, provider, worker
 
 
+def test_worker_health_and_story_inspection_before_first_producer_event(tmp_path):
+    store = AnalysisStore(tmp_path / "empty-project-a.db")
+    assert store.active_story() is None
+    assert store.inspect_jobs() == []
+
+
 def test_liq_creates_full_analysis_provider_request_and_materialised_story(tmp_path):
     path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
     result = ingest.receive(raw(liq()))
