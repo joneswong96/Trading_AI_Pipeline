@@ -21,8 +21,15 @@ from typing import Any, Callable, Protocol
 from urllib.parse import urlsplit
 from uuid import uuid4
 
+import httpx
+
 from capture.base import ROOT
 from contracts import canonical_json
+from project_a_capture_service.cdp import SCRIPT_SHA256
+from project_a_capture_service.schemas import (
+    CAPTURE_INPUT_SCHEMA, CAPTURE_OUTPUT_SCHEMA, CAPTURE_PLAN_VERSION, CDP_ENDPOINT, TOOL_NAME,
+)
+from project_a_capture_service.local_identity import attest_capture_listener
 
 from .provider import (
     OpenAIProviderConfig,
@@ -54,17 +61,30 @@ class DisabledEvidenceCapture:
 class McpToolCapture:
     """Invoke one configured, loopback MCP capture tool from the worker."""
 
-    def __init__(self, *, server_url: str, tool_name: str, artifact_root: str | Path):
+    def __init__(self, *, server_url: str, tool_name: str, token: str,
+                 artifact_root: str | Path, expected_server_pid: int | None = None):
         parsed = urlsplit(server_url)
-        if parsed.scheme not in {"http", "https"} or parsed.hostname not in {
-            "127.0.0.1", "localhost", "::1"
-        }:
-            raise ValueError("PROJECT_A_MCP_SERVER_URL must be loopback HTTP(S)")
-        if not tool_name or tool_name.strip() != tool_name:
-            raise ValueError("PROJECT_A_MCP_CAPTURE_TOOL must be an exact tool name")
+        if (
+            parsed.scheme != "http" or parsed.hostname != "127.0.0.1"
+            or parsed.path != "/mcp" or parsed.username or parsed.password
+            or parsed.query or parsed.fragment or not parsed.port
+        ):
+            raise ValueError("PROJECT_A_MCP_SERVER_URL must be exact loopback HTTP /mcp")
+        if tool_name != TOOL_NAME:
+            raise ValueError(f"PROJECT_A_MCP_CAPTURE_TOOL must be {TOOL_NAME}")
+        if len(token.encode("utf-8")) < 32 or len(token.encode("utf-8")) > 256:
+            raise ValueError("PROJECT_A_CAPTURE_TOKEN must contain 32..256 UTF-8 bytes")
         self.server_url = server_url
         self.tool_name = tool_name
+        self.token = token
         self.artifact_root = Path(artifact_root)
+        self.server_port = int(parsed.port)
+        self.expected_server_pid = expected_server_pid
+
+    def _attest_server_listener(self) -> None:
+        if not isinstance(self.expected_server_pid, int):
+            raise ValueError("PROJECT_A_CAPTURE_SERVER_PID must be configured")
+        attest_capture_listener(port=self.server_port, expected_pid=self.expected_server_pid)
 
     @staticmethod
     def _attribute(value: Any, *names: str, default=None):
@@ -81,26 +101,44 @@ class McpToolCapture:
             from mcp.client.streamable_http import streamable_http_client
         except ImportError as exc:
             raise ValueError("official MCP client package is unavailable") from exc
-        async with streamable_http_client(self.server_url) as streams:
-            read_stream, write_stream = streams[0], streams[1]
-            async with ClientSession(read_stream, write_stream) as session:
-                await session.initialize()
-                capture_request = json.loads(job["request_context_json"])["capture"]
-                return await session.call_tool(
-                    self.tool_name,
-                    arguments={
-                        "schema_version": "project_a.mcp_capture_request/1.0",
-                        "job_id": job["job_id"],
-                        "stage": job["stage"],
-                        "capture_scope": job["capture_scope"],
-                        "source_event_id": job["canonical_event_id"],
-                        "symbol": "XAUUSD", "feed": "ICMARKETS",
-                        "capture_request_sha256": hashlib.sha256(
-                            canonical_json(capture_request).encode("utf-8")
-                        ).hexdigest(),
-                        "request": capture_request,
-                    },
-                )
+        context = json.loads(job["request_context_json"])
+        capture_request = context["capture"]
+        accepted = capture_request.get("accepted_request", {})
+        capture_plan_sha256 = hashlib.sha256(canonical_json({
+            "structured_reads": accepted.get("structured_reads", []),
+            "screenshot_requests": accepted.get("screenshot_requests", []),
+        }).encode("utf-8")).hexdigest()
+        canonical_event = context["canonical_event"]
+        arguments = {
+            "request_id": job["job_id"], "story_id": job["story_id"],
+            "analysis_id": job["analysis_id"], "stage": job["stage"],
+            "capture_scope": job["capture_scope"],
+            "canonical_event_id": job["canonical_event_id"],
+            "event_timestamp": canonical_event["source_bar_time"],
+            "expected_account": "Jonesy_Wong", "expected_symbol": "ICMARKETS:XAUUSD",
+            "required_capture_plan_version": CAPTURE_PLAN_VERSION,
+            "capture_plan_sha256": capture_plan_sha256,
+            "capture_request_sha256": hashlib.sha256(
+                canonical_json(capture_request).encode("utf-8")
+            ).hexdigest(),
+        }
+        self._attest_server_listener()
+        async with httpx.AsyncClient(
+            headers={"Authorization": "Bearer " + self.token},
+            timeout=httpx.Timeout(60, connect=3), follow_redirects=False, trust_env=False,
+        ) as http_client:
+            async with streamable_http_client(self.server_url, http_client=http_client) as streams:
+                read_stream, write_stream = streams[0], streams[1]
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    tools = await session.list_tools()
+                    if (
+                        len(tools.tools) != 1 or tools.tools[0].name != self.tool_name
+                        or tools.tools[0].inputSchema != CAPTURE_INPUT_SCHEMA
+                        or tools.tools[0].outputSchema != CAPTURE_OUTPUT_SCHEMA
+                    ):
+                        raise ValueError("MCP tool inventory differs from the fixed capture boundary")
+                    return await session.call_tool(self.tool_name, arguments=arguments)
 
     @staticmethod
     def _atomic_bytes(path: Path, data: bytes) -> None:
@@ -136,6 +174,12 @@ class McpToolCapture:
                 canonical_json(capture_request).encode("utf-8")
             ).hexdigest(),
             "structured_reads_complete": True, "screenshots_complete": True,
+            "account": "Jonesy_Wong", "capture_plan_version": CAPTURE_PLAN_VERSION,
+            "cdp_endpoint": CDP_ENDPOINT, "script_sha256": SCRIPT_SHA256,
+            "capture_plan_sha256": hashlib.sha256(canonical_json({
+                "structured_reads": capture_request.get("accepted_request", {}).get("structured_reads", []),
+                "screenshot_requests": capture_request.get("accepted_request", {}).get("screenshot_requests", []),
+            }).encode("utf-8")).hexdigest(),
         }
         if any(structured.get(key) != value for key, value in required.items()):
             raise ValueError("MCP result does not attest the requested capture binding")
@@ -145,46 +189,76 @@ class McpToolCapture:
             raise ValueError("MCP structured evidence is absent")
         content = self._attribute(result, "content", default=[]) or []
         image_blocks = [item for item in content if self._attribute(item, "type") == "image"]
-        if not isinstance(evidence_ids, list) or len(evidence_ids) != len(image_blocks):
+        expected_images = 5 if job["stage"] == "LIQ_BASELINE" else 2
+        if (
+            not isinstance(evidence_ids, list) or len(evidence_ids) != len(image_blocks)
+            or len(evidence_ids) != expected_images or len(set(evidence_ids)) != len(evidence_ids)
+        ):
             raise ValueError("MCP image evidence identities do not match image blocks")
         directory = (self.artifact_root / job["job_id"]).resolve()
         images = []
+        dimensions = {}
+        image_payloads: list[tuple[Path, bytes]] = []
+        total_bytes = 0
         for index, (evidence_id, block) in enumerate(zip(evidence_ids, image_blocks)):
             if not isinstance(evidence_id, str) or not evidence_id:
                 raise ValueError("MCP image evidence ID is invalid")
             media_type = self._attribute(block, "mimeType", "mime_type")
             encoded = self._attribute(block, "data")
-            if media_type not in {"image/png", "image/jpeg", "image/webp"} or not isinstance(encoded, str):
+            if media_type != "image/png" or not isinstance(encoded, str) or len(encoded) > 5_592_424:
                 raise ValueError("MCP image block is invalid")
             try:
                 data = base64.b64decode(encoded, validate=True)
             except ValueError as exc:
                 raise ValueError("MCP image block is not valid base64") from exc
-            signature_valid = (
-                media_type == "image/png" and data.startswith(b"\x89PNG\r\n\x1a\n")
-                or media_type == "image/jpeg" and data.startswith(b"\xff\xd8\xff")
-                or media_type == "image/webp" and len(data) >= 12
-                and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
-            )
-            if not signature_valid:
-                raise ValueError("MCP image bytes do not match the declared media type")
-            suffix = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}[media_type]
+            from project_a_capture_service.cdp import CaptureFailure, validate_png
+            try:
+                dimensions[evidence_id] = validate_png(data)
+            except CaptureFailure as exc:
+                raise ValueError("MCP PNG evidence failed size/dimension validation") from exc
+            total_bytes += len(data)
+            suffix = ".png"
             content_hash = hashlib.sha256(data).hexdigest()
             path = directory / (
                 f"{index:02d}_{hashlib.sha256(evidence_id.encode()).hexdigest()[:16]}_"
                 f"{content_hash[:16]}{suffix}"
             )
-            self._atomic_bytes(path, data)
+            image_payloads.append((path, data))
             images.append({
                 "evidence_id": evidence_id, "path": str(path), "media_type": media_type,
                 "sha256": content_hash,
             })
+        if total_bytes > (20 * 1024 * 1024 if job["stage"] == "LIQ_BASELINE" else 8 * 1024 * 1024):
+            raise ValueError("MCP stage image budget exceeded")
+        artifacts = structured.get("screenshot_artifacts")
+        if not isinstance(artifacts, list) or [item.get("evidence_id") for item in artifacts] != evidence_ids:
+            raise ValueError("MCP screenshot artifact manifest order is invalid")
+        by_id = {item["evidence_id"]: item for item in images}
+        if any(
+            artifact.get("sha256") != by_id[artifact["evidence_id"]]["sha256"]
+            or artifact.get("mime_type") != "image/png"
+            or (artifact.get("width"), artifact.get("height")) != dimensions[artifact["evidence_id"]]
+            for artifact in artifacts
+        ):
+            raise ValueError("MCP screenshot artifact manifest does not bind returned bytes")
+        immutable_manifest_sha = structured.get("immutable_evidence_manifest_sha256")
+        if (
+            not isinstance(immutable_manifest_sha, str) or len(immutable_manifest_sha) != 64
+            or any(character not in "0123456789abcdef" for character in immutable_manifest_sha)
+        ):
+            raise ValueError("MCP immutable evidence manifest hash is invalid")
+        for path, data in image_payloads:
+            self._atomic_bytes(path, data)
         manifest = {
             **required,
             "capture_method": "MCP",
             "captured_at": structured.get("captured_at"),
             "mcp_tool": self.tool_name,
             "image_count": len(images),
+            "capture_plan_version": structured.get("capture_plan_version"),
+            "immutable_evidence_manifest_sha256": structured.get(
+                "immutable_evidence_manifest_sha256"
+            ),
         }
         captured = CapturedEvidence(manifest, evidence_document, tuple(images))
         captured.validate()
@@ -210,20 +284,33 @@ class AnalysisWorker:
         now = self.clock()
         self.store.heartbeat(worker_id=self.worker_id, provider_enabled=self.provider.enabled, at=now)
         captures = 0
-        for pending in self.store.pending_capture_jobs()[:1]:
+        pending = self.store.claim_capture_job(worker_id=self.worker_id, at=self.clock())
+        for pending in (() if pending is None else (pending,)):
             try:
                 evidence = self.capture.capture(pending)
-                if evidence is not None:
-                    self.store.record_capture(pending["job_id"], evidence, at=self.clock())
-                    captures += 1
-            except (OSError, ValueError, KeyError, TypeError):
+                if evidence is None:
+                    raise ValueError("capture boundary returned no completed evidence")
+                self.store.record_capture(
+                    pending["job_id"], evidence, at=self.clock(), worker_id=self.worker_id,
+                    lease_token=pending["capture_lease_token"],
+                )
+                captures += 1
+            except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+                try:
+                    retry = self.store.capture_failure(
+                        pending["job_id"], at=self.clock(), worker_id=self.worker_id,
+                        lease_token=pending["capture_lease_token"],
+                        code="CAPTURE_INTEGRITY_FAILURE", detail=str(exc),
+                    )
+                except RuntimeError:
+                    retry = {"status": "PENDING_CAPTURE", "failure_code": "CAPTURE_LEASE_LOST"}
                 self.store.heartbeat(
                     worker_id=self.worker_id, provider_enabled=self.provider.enabled,
                     at=self.clock(), error_code="CAPTURE_INTEGRITY_FAILURE",
                 )
                 return {"ok": False, "provider_enabled": self.provider.enabled,
                         "captured": 0, "processed": 0,
-                        "status": "PENDING_CAPTURE", "failure_code": "CAPTURE_INTEGRITY_FAILURE"}
+                        "status": retry["status"], "failure_code": retry["failure_code"]}
         if not self.provider.enabled:
             return {"ok": True, "provider_enabled": False, "captured": captures, "processed": 0}
         job = self.store.claim_next(
@@ -314,9 +401,23 @@ def main(argv=None) -> int:
     store = AnalysisStore(args.db)
     mcp_url = os.getenv("PROJECT_A_MCP_SERVER_URL", "").strip()
     mcp_tool = os.getenv("PROJECT_A_MCP_CAPTURE_TOOL", "").strip()
+    capture_token = os.getenv("PROJECT_A_CAPTURE_TOKEN", "")
+    capture_server_pid_text = os.getenv("PROJECT_A_CAPTURE_SERVER_PID", "").strip()
+    configured = [bool(mcp_url), bool(mcp_tool), bool(capture_token), bool(capture_server_pid_text)]
+    if any(configured) and not all(configured):
+        raise SystemExit(
+            "PROJECT_A_MCP_SERVER_URL, PROJECT_A_MCP_CAPTURE_TOOL, PROJECT_A_CAPTURE_TOKEN, "
+            "and PROJECT_A_CAPTURE_SERVER_PID "
+            "must be configured together"
+        )
+    try:
+        capture_server_pid = int(capture_server_pid_text) if capture_server_pid_text else None
+    except ValueError as exc:
+        raise SystemExit("PROJECT_A_CAPTURE_SERVER_PID must be a positive integer") from exc
     capture: EvidenceCapture = (
-        McpToolCapture(server_url=mcp_url, tool_name=mcp_tool, artifact_root=args.evidence_root)
-        if mcp_url and mcp_tool else DisabledEvidenceCapture()
+        McpToolCapture(server_url=mcp_url, tool_name=mcp_tool, token=capture_token,
+                       artifact_root=args.evidence_root, expected_server_pid=capture_server_pid)
+        if all(configured) else DisabledEvidenceCapture()
     )
     worker = AnalysisWorker(
         store=store,

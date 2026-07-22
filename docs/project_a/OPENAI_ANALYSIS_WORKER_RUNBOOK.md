@@ -11,8 +11,10 @@ record, and `PENDING_CAPTURE` status in one transaction. The worker invokes one
 configured loopback MCP tool; it does not poll a prebuilt evidence inbox. Set:
 
 ```powershell
-$env:PROJECT_A_MCP_SERVER_URL='http://127.0.0.1:<approved-port>/mcp'
-$env:PROJECT_A_MCP_CAPTURE_TOOL='<approved-read-only-capture-tool>'
+$env:PROJECT_A_MCP_SERVER_URL='http://127.0.0.1:8765/mcp'
+$env:PROJECT_A_MCP_CAPTURE_TOOL='project_a_capture_snapshot'
+$env:PROJECT_A_CAPTURE_TOKEN='<set-locally-without-echoing>'
+$env:PROJECT_A_CAPTURE_SERVER_PID='<verified-8765-listener-pid>'
 ```
 
 The MCP result must bind the exact job, source event, stage, capture scope,
@@ -30,19 +32,21 @@ not resent.
 Set the common database path without printing secrets:
 
 ```powershell
+$runtime='C:\Users\jones.w\TradingSys\trading-auto'
+Set-Location $runtime
 $env:PROJECT_A_DB='C:\Users\jones.w\TradingSys\trading-auto\storage\project_a.db'
 ```
 
 Start the existing webhook server:
 
 ```powershell
-python -m ingest.webhook_server
+uv run --python 3.11 --with-requirements requirements.txt python -m ingest.webhook_server
 ```
 
 Start the persistent worker in the safe provider-disabled mode:
 
 ```powershell
-python -m project_a_analysis.worker --db $env:PROJECT_A_DB
+uv run --python 3.11 --with-requirements requirements.txt python -m project_a_analysis.worker --db $env:PROJECT_A_DB
 ```
 
 Configure only the model identity (no default or fallback model is used):
@@ -54,26 +58,26 @@ $env:PROJECT_A_OPENAI_MODEL='<Jones-approved-model-id>'
 Verify worker heartbeat and inspect jobs/story:
 
 ```powershell
-python -m project_a_analysis.cli --db $env:PROJECT_A_DB health
-python -m project_a_analysis.cli --db $env:PROJECT_A_DB jobs --status PENDING_CAPTURE
-python -m project_a_analysis.cli --db $env:PROJECT_A_DB jobs --status TECHNICAL_FAILURE
-python -m project_a_analysis.cli --db $env:PROJECT_A_DB jobs --status COMPLETED
-python -m project_a_analysis.cli --db $env:PROJECT_A_DB active-story
-python -m project_a_analysis.cli --db $env:PROJECT_A_DB audit --limit 50
+uv run --python 3.11 --with-requirements requirements.txt python -m project_a_analysis.cli --db $env:PROJECT_A_DB health
+uv run --python 3.11 --with-requirements requirements.txt python -m project_a_analysis.cli --db $env:PROJECT_A_DB jobs --status PENDING_CAPTURE
+uv run --python 3.11 --with-requirements requirements.txt python -m project_a_analysis.cli --db $env:PROJECT_A_DB jobs --status TECHNICAL_FAILURE
+uv run --python 3.11 --with-requirements requirements.txt python -m project_a_analysis.cli --db $env:PROJECT_A_DB jobs --status COMPLETED
+uv run --python 3.11 --with-requirements requirements.txt python -m project_a_analysis.cli --db $env:PROJECT_A_DB active-story
+uv run --python 3.11 --with-requirements requirements.txt python -m project_a_analysis.cli --db $env:PROJECT_A_DB audit --limit 50
 ```
 
 Record Jones's only two story-closing decisions:
 
 ```powershell
-python -m project_a_analysis.cli --db $env:PROJECT_A_DB decision --story-id <story_id> --value ENTERED
-python -m project_a_analysis.cli --db $env:PROJECT_A_DB decision --story-id <story_id> --value SKIPPED
+uv run --python 3.11 --with-requirements requirements.txt python -m project_a_analysis.cli --db $env:PROJECT_A_DB decision --story-id <story_id> --value ENTERED
+uv run --python 3.11 --with-requirements requirements.txt python -m project_a_analysis.cli --db $env:PROJECT_A_DB decision --story-id <story_id> --value SKIPPED
 ```
 
 Stop safely with `Ctrl+C`. For a hidden Windows process, record the returned PID
 and stop only that exact PID before starting the same command again:
 
 ```powershell
-$process = Start-Process python -WindowStyle Hidden -PassThru -ArgumentList @('-m','project_a_analysis.worker','--db',$env:PROJECT_A_DB)
+$process = Start-Process uv -WorkingDirectory $runtime -WindowStyle Hidden -PassThru -ArgumentList @('run','--python','3.11','--with-requirements','requirements.txt','python','-m','project_a_analysis.worker','--db',$env:PROJECT_A_DB)
 $process.Id
 Stop-Process -Id <recorded-worker-pid>
 ```
@@ -92,14 +96,14 @@ $env:PROJECT_A_OPENAI_BILLING_CONFIRMED='true'
 Inspect the captured job and compute the exact model-bound request manifest:
 
 ```powershell
-python -m project_a_analysis.cli --db $env:PROJECT_A_DB jobs --status CAPTURED
-python -m project_a_analysis.cli --db $env:PROJECT_A_DB request-manifest --job-id <job_id>
+uv run --python 3.11 --with-requirements requirements.txt python -m project_a_analysis.cli --db $env:PROJECT_A_DB jobs --status CAPTURED
+uv run --python 3.11 --with-requirements requirements.txt python -m project_a_analysis.cli --db $env:PROJECT_A_DB request-manifest --job-id <job_id>
 ```
 
 Then—and only after Jones approves that exact job and request SHA—run exactly:
 
 ```powershell
-python -m project_a_analysis.worker --db $env:PROJECT_A_DB --once --approve-one-shadow-request --approved-job-id <job_id> --approved-request-sha256 <lowercase-64-hex>
+uv run --python 3.11 --with-requirements requirements.txt python -m project_a_analysis.worker --db $env:PROJECT_A_DB --once --approve-one-shadow-request --approved-job-id <job_id> --approved-request-sha256 <lowercase-64-hex>
 ```
 
 The approval flag is rejected without `--once` and both identities. The worker

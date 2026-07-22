@@ -332,6 +332,18 @@ def _parse_capture_time(value: Any, field: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+def _validate_source_time_field(value: Any, field: str, timeframes: list[str]) -> None:
+    if isinstance(value, dict):
+        if set(value) != set(timeframes):
+            raise ValueError(f"{field} must contain the exact requested timeframe keys")
+        for timeframe in timeframes:
+            _parse_capture_time(value[timeframe], f"{field}.{timeframe}")
+        return
+    if len(timeframes) != 1:
+        raise ValueError(f"{field} must contain the exact requested timeframe keys")
+    _parse_capture_time(value, field)
+
+
 def _validate_capture_results(evidence: CapturedEvidence, capture_request: dict, at: datetime) -> None:
     def verified_source(requested: Any, actual: Any) -> bool:
         if not isinstance(requested, dict) or not isinstance(actual, dict):
@@ -401,7 +413,10 @@ def _validate_capture_results(evidence: CapturedEvidence, capture_request: dict,
             raise ValueError(f"structured read {request_id} observation is stale")
         for time_field in ("source_time", "source_bar_time"):
             if time_field in request.get("fields", []):
-                _parse_capture_time(fields.get(time_field), f"{request_id}.{time_field}")
+                _validate_source_time_field(
+                    fields.get(time_field), f"{request_id}.{time_field}",
+                    list(request.get("timeframes", [])),
+                )
         if "confirmed" in request.get("fields", []) and fields.get("confirmed") is not True:
             raise ValueError(f"structured read {request_id} is not confirmed")
         if "symbol" in request.get("fields", []) and fields.get("symbol") != request["source"]["symbol"]:
@@ -454,22 +469,126 @@ class AnalysisStore:
         finally:
             conn.close()
 
-    def pending_capture_jobs(self) -> tuple[dict[str, Any], ...]:
+    def pending_capture_jobs(self, *, at: datetime | None = None) -> tuple[dict[str, Any], ...]:
+        at_text = utc_z(at or datetime.now(timezone.utc))
         conn = self.database.connect()
         try:
             rows = conn.execute(
                 "SELECT j.* FROM project_a_analysis_jobs j JOIN project_a_analysis_job_status_history s "
                 "ON s.status_id=(SELECT MAX(s2.status_id) FROM project_a_analysis_job_status_history s2 "
                 "WHERE s2.job_id=j.job_id) WHERE s.status='PENDING_CAPTURE' "
+                "AND (s.lease_expires_at IS NULL OR s.lease_expires_at<=?) "
                 "AND NOT EXISTS (SELECT 1 FROM project_a_story_state_history h "
                 "WHERE h.story_id=j.story_id AND h.status='CLOSED') "
-                "ORDER BY j.requested_at,j.job_id"
+                "ORDER BY j.requested_at,j.job_id", (at_text,)
             ).fetchall()
             return tuple(dict(row) for row in rows)
         finally:
             conn.close()
 
-    def record_capture(self, job_id: str, evidence: CapturedEvidence, *, at: datetime) -> None:
+    def claim_capture_job(self, *, worker_id: str, at: datetime,
+                          lease_seconds: int = 90) -> dict[str, Any] | None:
+        if not 10 <= lease_seconds <= 300:
+            raise ValueError("capture lease must be 10..300 seconds")
+        at_text = utc_z(at)
+        with self.database.transaction(immediate=True) as conn:
+            expired = conn.execute(
+                "SELECT j.job_id,s.worker_id FROM project_a_analysis_jobs j "
+                "JOIN project_a_analysis_job_status_history s ON s.status_id=("
+                "SELECT MAX(s2.status_id) FROM project_a_analysis_job_status_history s2 "
+                "WHERE s2.job_id=j.job_id) WHERE s.status='CLAIMED' "
+                "AND s.worker_id LIKE 'capture:%' AND s.lease_expires_at<=? "
+                "ORDER BY j.requested_at,j.job_id LIMIT 1", (at_text,),
+            ).fetchone()
+            if expired is not None:
+                retry_at = utc_z(at + timedelta(seconds=30))
+                conn.execute(
+                    "INSERT INTO project_a_analysis_job_status_history("
+                    "job_id,status,recorded_at,worker_id,lease_expires_at,failure_code,detail) "
+                    "VALUES (?,'PENDING_CAPTURE',?,?,?,?,?)",
+                    (expired["job_id"], at_text, worker_id, retry_at,
+                     "CAPTURE_LEASE_EXPIRED", "capture owner exited before completing its lease"),
+                )
+                _audit(conn, at=at_text, action="MCP_CAPTURE_LEASE_EXPIRED",
+                       job_id=expired["job_id"], document={"retry_at": retry_at})
+                return None
+            row = conn.execute(
+                "SELECT j.* FROM project_a_analysis_jobs j "
+                "JOIN project_a_analysis_job_status_history s ON s.status_id=("
+                "SELECT MAX(s2.status_id) FROM project_a_analysis_job_status_history s2 "
+                "WHERE s2.job_id=j.job_id) WHERE s.status='PENDING_CAPTURE' "
+                "AND (s.lease_expires_at IS NULL OR s.lease_expires_at<=?) "
+                "AND NOT EXISTS (SELECT 1 FROM project_a_story_state_history h "
+                "WHERE h.story_id=j.story_id AND h.status='CLOSED') "
+                "ORDER BY j.requested_at,j.job_id LIMIT 1", (at_text,),
+            ).fetchone()
+            if row is None:
+                return None
+            lease_token = hashlib.sha256(os.urandom(32)).hexdigest()
+            owner = f"capture:{worker_id}:{lease_token}"
+            expiry = utc_z(at + timedelta(seconds=lease_seconds))
+            conn.execute(
+                "INSERT INTO project_a_analysis_job_status_history("
+                "job_id,status,recorded_at,worker_id,lease_expires_at) "
+                "VALUES (?,'CLAIMED',?,?,?)",
+                (row["job_id"], at_text, owner, expiry),
+            )
+            _audit(conn, at=at_text, action="MCP_CAPTURE_CLAIMED", job_id=row["job_id"],
+                   document={"lease_expires_at": expiry})
+            result = dict(row)
+            result["capture_lease_token"] = lease_token
+            return result
+
+    def capture_failure(self, job_id: str, *, at: datetime, worker_id: str,
+                        lease_token: str,
+                        code: str, detail: str, maximum_attempts: int = 5) -> dict[str, str]:
+        if not 1 <= maximum_attempts <= 10:
+            raise ValueError("maximum capture attempts must be 1..10")
+        at_text = utc_z(at)
+        bounded_detail = str(detail)[:400]
+        with self.database.transaction(immediate=True) as conn:
+            latest = conn.execute(
+                "SELECT status,worker_id,lease_expires_at FROM project_a_analysis_job_status_history WHERE job_id=? "
+                "ORDER BY status_id DESC LIMIT 1", (job_id,),
+            ).fetchone()
+            if latest is None:
+                raise KeyError(job_id)
+            owner = f"capture:{worker_id}:{lease_token}"
+            if (
+                latest["status"] != "CLAIMED" or latest["worker_id"] != owner
+                or latest["lease_expires_at"] < at_text
+            ):
+                raise RuntimeError("capture lease ownership mismatch or expired lease")
+            attempts = int(conn.execute(
+                "SELECT COUNT(*) FROM project_a_analysis_job_status_history "
+                "WHERE job_id=? AND status='PENDING_CAPTURE' AND failure_code IS NOT NULL",
+                (job_id,),
+            ).fetchone()[0]) + 1
+            if attempts >= maximum_attempts:
+                failure_code = "CAPTURE_RETRY_EXHAUSTED"
+                conn.execute(
+                    "INSERT INTO project_a_analysis_job_status_history("
+                    "job_id,status,recorded_at,worker_id,failure_code,detail) "
+                    "VALUES (?,'TECHNICAL_FAILURE',?,?,?,?)",
+                    (job_id, at_text, worker_id, failure_code, bounded_detail),
+                )
+                _audit(conn, at=at_text, action="MCP_CAPTURE_RETRY_EXHAUSTED", job_id=job_id,
+                       document={"attempt": attempts, "failure_code": code})
+                return {"status": "TECHNICAL_FAILURE", "failure_code": failure_code}
+            delay_seconds = min(30 * (2 ** (attempts - 1)), 900)
+            retry_at = utc_z(at + timedelta(seconds=delay_seconds))
+            conn.execute(
+                "INSERT INTO project_a_analysis_job_status_history("
+                "job_id,status,recorded_at,worker_id,lease_expires_at,failure_code,detail) "
+                "VALUES (?,'PENDING_CAPTURE',?,?,?,?,?)",
+                (job_id, at_text, worker_id, retry_at, code, bounded_detail),
+            )
+            _audit(conn, at=at_text, action="MCP_CAPTURE_RETRY_SCHEDULED", job_id=job_id,
+                   document={"attempt": attempts, "failure_code": code, "retry_at": retry_at})
+            return {"status": "PENDING_CAPTURE", "failure_code": code}
+
+    def record_capture(self, job_id: str, evidence: CapturedEvidence, *, at: datetime,
+                       worker_id: str, lease_token: str) -> None:
         evidence.validate()
         at_text = utc_z(at)
         with self.database.transaction(immediate=True) as conn:
@@ -507,15 +626,17 @@ class AnalysisStore:
             if len(structured_json.encode("utf-8")) > 262_144:
                 raise ValueError("structured evidence exceeds 262144 bytes")
             latest = conn.execute(
-                "SELECT status FROM project_a_analysis_job_status_history WHERE job_id=? "
+                "SELECT status,worker_id,lease_expires_at FROM project_a_analysis_job_status_history WHERE job_id=? "
                 "ORDER BY status_id DESC LIMIT 1", (job_id,),
             ).fetchone()
             if latest is None:
                 raise KeyError(job_id)
-            if latest["status"] == "CAPTURED":
-                return
-            if latest["status"] != "PENDING_CAPTURE":
-                raise RuntimeError("job is not waiting for capture")
+            owner = f"capture:{worker_id}:{lease_token}"
+            if (
+                latest["status"] != "CLAIMED" or latest["worker_id"] != owner
+                or latest["lease_expires_at"] < at_text
+            ):
+                raise RuntimeError("capture lease ownership mismatch or expired lease")
             manifest_json = canonical_json(evidence.manifest)
             manifest_sha = _sha({
                 "manifest": evidence.manifest,
@@ -554,6 +675,7 @@ class AnalysisStore:
                 "JOIN project_a_analysis_job_status_history s ON s.status_id=(SELECT MAX(s2.status_id) "
                 "FROM project_a_analysis_job_status_history s2 WHERE s2.job_id=j.job_id) "
                 "WHERE (s.status='CAPTURED' OR (s.status='CLAIMED' AND s.lease_expires_at<?)) "
+                "AND (s.status!='CLAIMED' OR s.worker_id NOT LIKE 'capture:%') "
                 + ("AND j.job_id=? " if job_id else "") +
                 "AND NOT EXISTS (SELECT 1 FROM project_a_story_state_history h "
                 "WHERE h.story_id=j.story_id AND h.status='CLOSED') "

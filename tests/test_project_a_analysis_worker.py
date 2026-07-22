@@ -4,12 +4,14 @@ import hashlib
 import base64
 import json
 import sqlite3
+from io import BytesIO
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from PIL import Image
 
 from contracts import canonical_json
 from ingest.project_a.config import ProjectAConfig
@@ -23,6 +25,7 @@ from project_a_analysis.provider import (
 )
 from project_a_analysis.store import AnalysisStore, CapturedEvidence
 from project_a_analysis.worker import AnalysisWorker, McpToolCapture, main as worker_main
+import project_a_analysis.worker as worker_module
 
 
 ROOT = Path(__file__).parents[1]
@@ -76,7 +79,9 @@ class CompleteCapture:
         for index in range(image_count):
             path = self.root / f"{job['job_id']}-{index}.png"
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"\x89PNG\r\n\x1a\n" + f"verified-mock-{index}".encode())
+            buffer = BytesIO()
+            Image.new("RGB", (320, 200), (index, 0, 0)).save(buffer, format="PNG")
+            path.write_bytes(buffer.getvalue())
             images.append({
                 "evidence_id": screenshot_requests[index]["request_id"], "path": str(path),
                 "media_type": "image/png", "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -88,7 +93,11 @@ class CompleteCapture:
                 fields["confirmed"] = True
             for time_field in ("source_time", "source_bar_time"):
                 if time_field in fields:
-                    fields[time_field] = "2026-07-20T01:02:00.000Z"
+                    fields[time_field] = (
+                        {timeframe: "2026-07-20T01:02:00.000Z" for timeframe in request["timeframes"]}
+                        if len(request["timeframes"]) > 1
+                        else "2026-07-20T01:02:00.000Z"
+                    )
             if "symbol" in fields:
                 fields["symbol"] = request["source"]["symbol"]
             if "feed" in fields:
@@ -137,6 +146,28 @@ class IncompleteCapture:
         return None
 
 
+def test_worker_attests_pinned_listener_before_transport(monkeypatch, tmp_path):
+    observed = {}
+
+    def attest(*, port, expected_pid):
+        observed.update(port=port, expected_pid=expected_pid)
+
+    monkeypatch.setattr(worker_module, "attest_capture_listener", attest)
+    capture = McpToolCapture(
+        server_url="http://127.0.0.1:8765/mcp",
+        tool_name="project_a_capture_snapshot", token="t" * 48,
+        artifact_root=tmp_path, expected_server_pid=12345,
+    )
+    capture._attest_server_listener()
+    assert observed == {"port": 8765, "expected_pid": 12345}
+
+
+class FailingCapture:
+    def capture(self, job):
+        del job
+        raise ValueError("bounded capture integrity failure")
+
+
 def grade(job):
     return {
         "story_id": job["story_id"], "analysis_id": job["analysis_id"],
@@ -183,6 +214,19 @@ def make_system(tmp_path):
         store=store, capture=capture, provider=provider, worker_id="test-worker", clock=clock,
     )
     return path, clock, ingest, store, capture, provider, worker
+
+
+def claim_capture(store, clock, worker_id="test-capture"):
+    claimed = store.claim_capture_job(worker_id=worker_id, at=clock())
+    assert claimed is not None
+    return claimed
+
+
+def record_claimed(store, claimed, evidence, clock, worker_id="test-capture"):
+    store.record_capture(
+        claimed["job_id"], evidence, at=clock(), worker_id=worker_id,
+        lease_token=claimed["capture_lease_token"],
+    )
 
 
 def test_worker_health_and_story_inspection_before_first_producer_event(tmp_path):
@@ -250,6 +294,88 @@ def test_incomplete_capture_never_calls_provider(tmp_path):
     assert provider.calls == [] and len(store.inspect_jobs("PENDING_CAPTURE")) == 1
 
 
+def test_capture_failure_uses_durable_backoff_without_provider_call(tmp_path):
+    path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
+    ingest.receive(raw(liq()))
+    blocked = AnalysisWorker(
+        store=store, capture=FailingCapture(), provider=provider,
+        worker_id="capture-failure", clock=clock,
+    )
+    outcome = blocked.tick()
+    assert outcome["status"] == "PENDING_CAPTURE"
+    assert outcome["failure_code"] == "CAPTURE_INTEGRITY_FAILURE"
+    assert store.pending_capture_jobs(at=clock()) == ()
+    assert len(store.inspect_jobs("PENDING_CAPTURE")) == 1
+    assert provider.calls == []
+    clock.value += timedelta(seconds=31)
+    assert len(store.pending_capture_jobs(at=clock())) == 1
+
+
+def test_capture_claim_is_atomic_and_requires_exact_lease_owner(tmp_path):
+    path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
+    ingest.receive(raw(liq()))
+    claimed = store.claim_capture_job(worker_id="worker-one", at=clock())
+    assert claimed is not None
+    assert store.claim_capture_job(worker_id="worker-two", at=clock()) is None
+    with pytest.raises(RuntimeError, match="lease ownership"):
+        store.capture_failure(
+            claimed["job_id"], at=clock(), worker_id="worker-two",
+            lease_token=claimed["capture_lease_token"],
+            code="CAPTURE_INTEGRITY_FAILURE", detail="wrong owner",
+        )
+    store.capture_failure(
+        claimed["job_id"], at=clock(), worker_id="worker-one",
+        lease_token=claimed["capture_lease_token"],
+        code="CAPTURE_INTEGRITY_FAILURE", detail="owned failure",
+    )
+    assert store.claim_capture_job(worker_id="worker-two", at=clock()) is None
+
+
+def test_expired_capture_lease_cannot_record_failure(tmp_path):
+    path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
+    ingest.receive(raw(liq()))
+    claimed = store.claim_capture_job(worker_id="worker-one", at=clock(), lease_seconds=10)
+    clock.value += timedelta(seconds=11)
+    with pytest.raises(RuntimeError, match="expired lease"):
+        store.capture_failure(
+            claimed["job_id"], at=clock(), worker_id="worker-one",
+            lease_token=claimed["capture_lease_token"],
+            code="CAPTURE_INTEGRITY_FAILURE", detail="late owner",
+        )
+
+
+def test_captured_job_rejects_late_or_wrong_lease_replay(tmp_path):
+    path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
+    ingest.receive(raw(liq()))
+    claimed = claim_capture(store, clock, worker_id="worker-one")
+    evidence = capture.capture(claimed)
+    record_claimed(store, claimed, evidence, clock, worker_id="worker-one")
+    with pytest.raises(RuntimeError, match="lease ownership"):
+        store.record_capture(
+            claimed["job_id"], evidence, at=clock(), worker_id="worker-two",
+            lease_token="0" * 64,
+        )
+
+
+def test_capture_failure_is_quarantined_after_bounded_retries(tmp_path):
+    path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
+    ingest.receive(raw(liq()))
+    blocked = AnalysisWorker(
+        store=store, capture=FailingCapture(), provider=provider,
+        worker_id="capture-exhaustion", clock=clock,
+    )
+    for delay in (31, 61, 121, 241):
+        assert blocked.tick()["status"] == "PENDING_CAPTURE"
+        clock.value += timedelta(seconds=delay)
+    outcome = blocked.tick()
+    assert outcome == {
+        "ok": False, "provider_enabled": provider.enabled, "captured": 0, "processed": 0,
+        "status": "TECHNICAL_FAILURE", "failure_code": "CAPTURE_RETRY_EXHAUSTED",
+    }
+    assert len(store.inspect_jobs("TECHNICAL_FAILURE")) == 1
+    assert provider.calls == []
+
+
 @pytest.mark.parametrize("code", ["MODEL_TIMEOUT", "RATE_LIMITED", "PROVIDER_UNAVAILABLE"])
 def test_provider_transport_errors_are_technical_failure_not_recommendation(tmp_path, code):
     path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
@@ -266,8 +392,9 @@ def test_provider_transport_errors_are_technical_failure_not_recommendation(tmp_
 def test_malformed_model_json_fails_closed_in_official_adapter(tmp_path):
     path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
     ingest.receive(raw(liq()))
-    evidence = capture.capture(store.pending_capture_jobs()[0])
-    store.record_capture(store.pending_capture_jobs()[0]["job_id"], evidence, at=clock())
+    pending = claim_capture(store, clock)
+    evidence = capture.capture(pending)
+    record_claimed(store, pending, evidence, clock)
     job = store.claim_next(worker_id="direct", at=clock())
     job, evidence = store.load_job_bundle(job["job_id"])
 
@@ -395,8 +522,8 @@ def test_story_jobs_are_serialised_across_workers(tmp_path):
     for number in (1, 2):
         clock.value = datetime(2026, 7, 20, 1, 2, 20 + number, tzinfo=timezone.utc)
         assert ingest.receive(raw(e1(number))).accepted
-    for pending in store.pending_capture_jobs():
-        store.record_capture(pending["job_id"], capture.capture(pending), at=clock())
+    while (pending := store.claim_capture_job(worker_id="test-capture", at=clock())) is not None:
+        record_claimed(store, pending, capture.capture(pending), clock)
     first = store.claim_next(worker_id="worker-one", at=clock())
     assert first["e1_count"] == 1
     assert store.claim_next(worker_id="worker-two", at=clock()) is None
@@ -426,7 +553,7 @@ def test_closing_newest_liq_story_never_resurrects_older_story(tmp_path):
 def test_capture_must_bind_job_freshness_and_screenshot(tmp_path):
     path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
     ingest.receive(raw(liq()))
-    pending = store.pending_capture_jobs()[0]
+    pending = claim_capture(store, clock)
     bad = CapturedEvidence(
         manifest={
             "status": "COMPLETED", "symbol": "XAUUSD", "feed": "ICMARKETS", "job_id": "wrong",
@@ -439,7 +566,11 @@ def test_capture_must_bind_job_freshness_and_screenshot(tmp_path):
         structured_evidence={"verified": True}, images=(),
     )
     with pytest.raises(ValueError):
-        store.record_capture(pending["job_id"], bad, at=clock())
+        record_claimed(store, pending, bad, clock)
+    store.capture_failure(
+        pending["job_id"], at=clock(), worker_id="test-capture",
+        lease_token=pending["capture_lease_token"], code="CAPTURE_INTEGRITY_FAILURE", detail="invalid",
+    )
     assert provider.calls == [] and len(store.inspect_jobs("PENDING_CAPTURE")) == 1
 
 
@@ -449,7 +580,7 @@ def test_capture_must_bind_job_freshness_and_screenshot(tmp_path):
 def test_forged_mcp_completeness_cannot_reach_captured_state(tmp_path, mutation):
     path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
     ingest.receive(raw(liq()))
-    pending = store.pending_capture_jobs()[0]
+    pending = claim_capture(store, clock)
     good = capture.capture(pending)
     manifest = deepcopy(good.manifest)
     structured = deepcopy(good.structured_evidence)
@@ -471,14 +602,18 @@ def test_forged_mcp_completeness_cannot_reach_captured_state(tmp_path, mutation)
         images[0]["sha256"] = hashlib.sha256(bad_path.read_bytes()).hexdigest()
     forged = CapturedEvidence(manifest, structured, tuple(images))
     with pytest.raises(ValueError):
-        store.record_capture(pending["job_id"], forged, at=clock())
+        record_claimed(store, pending, forged, clock)
+    store.capture_failure(
+        pending["job_id"], at=clock(), worker_id="test-capture",
+        lease_token=pending["capture_lease_token"], code="CAPTURE_INTEGRITY_FAILURE", detail="invalid",
+    )
     assert len(store.inspect_jobs("PENDING_CAPTURE")) == 1 and provider.calls == []
 
 
 def test_invalid_mcp_image_does_not_poison_corrected_retry(tmp_path):
     path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
     ingest.receive(raw(liq()))
-    pending = store.pending_capture_jobs()[0]
+    pending = claim_capture(store, clock)
     good = capture.capture(pending)
     outer = {
         **{
@@ -490,6 +625,18 @@ def test_invalid_mcp_image_does_not_poison_corrected_retry(tmp_path):
         },
         "structured_evidence": good.structured_evidence,
         "image_evidence_ids": [item["evidence_id"] for item in good.images],
+        "account": "Jonesy_Wong", "capture_plan_version": "project_a.capture_plan/1.0",
+        "capture_plan_sha256": hashlib.sha256(canonical_json({
+            "structured_reads": json.loads(pending["request_context_json"])["capture"]["accepted_request"]["structured_reads"],
+            "screenshot_requests": json.loads(pending["request_context_json"])["capture"]["accepted_request"]["screenshot_requests"],
+        }).encode()).hexdigest(),
+        "cdp_endpoint": "http://127.0.0.1:9333",
+        "script_sha256": "b2ab345bd8ed987a1ef17e17087126a4ddcbcbcacad71e68ab28600eb19390a6",
+        "immutable_evidence_manifest_sha256": "e" * 64,
+        "screenshot_artifacts": [{
+            "evidence_id": item["evidence_id"], "sha256": item["sha256"],
+            "mime_type": "image/png", "width": 320, "height": 200,
+        } for item in good.images],
     }
     valid_blocks = [
         SimpleNamespace(
@@ -505,7 +652,8 @@ def test_invalid_mcp_image_does_not_poison_corrected_retry(tmp_path):
 
     class SequencedMcp(McpToolCapture):
         def __init__(self):
-            super().__init__(server_url="http://127.0.0.1:9999/mcp", tool_name="capture",
+            super().__init__(server_url="http://127.0.0.1:9999/mcp",
+                             tool_name="project_a_capture_snapshot", token="t" * 48,
                              artifact_root=tmp_path / "mcp")
             self.results = [
                 SimpleNamespace(isError=False, structuredContent=outer, content=invalid_blocks),
@@ -516,19 +664,19 @@ def test_invalid_mcp_image_does_not_poison_corrected_retry(tmp_path):
             return self.results.pop(0)
 
     client = SequencedMcp()
-    with pytest.raises(ValueError, match="do not match"):
+    with pytest.raises(ValueError, match="PNG evidence"):
         client.capture(pending)
     assert list((tmp_path / "mcp").rglob("*")) == []
     corrected = client.capture(pending)
-    store.record_capture(pending["job_id"], corrected, at=clock())
+    record_claimed(store, pending, corrected, clock)
     assert len(store.inspect_jobs("CAPTURED")) == 1
 
 
 def test_durable_provider_retry_rejects_changed_request_identity(tmp_path):
     path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
     ingest.receive(raw(liq()))
-    pending = store.pending_capture_jobs()[0]
-    store.record_capture(pending["job_id"], capture.capture(pending), at=clock())
+    pending = claim_capture(store, clock)
+    record_claimed(store, pending, capture.capture(pending), clock)
     job = store.claim_next(worker_id="identity", at=clock())
     job, evidence = store.load_job_bundle(job["job_id"])
     store.begin_provider_attempt(job, model="model-a", request_manifest_sha256="a" * 64,
@@ -541,8 +689,8 @@ def test_durable_provider_retry_rejects_changed_request_identity(tmp_path):
 def test_persistence_revalidates_grade_schema_and_identity(tmp_path):
     path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
     ingest.receive(raw(liq()))
-    pending = store.pending_capture_jobs()[0]
-    store.record_capture(pending["job_id"], capture.capture(pending), at=clock())
+    pending = claim_capture(store, clock)
+    record_claimed(store, pending, capture.capture(pending), clock)
     job = store.claim_next(worker_id="persist", at=clock())
     job, evidence = store.load_job_bundle(job["job_id"])
     store.begin_provider_attempt(job, model="model", request_manifest_sha256="a" * 64,

@@ -4,7 +4,7 @@ pyyaml
 python-dotenv
 jsonschema>=4.21,<5
 
-# Step 1 — capture 雙路（已裝，連 chromium：python -m playwright install chromium）
+# Step 1 — capture 雙路（已裝，連 chromium：uv run --python 3.11 python -m playwright install chromium）
 playwright
 
 # Step 4 — marker.py 畫 SNR/Entry/SL/TP（已裝）
@@ -19,6 +19,8 @@ uvicorn
 requests            # Telegram sendMessage（Phase 1 已 wire）；Notion 真 send 仍 M1
 openai>=1.68,<3      # Project A Responses API; imported only after the one-request SHADOW gate
 mcp>=1.9,<2          # Loopback MCP structured-read/screenshot client owned by the analysis worker
+httpx>=0.27,<1       # Authenticated loopback Streamable HTTP client
+websocket-client>=1.8,<2  # Fixed-method read-only Chrome DevTools transport
 
 # 以下逐步先裝（裝嗰陣解返 comment，避免拉一堆未用嘅嘢）：
 # anthropic         # Step 3 真・inference wire 嗰陣先裝（Q8=A: Sonnet）
