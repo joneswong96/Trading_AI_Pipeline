@@ -326,8 +326,14 @@ def validate_view(view: ViewPlan, target: Target, raw: dict[str, Any], *, now: d
         timeframe = _normalize_timeframe(chart.get("interval"))
         if not timeframe:
             raise CaptureFailure("TIMEFRAME_MISMATCH", "unrecognized TradingView interval")
-        if chart.get("chart_type") != 1:
-            raise CaptureFailure("CHART_TYPE_MISMATCH", f"{view.layout_id}/{timeframe} is not standard candles")
+        chart_type_names = {1: "standard_candles", 19: "volume_candles"}
+        expected_chart_types = dict(zip(view.timeframes, view.chart_types))
+        actual_chart_type = chart_type_names.get(chart.get("chart_type"))
+        if actual_chart_type != expected_chart_types.get(timeframe):
+            raise CaptureFailure(
+                "CHART_TYPE_MISMATCH",
+                f"{view.layout_id}/{timeframe} expected {expected_chart_types.get(timeframe)}, observed {actual_chart_type or chart.get('chart_type')}",
+            )
         current = chart.get("current_bar")
         closed = chart.get("closed_bar")
         if not isinstance(current, dict) or not isinstance(closed, dict):
@@ -339,6 +345,7 @@ def validate_view(view: ViewPlan, target: Target, raw: dict[str, Any], *, now: d
             raise CaptureFailure("SOURCE_STALE", f"{view.layout_id}/{timeframe} bar is stale")
         item = dict(chart)
         item["timeframe"] = timeframe
+        item["chart_type_name"] = actual_chart_type
         normalized.append(item)
     if {item["timeframe"] for item in normalized} != set(view.timeframes):
         raise CaptureFailure("TIMEFRAME_MISMATCH", f"layout {view.layout_id} timeframe set mismatch")

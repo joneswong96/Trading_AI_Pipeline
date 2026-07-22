@@ -134,6 +134,12 @@ def _fields_for(request: dict[str, Any], view: ViewSnapshot, observed_at: str) -
     kind = request["read_kind"]
     timeframes = list(request["timeframes"])
     charts = {timeframe: _chart(view, timeframe) for timeframe in timeframes}
+    if any(chart.get("chart_type_name") != "standard_candles" for chart in charts.values()):
+        raise CaptureFailure(
+            "CAPTURE_PLAN_MISMATCH",
+            f"{request['request_id']} attempted structured numeric extraction from a visual-context-only Volume pane",
+            retryable=False,
+        )
     fields: dict[str, Any]
     if kind == "CURRENT_FORMING_PRICE":
         chart = charts[timeframes[0]]
@@ -485,7 +491,7 @@ class CaptureEngine:
                 layout_id=snapshot.target.layout_id, url=snapshot.target.url,
                 account=snapshot.account, symbol=snapshot.plan.symbol, feed=snapshot.plan.feed,
                 timeframes=[chart["timeframe"] for chart in snapshot.charts],
-                chart_types=["standard_candles" for _ in snapshot.charts],
+                chart_types=[chart["chart_type_name"] for chart in snapshot.charts],
                 indicator_names=list(snapshot.indicator_names), observed_at=utc_z(snapshot.observed_at),
                 last_bar_at=utc_z(snapshot.last_bar_at), status="COMPLETE",
             ) for snapshot in before.values()]
@@ -569,7 +575,7 @@ class CaptureEngine:
                        "layout_id": item.target.layout_id, "account": item.account,
                        "symbol": item.plan.symbol, "feed": item.plan.feed,
                        "timeframes": sorted(chart["timeframe"] for chart in item.charts),
-                       "chart_types": ["standard_candles" for _ in item.charts],
+                       "chart_types": [chart["chart_type_name"] for chart in item.charts],
                        "indicator_names": list(item.indicator_names),
                        "alert_inventory_count": item.alert_inventory_count}
                       for item in before.values()],

@@ -109,7 +109,11 @@ def raw_state(role: str):
         "title": "TradingView", "observed_epoch_ms": int(NOW.timestamp() * 1000),
         "account_markers": [{"href": "/u/Jonesy_Wong/", "username": "",
                              "aria_label": "", "title": "", "text": ""}],
-        "charts": [chart(interval, symbol, seconds) for interval, seconds in INTERVALS[role]],
+        "charts": [
+            {**chart(interval, symbol, seconds),
+             "chart_type": 19 if chart_type == "volume_candles" else 1}
+            for (interval, seconds), chart_type in zip(INTERVALS[role], view.chart_types)
+        ],
         "alert_inventory_count": 7,
     }
 
@@ -196,7 +200,7 @@ def live_service(tmp_path):
 def test_frozen_plans_and_schema_are_exact():
     baseline = plan_for_stage("LIQ_BASELINE")
     delta = plan_for_stage("E1_DELTA")
-    assert (len(baseline.structured_reads), len(baseline.screenshots)) == (12, 5)
+    assert (len(baseline.structured_reads), len(baseline.screenshots)) == (11, 5)
     assert (len(delta.structured_reads), len(delta.screenshots)) == (5, 2)
     assert plan_sha256(baseline) == PLAN_SHA256S["LIQ_BASELINE"]
     assert plan_sha256(delta) == PLAN_SHA256S["E1_DELTA"]
@@ -332,7 +336,7 @@ def test_target_url_rejects_non_exact_tradingview_authority(url):
     (lambda raw: raw.update(account_markers=[]), "ACCOUNT_MISMATCH"),
     (lambda raw: raw["charts"][0].update(symbol="OTHER:XAUUSD"), "SYMBOL_MISMATCH"),
     (lambda raw: raw["charts"][0].update(interval="99"), "TIMEFRAME_MISMATCH"),
-    (lambda raw: raw["charts"][0].update(chart_type=19), "CHART_TYPE_MISMATCH"),
+    (lambda raw: raw["charts"][0].update(chart_type=1), "CHART_TYPE_MISMATCH"),
     (lambda raw: raw["charts"][0]["current_bar"].update(time=(NOW - timedelta(hours=2)).timestamp()), "SOURCE_STALE"),
 ])
 def test_view_identity_mutations_fail_closed(mutation, code):
@@ -349,7 +353,7 @@ def test_baseline_capture_exact_manifest_audit_and_idempotent_replay(tmp_path):
     first = capture.capture(request())
     assert len(first.images) == 5
     reads = first.structured["structured_evidence"]["structured_read_results"]
-    assert len(reads) == 12
+    assert len(reads) == 11
     assert [item for item in reads if item["request_id"] == "read_9222_dxy_1m"] == [{
         "request_id": "read_9222_dxy_1m", "status": "UNAVAILABLE",
         "reason": "SOURCE_PORT_NOT_AUTHORIZED",
@@ -462,8 +466,8 @@ def test_e1_capture_is_bounded_delta(tmp_path):
     package = capture.capture(request("E1_DELTA"))
     assert len(package.images) == 2
     assert {item["request_id"] for item in package.structured["structured_evidence"]["structured_read_results"]} == {
-        "read_9333_xau_current", "read_9333_xau_closed_ohlc_1m_5m",
-        "read_9333_xau_macd_1m_5m", "read_9333_renko_5s",
+        "read_9333_xau_current", "read_9333_xau_closed_ohlc_5m",
+        "read_9333_xau_macd_5m", "read_9333_renko_5s",
         "read_9333_xau_5s_price_action",
     }
 
@@ -490,6 +494,13 @@ def test_preflight_compares_browser_state_without_mutation(tmp_path):
     assert result["status"] == "PASS" and result["mutation_detected"] is False
     assert result["browser_state_before_sha256"] == result["browser_state_after_sha256"]
     assert len(result["views"]) == 5 and backend.screenshot_calls == 5
+    identities = {item["role"]: item for item in result["views"]}
+    assert identities["xau_intraday"]["chart_types"] == [
+        "volume_candles", "standard_candles",
+    ]
+    assert identities["xau_htf"]["chart_types"] == [
+        "volume_candles", "volume_candles", "volume_candles",
+    ]
 
 
 def test_wrong_target_state_after_screenshot_fails_mutation_guard(tmp_path):

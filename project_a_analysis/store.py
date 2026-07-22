@@ -137,8 +137,8 @@ def _e1_delta_evidence_request(conn: sqlite3.Connection, story_id: str) -> dict[
         raise RuntimeError("E1 requires a durable LIQ baseline capture request")
     baseline = json.loads(row["request_context_json"])["capture"]["accepted_request"]
     read_ids = {
-        "read_9333_xau_current", "read_9333_xau_closed_ohlc_1m_5m",
-        "read_9333_xau_macd_1m_5m", "read_9333_renko_5s",
+        "read_9333_xau_current", "read_9333_xau_closed_ohlc_5m",
+        "read_9333_xau_macd_5m", "read_9333_renko_5s",
         "read_9333_xau_5s_price_action",
     }
     screenshot_ids = {"screenshot_9333_xau_intraday", "screenshot_9333_renko"}
@@ -349,7 +349,7 @@ def _validate_capture_results(evidence: CapturedEvidence, capture_request: dict,
         if not isinstance(requested, dict) or not isinstance(actual, dict):
             return False
         policy_fields = (
-            "role", "port", "layout_id", "symbol", "feed", "timeframes", "chart_type"
+            "role", "port", "layout_id", "symbol", "feed", "timeframes", "chart_types"
         )
         target = actual.get("target_id")
         return (

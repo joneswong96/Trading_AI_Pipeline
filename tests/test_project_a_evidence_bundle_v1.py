@@ -14,6 +14,7 @@ from project_a.evidence_bundle import (
     Port9333RequestAdapter,
     RequestLevel,
     ScreenshotRequest,
+    SOURCE_AUTHORITY,
     SourceIdentity,
     StructuredReadRequest,
     TriggerDecision,
@@ -29,7 +30,10 @@ NOW = datetime(2026, 7, 20, 3, 4, 5, tzinfo=timezone.utc)
 @pytest.fixture
 def sources():
     def source(role, port, layout, target, symbol, feed, timeframes):
-        return SourceIdentity(role, port, layout, target, symbol, feed, timeframes)
+        return SourceIdentity(
+            role, port, layout, target, symbol, feed, timeframes,
+            chart_types=SOURCE_AUTHORITY[role][5],
+        )
 
     return {
         "xau_intraday": source("xau_intraday", 9333, "cpPWuLlN", "target-xau-intraday", "XAUUSD", "ICMARKETS", ("1m", "5m")),
@@ -92,7 +96,7 @@ def test_liq_touch_starts_research_and_compiles_complete_capture(sources):
     assert request.trigger.full_capture_requested is True
     assert {item.read_kind for item in request.structured_reads} == {
         "CURRENT_FORMING_PRICE", "CLOSED_OHLC", "STANDARD_MACD",
-        "EXPANSION_CONTEXT", "SNR_HPA_CONTEXT", "CLOSED_OHLC_AND_STRUCTURE",
+        "EXPANSION_CONTEXT", "SNR_HPA_CONTEXT",
         "DXY_CONTEXT", "DXY_SUPPLEMENTAL", "RENKO_STATE", "SHORT_TERM_PRICE_ACTION",
     }
     assert len(request.screenshot_requests) == 5
@@ -137,11 +141,24 @@ def test_intraday_timeframes_are_split_across_exact_9333_layout_identities(sourc
         for item in numeric
     }
     assert observed == {
-        ("CLOSED_OHLC", ("1m", "5m")): ("xau_intraday", "cpPWuLlN"),
-        ("STANDARD_MACD", ("1m", "5m")): ("xau_intraday", "cpPWuLlN"),
+        ("CLOSED_OHLC", ("5m",)): ("xau_intraday", "cpPWuLlN"),
+        ("STANDARD_MACD", ("5m",)): ("xau_intraday", "cpPWuLlN"),
         ("CLOSED_OHLC", ("15m", "30m")): ("xau_30m_15m", "avpCVaw2"),
         ("STANDARD_MACD", ("15m", "30m")): ("xau_30m_15m", "avpCVaw2"),
     }
+
+
+def test_volume_panes_are_visual_context_only(sources):
+    request = build(sources, "LIQ_TOUCH")
+    for item in request.structured_reads:
+        chart_types = dict(zip(item.source.timeframes, item.source.chart_types))
+        assert all(chart_types[timeframe] == "standard_candles" for timeframe in item.timeframes)
+    visual_roles = {item.source.role for item in request.screenshot_requests}
+    assert {"xau_intraday", "xau_htf"} <= visual_roles
+    assert sources["xau_intraday"].chart_types == ("volume_candles", "standard_candles")
+    assert sources["xau_htf"].chart_types == (
+        "volume_candles", "volume_candles", "volume_candles",
+    )
 
 
 @pytest.mark.parametrize("event", ["EXP_UP", "RENKO_E1", "RENKO_E2", "RENKO_MAIN", "RENKO_FIRE"])
@@ -214,11 +231,11 @@ def test_primary_and_supplemental_adapters_are_request_only_and_port_pinned(sour
         build(wrong, "LIQ_TOUCH")
 
 
-def test_native_renko_chart_type_is_rejected():
-    with pytest.raises(EvidenceBundleError, match="standard-candle"):
+def test_unapproved_chart_type_is_rejected():
+    with pytest.raises(EvidenceBundleError, match="approved candle allowlist"):
         SourceIdentity(
             "renko", 9333, "YclFo8Ax", "target-renko", "XAUUSD", "ICMARKETS",
-            ("5s",), chart_type="renko",
+            ("5s",), chart_types=("renko",),
         )
 
 

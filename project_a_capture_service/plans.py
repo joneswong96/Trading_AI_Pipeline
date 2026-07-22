@@ -25,6 +25,7 @@ class ViewPlan:
     symbol: str
     feed: str
     timeframes: tuple[str, ...]
+    chart_types: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -38,24 +39,24 @@ class CapturePlan:
 
 
 VIEWS = {
-    "xau_intraday": ViewPlan("xau_intraday", "cpPWuLlN", "XAUUSD", "ICMARKETS", ("1m", "5m")),
-    "xau_30m_15m": ViewPlan("xau_30m_15m", "avpCVaw2", "XAUUSD", "ICMARKETS", ("15m", "30m")),
-    "xau_htf": ViewPlan("xau_htf", "pNqcbOmu", "XAUUSD", "ICMARKETS", ("4H", "D", "W")),
-    "dxy_15m": ViewPlan("dxy_15m", "n9qjfufV", "DXY", "TVC", ("15m",)),
-    "renko": ViewPlan("renko", "YclFo8Ax", "XAUUSD", "ICMARKETS", ("5s",)),
+    "xau_intraday": ViewPlan("xau_intraday", "cpPWuLlN", "XAUUSD", "ICMARKETS", ("1m", "5m"), ("volume_candles", "standard_candles")),
+    "xau_30m_15m": ViewPlan("xau_30m_15m", "avpCVaw2", "XAUUSD", "ICMARKETS", ("15m", "30m"), ("standard_candles", "standard_candles")),
+    "xau_htf": ViewPlan("xau_htf", "pNqcbOmu", "XAUUSD", "ICMARKETS", ("4H", "D", "W"), ("volume_candles", "volume_candles", "volume_candles")),
+    "dxy_15m": ViewPlan("dxy_15m", "n9qjfufV", "DXY", "TVC", ("15m",), ("standard_candles",)),
+    "renko": ViewPlan("renko", "YclFo8Ax", "XAUUSD", "ICMARKETS", ("5s",), ("standard_candles",)),
 }
 
 E1_READ_IDS = frozenset({
     "read_9333_xau_current",
-    "read_9333_xau_closed_ohlc_1m_5m",
-    "read_9333_xau_macd_1m_5m",
+    "read_9333_xau_closed_ohlc_5m",
+    "read_9333_xau_macd_5m",
     "read_9333_renko_5s",
     "read_9333_xau_5s_price_action",
 })
 E1_SCREENSHOT_IDS = frozenset({"screenshot_9333_xau_intraday", "screenshot_9333_renko"})
 PLAN_SHA256S = {
-    "LIQ_BASELINE": "aae83eeb026a108506ed0778d9a5520c364733ccc1b96272850c7b98fdc8a856",
-    "E1_DELTA": "66db257d9055950113f71172d184dd5f2f855d079d9723ba728ad8d953963852",
+    "LIQ_BASELINE": "d75e2f5da1b833fd542a4be9ddf4a75e2b69a1cb87c599928dd2d88af7e7fb88",
+    "E1_DELTA": "270a938a5b09a5d3e36ef28e40593d1f4530045fbec94b1a6178ce154612fad5",
 }
 
 
@@ -123,6 +124,8 @@ def validate_frozen_plans() -> None:
         for view in plan.views:
             if view.layout_id not in {item.layout_id for item in VIEWS.values()}:
                 raise RuntimeError("unapproved layout in capture plan")
+            if len(view.timeframes) != len(view.chart_types):
+                raise RuntimeError("chart-type allowlist is not aligned with timeframes")
 
 
 validate_frozen_plans()

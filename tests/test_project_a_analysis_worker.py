@@ -625,7 +625,7 @@ def test_invalid_mcp_image_does_not_poison_corrected_retry(tmp_path):
         },
         "structured_evidence": good.structured_evidence,
         "image_evidence_ids": [item["evidence_id"] for item in good.images],
-        "account": "Jonesy_Wong", "capture_plan_version": "project_a.capture_plan/1.0",
+        "account": "Jonesy_Wong", "capture_plan_version": "project_a.capture_plan/1.1",
         "capture_plan_sha256": hashlib.sha256(canonical_json({
             "structured_reads": json.loads(pending["request_context_json"])["capture"]["accepted_request"]["structured_reads"],
             "screenshot_requests": json.loads(pending["request_context_json"])["capture"]["accepted_request"]["screenshot_requests"],

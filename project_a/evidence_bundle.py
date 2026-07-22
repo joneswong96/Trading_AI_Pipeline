@@ -119,7 +119,7 @@ class SourceIdentity:
     symbol: str
     feed: str
     timeframes: tuple[str, ...]
-    chart_type: str = "standard_candles"
+    chart_types: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.port not in (9222, 9333):
@@ -128,8 +128,12 @@ class SourceIdentity:
             raise EvidenceBundleError("source identity must be complete")
         if not self.timeframes:
             raise EvidenceBundleError("source identity must declare timeframes")
-        if self.chart_type != "standard_candles":
-            raise EvidenceBundleError("only standard-candle source charts are approved")
+        if not self.chart_types:
+            object.__setattr__(self, "chart_types", tuple("standard_candles" for _ in self.timeframes))
+        if len(self.chart_types) != len(self.timeframes):
+            raise EvidenceBundleError("source chart types must align one-to-one with timeframes")
+        if not set(self.chart_types) <= {"standard_candles", "volume_candles"}:
+            raise EvidenceBundleError("source chart types must use the approved candle allowlist")
 
     def canonical(self) -> dict[str, JsonValue]:
         return {
@@ -140,7 +144,7 @@ class SourceIdentity:
             "symbol": self.symbol,
             "feed": self.feed,
             "timeframes": self.timeframes,
-            "chart_type": self.chart_type,
+            "chart_types": self.chart_types,
         }
 
 
@@ -344,12 +348,12 @@ FULL_CAPTURE_SCREENSHOT_ROLES = (
     "xau_intraday", "xau_30m_15m", "xau_htf", "dxy_15m", "renko",
 )
 SOURCE_AUTHORITY = {
-    "xau_intraday": (9333, "cpPWuLlN", "XAUUSD", "ICMARKETS", ("1m", "5m")),
-    "xau_30m_15m": (9333, "avpCVaw2", "XAUUSD", "ICMARKETS", ("15m", "30m")),
-    "xau_htf": (9333, "pNqcbOmu", "XAUUSD", "ICMARKETS", ("4H", "D", "W")),
-    "dxy_15m": (9333, "n9qjfufV", "DXY", "TVC", ("15m",)),
-    "dxy_1m": (9222, "ocVwlz2C", "DXY", "TVC", ("1m",)),
-    "renko": (9333, "YclFo8Ax", "XAUUSD", "ICMARKETS", ("5s",)),
+    "xau_intraday": (9333, "cpPWuLlN", "XAUUSD", "ICMARKETS", ("1m", "5m"), ("volume_candles", "standard_candles")),
+    "xau_30m_15m": (9333, "avpCVaw2", "XAUUSD", "ICMARKETS", ("15m", "30m"), ("standard_candles", "standard_candles")),
+    "xau_htf": (9333, "pNqcbOmu", "XAUUSD", "ICMARKETS", ("4H", "D", "W"), ("volume_candles", "volume_candles", "volume_candles")),
+    "dxy_15m": (9333, "n9qjfufV", "DXY", "TVC", ("15m",), ("standard_candles",)),
+    "dxy_1m": (9222, "ocVwlz2C", "DXY", "TVC", ("1m",), ("standard_candles",)),
+    "renko": (9333, "YclFo8Ax", "XAUUSD", "ICMARKETS", ("5s",), ("standard_candles",)),
 }
 
 
@@ -364,6 +368,7 @@ def approved_source_identities() -> dict[str, SourceIdentity]:
             symbol=authority[2],
             feed=authority[3],
             timeframes=authority[4],
+            chart_types=authority[5],
         )
         for role, authority in SOURCE_AUTHORITY.items()
     }
@@ -380,11 +385,11 @@ def _require_source(
     if (
         source.role != role
         or source.port != port
-        or (source.port, source.layout_id, source.symbol, source.feed, source.timeframes) != expected
-        or source.chart_type != "standard_candles"
+        or (source.port, source.layout_id, source.symbol, source.feed,
+            source.timeframes, source.chart_types) != expected
     ):
         raise EvidenceBundleError(
-            f"source {role} must match approved port/layout/symbol/feed/timeframe standard-candle authority"
+            f"source {role} must match approved port/layout/symbol/feed/timeframe/chart-type authority"
         )
     return source
 
@@ -411,17 +416,17 @@ class Port9333RequestAdapter:
                     "timeframe", "liquidity_level_id", "liquidity_level_price",
                     "distance_to_level", "distance_atr", "source_time", "observed_at",
                 ),
-                ("1m",),
+                ("5m",),
             ),
             StructuredReadRequest(
-                "read_9333_xau_closed_ohlc_1m_5m", intraday, "CLOSED_OHLC",
+                "read_9333_xau_closed_ohlc_5m", intraday, "CLOSED_OHLC",
                 ("open", "high", "low", "close", "source_bar_time", "confirmed"),
-                ("1m", "5m"), closed_bars_only=True,
+                ("5m",), closed_bars_only=True,
             ),
             StructuredReadRequest(
-                "read_9333_xau_macd_1m_5m", intraday, "STANDARD_MACD",
+                "read_9333_xau_macd_5m", intraday, "STANDARD_MACD",
                 ("macd", "signal", "histogram", "previous_histogram", "source_bar_time", "confirmed"),
-                ("1m", "5m"), closed_bars_only=True,
+                ("5m",), closed_bars_only=True,
                 indicator_parameters=STANDARD_MACD,
             ),
             StructuredReadRequest(
@@ -442,7 +447,7 @@ class Port9333RequestAdapter:
                     "atr", "atr_multiple", "path_efficiency", "body_quality",
                     "opposing_bars", "source_bar_time", "confirmed",
                 ),
-                ("1m", "5m"), closed_bars_only=True,
+                ("5m",), closed_bars_only=True,
             ),
             StructuredReadRequest(
                 "read_9333_xau_snr_hpa_context", intraday, "SNR_HPA_CONTEXT",
@@ -450,19 +455,14 @@ class Port9333RequestAdapter:
                     "levels", "structure", "momentum", "source_bar_time",
                     "confirmed",
                 ),
-                ("1m", "5m"), closed_bars_only=True,
+                ("5m",), closed_bars_only=True,
             ),
         ]
         if level in FULL_EVIDENCE_CAPTURE_LEVELS:
-            htf = _require_source(sources, "xau_htf", 9333)
+            _require_source(sources, "xau_htf", 9333)
             dxy = _require_source(sources, "dxy_15m", 9333)
             renko = _require_source(sources, "renko", 9333)
             requests.extend((
-                StructuredReadRequest(
-                    "read_9333_xau_htf", htf, "CLOSED_OHLC_AND_STRUCTURE",
-                    ("open", "high", "low", "close", "structure", "source_bar_time", "confirmed"),
-                    ("4H", "D", "W"), closed_bars_only=True,
-                ),
                 StructuredReadRequest(
                     "read_9333_dxy_15m", dxy, "DXY_CONTEXT",
                     ("current", "close", "change", "sma20", "distance", "source_bar_time", "confirmed"),

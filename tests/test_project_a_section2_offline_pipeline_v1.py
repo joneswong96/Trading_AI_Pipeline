@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from project_a.evidence_bundle import RequestLevel, SourceIdentity
+from project_a.evidence_bundle import RequestLevel, SOURCE_AUTHORITY, SourceIdentity
 from project_a.make_sense import StoryState
 from project_a.numeric_state import (
     EXPANSION_EVENT_SCHEMA,
@@ -19,7 +19,10 @@ from project_a.section2_pipeline import OfflineSection2Pipeline, Section2Pipelin
 
 def _sources():
     def item(role, port, layout, frames, symbol="XAUUSD", feed="ICMARKETS"):
-        return SourceIdentity(role, port, layout, f"target-{role}", symbol, feed, frames)
+        return SourceIdentity(
+            role, port, layout, f"target-{role}", symbol, feed, frames,
+            chart_types=SOURCE_AUTHORITY[role][5],
+        )
 
     return {
         "xau_intraday": item("xau_intraday", 9333, "cpPWuLlN", ("1m", "5m")),
@@ -153,7 +156,10 @@ def test_liq_touch_composes_the_complete_offline_request_chain():
     assert result.evidence_bundle_request.trigger.level is RequestLevel.LIQ_RESEARCH_CAPTURE
     assert result.evidence_bundle_request.trigger.full_capture_requested is True
     assert {request.source.layout_id for request in result.evidence_bundle_request.structured_reads} >= {
-        "cpPWuLlN", "avpCVaw2", "pNqcbOmu", "n9qjfufV", "ocVwlz2C", "YclFo8Ax",
+        "cpPWuLlN", "avpCVaw2", "n9qjfufV", "ocVwlz2C", "YclFo8Ax",
+    }
+    assert "pNqcbOmu" in {
+        request.source.layout_id for request in result.evidence_bundle_request.screenshot_requests
     }
     assert {request.read_kind for request in result.evidence_bundle_request.structured_reads} >= {
         "CURRENT_FORMING_PRICE", "EXPANSION_CONTEXT", "SNR_HPA_CONTEXT",
