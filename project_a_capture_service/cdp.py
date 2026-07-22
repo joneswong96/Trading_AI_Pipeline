@@ -191,6 +191,8 @@ class ProductionCdpBackend:
         if os.name != "nt":
             raise CaptureFailure("CDP_ENDPOINT_IDENTITY_MISMATCH", "production listener attestation is Windows-only")
         script = (
+            "Import-Module -Name 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\"
+            "Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1';"
             "$r=@(Get-NetTCPConnection -State Listen -LocalPort 9333 -ErrorAction SilentlyContinue);"
             "if($r.Count -gt 0){$p=Get-CimInstance Win32_Process -Filter ('ProcessId='+$r[0].OwningProcess);"
             "$s=Get-AuthenticodeSignature -LiteralPath $p.ExecutablePath;"
