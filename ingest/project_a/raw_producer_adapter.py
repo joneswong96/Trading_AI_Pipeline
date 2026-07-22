@@ -25,6 +25,8 @@ from project_a.numeric_state import (
 )
 from project_a.evidence_bundle import approved_source_identities
 from project_a.section2_pipeline import OfflineSection2Pipeline, Section2PipelineError
+from project_a_analysis.schema import ensure_schema as ensure_analysis_schema
+from project_a_analysis.store import enqueue_analysis_trigger
 
 from .config import ProjectAConfig
 from .database import ProjectADatabase
@@ -292,6 +294,7 @@ class ProjectARawProducerStore:
                 + LIQ_RESEARCH_QUEUE_SCHEMA
                 + "\nCOMMIT;"
             )
+            ensure_analysis_schema(conn, applied_at)
             conn.execute(
                 "INSERT OR IGNORE INTO project_a_producer_adapter_meta(version,checksum) VALUES (?,?)",
                 (RAW_ADAPTER_SCHEMA_VERSION, RAW_ADAPTER_SCHEMA_CHECKSUM),
@@ -707,6 +710,7 @@ class ProjectARawProducerAdapter:
                     ),
                 )
                 research_wake = self._is_active_liq_touch(event, observed_at)
+                analysis_evidence_request = None
                 evidence_key = self._liq_research_evidence_key(event) if research_wake else None
                 touch_fingerprint = self._liq_touch_fingerprint(event) if research_wake else None
                 same_evidence_suppressed = False
@@ -750,6 +754,7 @@ class ProjectARawProducerAdapter:
                                 )
                 if research_wake:
                     request_document = pipeline.evidence_bundle_request.document()
+                    analysis_evidence_request = request_document
                     request_bytes = canonical_json_bytes(request_document)
                     request_sha256 = hashlib.sha256(request_bytes).hexdigest()
                     conn.execute(
@@ -784,6 +789,13 @@ class ProjectARawProducerAdapter:
                         "canonical_event_id,status,recorded_at"
                         ") VALUES (?,?,?)",
                         (event.canonical_event_id, "PENDING", received_at),
+                    )
+                if research_wake or event.event == "RENKO_E1":
+                    enqueue_analysis_trigger(
+                        conn,
+                        canonical_event=canonical_document,
+                        recorded_at=observed_at,
+                        evidence_request=analysis_evidence_request,
                     )
                 return RawProducerResult(
                     200, True, same_evidence_suppressed,

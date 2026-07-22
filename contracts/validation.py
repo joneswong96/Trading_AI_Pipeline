@@ -15,6 +15,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 from .registry import (
     AI_VERDICT_SCHEMA_V1,
+    PROJECT_A_GRADE_SCHEMA_V1,
     ANALYSIS_REQUEST_SCHEMA_V1,
     EVENT_SCHEMA_V0_2,
     PROJECT_A_CANONICAL_EVENT_V1,
@@ -184,6 +185,8 @@ def validate_contract(contract: str, document: dict) -> dict:
         _validate_request(document)
     elif contract == AI_VERDICT_SCHEMA_V1:
         _validate_verdict(document)
+    elif contract == PROJECT_A_GRADE_SCHEMA_V1:
+        pass
     elif contract == THESIS_SCHEMA_V1:
         _validate_thesis(document)
     else:

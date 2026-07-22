@@ -2,6 +2,7 @@
 
 from .registry import (
     AI_VERDICT_SCHEMA_V1,
+    PROJECT_A_GRADE_SCHEMA_V1,
     ANALYSIS_REQUEST_SCHEMA_V1,
     EVENT_SCHEMA_V0_2,
     PROJECT_A_CANONICAL_EVENT_V1,
@@ -35,6 +36,7 @@ from .validation import ContractError, canonical_json, canonical_json_bytes, val
 
 __all__ = [
     "AI_VERDICT_SCHEMA_V1",
+    "PROJECT_A_GRADE_SCHEMA_V1",
     "ANALYSIS_REQUEST_SCHEMA_V1",
     "CanonicalEventV1Document",
     "CanonicalVerificationResultV1",

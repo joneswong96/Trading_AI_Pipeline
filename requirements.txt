@@ -17,6 +17,8 @@ apscheduler
 fastapi
 uvicorn
 requests            # Telegram sendMessage（Phase 1 已 wire）；Notion 真 send 仍 M1
+openai>=1.68,<3      # Project A Responses API; imported only after the one-request SHADOW gate
+mcp>=1.9,<2          # Loopback MCP structured-read/screenshot client owned by the analysis worker
 
 # 以下逐步先裝（裝嗰陣解返 comment，避免拉一堆未用嘅嘢）：
 # anthropic         # Step 3 真・inference wire 嗰陣先裝（Q8=A: Sonnet）

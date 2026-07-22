@@ -11,6 +11,7 @@ their writers are disabled. Changes require the process in `CHANGE_REQUEST.md`.
 | `PROJECT_A_CANONICAL_EVENT_V1` | `1.0` | `schemas/project_a_canonical_event_v1.json` | **Writer disabled** | Session 0 dual reader/replay only |
 | `ANALYSIS_REQUEST_SCHEMA_V1` | `1.0` | `schemas/analysis_request_schema_v1.json` | Session 3 | Session 4, replay |
 | `AI_VERDICT_SCHEMA_V1` | `1.0` | `schemas/ai_verdict_schema_v1.json` | Session 4 | Session 5, replay |
+| `PROJECT_A_GRADE_SCHEMA_V1` | `1.0` | `schemas/project_a_grade_schema_v1.json` | Analysis Worker | Story Memory, local audit |
 | `THESIS_SCHEMA_V1` | `1.0` | `schemas/thesis_schema_v1.json` | Session 5 compiler | Session 5 adapters, Session 0 acceptance |
 
 ## Common contract rules

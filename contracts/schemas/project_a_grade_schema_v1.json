@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:project-a:PROJECT_A_GRADE_SCHEMA_V1",
+  "title": "PROJECT_A_GRADE_SCHEMA_V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "story_id", "analysis_id", "parent_analysis_id", "stage", "e1_count",
+    "expected_direction", "grade", "probability_band", "recommendation",
+    "supporting_evidence", "opposing_evidence", "material_changes",
+    "inherited_thesis", "invalidation", "confidence", "evidence_freshness", "rationale"
+  ],
+  "properties": {
+    "story_id": {"type": "string", "pattern": "^story_[a-f0-9]{32}$"},
+    "analysis_id": {"type": "string", "pattern": "^analysis_[a-f0-9]{32}$"},
+    "parent_analysis_id": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^analysis_[a-f0-9]{32}$"}
+      ]
+    },
+    "stage": {"type": "string", "enum": ["LIQ_BASELINE", "E1_DELTA"]},
+    "e1_count": {"type": "integer", "minimum": 0},
+    "expected_direction": {"type": "string", "enum": ["LONG", "SHORT", "NEUTRAL"]},
+    "grade": {"type": "string", "enum": ["A+", "A", "B+", "B", "C", "UNGRADABLE"]},
+    "probability_band": {"type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "VERY_HIGH"]},
+    "recommendation": {"type": "string", "enum": ["IN", "OUT", "WAIT"]},
+    "supporting_evidence": {
+      "type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 240}
+    },
+    "opposing_evidence": {
+      "type": "array", "maxItems": 12, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 240}
+    },
+    "material_changes": {
+      "type": "array", "maxItems": 12, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 240}
+    },
+    "inherited_thesis": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "invalidation": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "evidence_freshness": {"type": "string", "enum": ["FRESH", "MIXED", "STALE"]},
+    "rationale": {"type": "string", "minLength": 1, "maxLength": 2400}
+  }
+}
