@@ -153,6 +153,13 @@ def request(stage="LIQ_BASELINE"):
         analysis_id="analysis_" + "c" * 32, stage=stage,
         capture_scope="FULL_BASELINE" if stage == "LIQ_BASELINE" else "BOUNDED_DELTA",
         canonical_event_id="evt_project_a", event_timestamp="2026-07-22T02:59:00.000Z",
+        liquidity_event_facts={
+            "producer_id": "LIQ_V2", "producer_revision": "9", "event": "LIQ_TOUCH",
+            "level_id": "liq1_" + "1" * 64, "level_version": "1", "side": "ASK",
+            "level_price": "3401.00", "touch_count": 1,
+            "source_bar_time": "2026-07-22T02:59:00.000Z",
+            "symbol": "XAUUSD", "feed": "ICMARKETS", "anchor_timeframe": "5m",
+        },
         expected_account="Jonesy_Wong", expected_symbol="ICMARKETS:XAUUSD",
         required_capture_plan_version=CAPTURE_PLAN_VERSION,
         capture_plan_sha256=PLAN_SHA256S[stage],
@@ -213,6 +220,10 @@ def test_frozen_plans_and_schema_are_exact():
     assert CAPTURE_INPUT_SCHEMA["additionalProperties"] is False
     with pytest.raises(ValidationError):
         CaptureToolRequest.model_validate({**request().model_dump(), "url": "https://example.com"})
+    invalid_touch = request().model_dump(mode="json")
+    invalid_touch["liquidity_event_facts"]["touch_count"] = True
+    with pytest.raises(ValidationError):
+        CaptureToolRequest.model_validate(invalid_touch)
 
 
 def test_service_config_refuses_non_loopback_or_reserved_port(monkeypatch, tmp_path):
@@ -268,6 +279,7 @@ def test_live_service_result_crosses_worker_and_store_validation(live_service, t
             "structured_reads": list(plan.structured_reads),
             "screenshot_requests": list(plan.screenshots),
         },
+        "liquidity_event_facts": request().liquidity_event_facts.model_dump(mode="json"),
     }))
     job = {
         "job_id": "job_" + "a" * 32,
@@ -289,6 +301,55 @@ def test_live_service_result_crosses_worker_and_store_validation(live_service, t
     assert client._attribute(raw_result, "isError", "is_error", default=False) is False, raw_result
     evidence = client.capture(job)
     _validate_capture_results(evidence, capture_request, NOW)
+
+
+@pytest.mark.parametrize("field", [
+    "request_id", "story_id", "analysis_id", "event_timestamp", "script_id", "script_version",
+])
+def test_worker_rejects_mcp_result_identity_mutation(
+    live_service, tmp_path, field,
+):
+    plan = plan_for_stage("LIQ_BASELINE")
+    capture_request = json.loads(canonical_json({
+        "scope": "FULL_BASELINE",
+        "mode": "MCP_STRUCTURED_READS_AND_SCREENSHOTS",
+        "accepted_request": {
+            "structured_reads": list(plan.structured_reads),
+            "screenshot_requests": list(plan.screenshots),
+        },
+        "liquidity_event_facts": request().liquidity_event_facts.model_dump(mode="json"),
+    }))
+    job = {
+        "job_id": "job_" + "e" * 32,
+        "story_id": "story_" + "f" * 32,
+        "analysis_id": "analysis_" + "1" * 32,
+        "stage": "LIQ_BASELINE",
+        "capture_scope": "FULL_BASELINE",
+        "canonical_event_id": "evt_project_a_identity",
+        "request_context_json": canonical_json({
+            "capture": capture_request,
+            "canonical_event": {"source_bar_time": "2026-07-22T02:59:00.000Z"},
+        }),
+    }
+
+    class MutatingMcp(McpToolCapture):
+        async def _call(self, job):
+            result = await super()._call(job)
+            structured = self._attribute(
+                result, "structuredContent", "structured_content"
+            )
+            structured[field] = "mismatched"
+            return result
+
+    client = MutatingMcp(
+        server_url=live_service.mcp_url,
+        tool_name="project_a_capture_snapshot",
+        token=TOKEN,
+        artifact_root=tmp_path / "worker-artifacts",
+    )
+    client._attest_server_listener = lambda: None
+    with pytest.raises(ValueError, match="requested capture binding"):
+        client.capture(job)
 
 
 def test_cdp_method_allowlist_has_no_mutation_capability():
@@ -388,6 +449,62 @@ def test_current_quote_persists_exact_bid_ask_spread_and_provenance(tmp_path):
     assert fields["quote_provider_id"] == "icmarkets"
     assert fields["quote_source_symbol"] == "ICMARKETS:XAUUSD"
     assert fields["quote_source_feed"] == "ICMARKETS"
+    assert fields["atr"] == 1.0
+    assert fields["atr_period"] == 14
+    assert fields["atr_method"] == "SMA_TRUE_RANGE_14_CONFIRMED_5M_BARS"
+    assert fields["normalized_spread"] == pytest.approx(
+        (fields["ask"] - fields["bid"]) / fields["atr"]
+    )
+    assert fields["liquidity_level_id"] == "liq1_" + "1" * 64
+    assert fields["liquidity_level_price"] == 3401.0
+    assert fields["liquidity_touch_count"] == 1
+    assert fields["distance_reference_price"] == fields["ask"]
+    assert fields["distance_to_level"] == pytest.approx(3401.0 - fields["ask"])
+    assert fields["distance_atr"] == pytest.approx(fields["distance_to_level"])
+
+
+def test_current_liq_and_atr_do_not_require_indicator_plot_series(tmp_path):
+    backend = FakeBackend()
+    chart_5m = backend.states["xau_intraday"]["charts"][1]
+    chart_5m["studies"] = [
+        item for item in chart_5m["studies"]
+        if "Liquidity" not in item["description"] and "Average True Range" not in item["description"]
+    ]
+    capture, _ = engine(tmp_path, backend)
+    result = capture.capture(request())
+    current = next(
+        item for item in result.structured["structured_evidence"]["structured_read_results"]
+        if item["request_id"] == "read_9333_xau_current"
+    )
+    assert current["fields"]["liquidity_level_id"] == "liq1_" + "1" * 64
+    assert current["fields"]["atr"] == 1.0
+
+
+def test_bid_level_distance_uses_validated_bid_quote(tmp_path):
+    capture_request = request()
+    bid_facts = capture_request.liquidity_event_facts.model_copy(update={
+        "side": "BID", "level_price": "3399.00",
+    })
+    capture_request = capture_request.model_copy(update={"liquidity_event_facts": bid_facts})
+    capture, _ = engine(tmp_path)
+    result = capture.capture(capture_request)
+    current = next(
+        item for item in result.structured["structured_evidence"]["structured_read_results"]
+        if item["request_id"] == "read_9333_xau_current"
+    )
+    fields = current["fields"]
+    assert fields["distance_reference_price"] == fields["bid"]
+    assert fields["distance_to_level"] == pytest.approx(fields["bid"] - 3399.0)
+
+
+def test_atr14_rejects_incomplete_confirmed_bar_inputs(tmp_path):
+    backend = FakeBackend()
+    backend.states["xau_intraday"]["charts"][1]["recent_closed_bars"] = (
+        backend.states["xau_intraday"]["charts"][1]["recent_closed_bars"][:14]
+    )
+    capture, _ = engine(tmp_path, backend)
+    with pytest.raises(CaptureFailure, match="ATR14 requires fifteen confirmed 5m bars"):
+        capture.capture(request())
 
 
 @pytest.mark.parametrize("field,value", [
@@ -488,6 +605,22 @@ def test_preflight_records_quote_fields_and_fixed_source_hash(tmp_path):
         "226390af9f21c728b19a73fabcdb7edb9cdf0e5b3d0d24bf223bb5e29297aadd"
     )
     assert backend.screenshot_calls == 5
+
+
+@pytest.mark.parametrize("seconds,detail", [
+    (-3600, "ATR14 source is stale"),
+    (600, "ATR14 source is future-dated"),
+])
+def test_preflight_rejects_stale_or_future_atr_bar_inputs(tmp_path, seconds, detail):
+    backend = FakeBackend()
+    chart_5m = backend.states["xau_intraday"]["charts"][1]
+    chart_5m["closed_bar"]["time"] += seconds
+    for bar in chart_5m["recent_closed_bars"]:
+        bar["time"] += seconds
+    capture, _ = engine(tmp_path, backend)
+    with pytest.raises(CaptureFailure, match=detail):
+        capture.preflight()
+    assert backend.screenshot_calls == 0
 
 
 def test_baseline_capture_exact_manifest_audit_and_idempotent_replay(tmp_path):

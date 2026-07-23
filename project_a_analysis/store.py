@@ -160,6 +160,18 @@ def _e1_delta_evidence_request(conn: sqlite3.Connection, story_id: str) -> dict[
     }
 
 
+def _liquidity_event_facts(event: Mapping[str, Any]) -> dict[str, Any]:
+    fields = (
+        "producer_id", "producer_revision", "event", "level_id", "level_version",
+        "side", "level_price", "touch_count", "source_bar_time", "symbol", "feed",
+        "anchor_timeframe",
+    )
+    facts = {field: event.get(field) for field in fields}
+    if any(value is None for value in facts.values()):
+        raise RuntimeError("LIQ event cannot supply the immutable capture facts")
+    return facts
+
+
 def enqueue_analysis_trigger(
     conn: sqlite3.Connection,
     *,
@@ -201,6 +213,16 @@ def enqueue_analysis_trigger(
         parent_analysis_id = latest["analysis_id"] if latest else None
         context = _bounded_story_context(conn, story_id)
         effective_evidence_request = _e1_delta_evidence_request(conn, story_id)
+        baseline_row = conn.execute(
+            "SELECT request_context_json FROM project_a_analysis_jobs WHERE story_id=? "
+            "AND stage='LIQ_BASELINE' ORDER BY requested_at LIMIT 1",
+            (story_id,),
+        ).fetchone()
+        if baseline_row is None:
+            raise RuntimeError("E1 requires immutable LIQ capture facts")
+        liquidity_event_facts = json.loads(
+            baseline_row["request_context_json"]
+        )["capture"]["liquidity_event_facts"]
     else:
         story_id = _digest("story_", event_id, at)
         conn.execute(
@@ -220,6 +242,7 @@ def enqueue_analysis_trigger(
             "big_picture": {"symbol": "XAUUSD", "feed": "ICMARKETS", "status": "TO_BE_CAPTURED"},
         }
         effective_evidence_request = dict(evidence_request or {})
+        liquidity_event_facts = _liquidity_event_facts(canonical_event)
         _audit(
             conn, at=at, action="STORY_CREATED", story_id=story_id,
             document={"liquidity_event_id": event_id, "e1_count": 0},
@@ -240,6 +263,7 @@ def enqueue_analysis_trigger(
             "scope": capture_scope,
             "mode": "MCP_STRUCTURED_READS_AND_SCREENSHOTS",
             "accepted_request": effective_evidence_request,
+            "liquidity_event_facts": liquidity_event_facts,
         },
         "safety": {
             "symbol": "XAUUSD", "mode": "SHADOW", "execution_environment": "MT5_DEMO",
@@ -425,6 +449,9 @@ def _validate_capture_results(evidence: CapturedEvidence, capture_request: dict,
         if "feed" in request.get("fields", []) and fields.get("feed") != request["source"]["feed"]:
             raise ValueError(f"structured read {request_id} feed mismatch")
         if request.get("read_kind") == "CURRENT_FORMING_PRICE":
+            event_facts = capture_request.get("liquidity_event_facts")
+            if not isinstance(event_facts, dict):
+                raise ValueError(f"structured read {request_id} omitted immutable LIQ facts")
             expected_quote_identity = {
                 "quote_source": "TradingViewApi.mainSeries.quotes",
                 "quote_provider_id": "icmarkets",
@@ -455,10 +482,91 @@ def _validate_capture_results(evidence: CapturedEvidence, capture_request: dict,
                 raise ValueError(f"structured read {request_id} quote ask is below bid")
             if quote_values["spread"] != quote_values["ask"] - quote_values["bid"]:
                 raise ValueError(f"structured read {request_id} quote spread is not exact")
+            atr = fields.get("atr")
+            normalized_spread = fields.get("normalized_spread")
+            if (
+                not isinstance(atr, (int, float))
+                or isinstance(atr, bool)
+                or not math.isfinite(atr)
+                or atr <= 0
+                or fields.get("atr_period") != 14
+                or fields.get("atr_method") != "SMA_TRUE_RANGE_14_CONFIRMED_5M_BARS"
+                or not isinstance(normalized_spread, (int, float))
+                or isinstance(normalized_spread, bool)
+                or not math.isfinite(normalized_spread)
+                or normalized_spread != quote_values["spread"] / atr
+            ):
+                raise ValueError(f"structured read {request_id} ATR or normalized spread is invalid")
             quote_at = _parse_capture_time(fields.get("source_time"), f"{request_id}.source_time")
             quote_age = captured_at - quote_at
             if not timedelta(seconds=-5) <= quote_age <= timedelta(seconds=240):
                 raise ValueError(f"structured read {request_id} quote timestamp is stale")
+            atr_at = _parse_capture_time(
+                fields.get("atr_source_time"), f"{request_id}.atr_source_time"
+            )
+            if not timedelta(seconds=-5) <= captured_at - atr_at <= timedelta(minutes=15):
+                raise ValueError(f"structured read {request_id} ATR source is stale")
+            expected_liquidity = {
+                "liquidity_level_id": event_facts.get("level_id"),
+                "liquidity_level_version": event_facts.get("level_version"),
+                "liquidity_level_side": event_facts.get("side"),
+                "liquidity_event_timestamp": event_facts.get("source_bar_time"),
+                "liquidity_producer_id": event_facts.get("producer_id"),
+                "liquidity_producer_revision": event_facts.get("producer_revision"),
+                "distance_reference_side": event_facts.get("side"),
+            }
+            if any(fields.get(key) != value for key, value in expected_liquidity.items()):
+                raise ValueError(f"structured read {request_id} LIQ event facts mismatch")
+            expected_touch = event_facts.get("touch_count")
+            actual_touch = fields.get("liquidity_touch_count")
+            if (
+                not isinstance(expected_touch, int)
+                or isinstance(expected_touch, bool)
+                or expected_touch < 1
+                or not isinstance(actual_touch, int)
+                or isinstance(actual_touch, bool)
+                or actual_touch != expected_touch
+            ):
+                raise ValueError(f"structured read {request_id} LIQ touch count is invalid")
+            try:
+                expected_level_price = float(event_facts["level_price"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(f"structured read {request_id} LIQ price is invalid") from exc
+            actual_level_price = fields.get("liquidity_level_price")
+            if (
+                not isinstance(actual_level_price, (int, float))
+                or isinstance(actual_level_price, bool)
+                or not math.isfinite(actual_level_price)
+                or actual_level_price != expected_level_price
+            ):
+                raise ValueError(f"structured read {request_id} LIQ price mismatch")
+            side = event_facts.get("side")
+            if side not in {"ASK", "BID"}:
+                raise ValueError(f"structured read {request_id} LIQ side is invalid")
+            reference = quote_values["ask"] if side == "ASK" else quote_values["bid"]
+            expected_distance = (
+                expected_level_price - reference
+                if side == "ASK"
+                else reference - expected_level_price
+            )
+            distance_values = (
+                fields.get("distance_reference_price"),
+                fields.get("distance_to_level"),
+                fields.get("distance_atr"),
+            )
+            if (
+                any(
+                    not isinstance(value, (int, float))
+                    or isinstance(value, bool)
+                    or not math.isfinite(value)
+                    for value in distance_values
+                )
+                or
+                fields.get("distance_reference_price") != reference
+                or fields.get("distance_to_level") != expected_distance
+                or fields.get("distance_atr") != expected_distance / atr
+            ):
+                raise ValueError(f"structured read {request_id} LIQ distance is invalid")
         if request.get("closed_bars_only") and result.get("closed_bars_only_verified") is not True:
             raise ValueError(f"structured read {request_id} did not attest closed bars")
     screenshot_requests = capture_request.get("accepted_request", {}).get("screenshot_requests", [])

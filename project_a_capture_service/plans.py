@@ -55,8 +55,8 @@ E1_READ_IDS = frozenset({
 })
 E1_SCREENSHOT_IDS = frozenset({"screenshot_9333_xau_intraday", "screenshot_9333_renko"})
 PLAN_SHA256S = {
-    "LIQ_BASELINE": "5981e2b1e207d28d7e2f1eac358fd4108522ccb54613883f0fc0dcfcf1ef988e",
-    "E1_DELTA": "4685227a76be77bf3d603154b48baf377ee5374be225021fb689685f394239ae",
+    "LIQ_BASELINE": "57dbff7d8685faf736a628a657610df722bd9a7268eddabcc107555d70fbefb9",
+    "E1_DELTA": "a31d3ca83d29a681d2962a53ebd132f0f44d8095898b0883ecb823335a0eee63",
 }
 
 

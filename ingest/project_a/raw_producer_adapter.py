@@ -540,8 +540,6 @@ class ProjectARawProducerAdapter:
             and data.get("freshness_status") == "FRESH"
             and data.get("level_freshness_status") == "FRESH"
             and data.get("market_price_freshness_status") == "FRESH"
-            and data.get("atr_freshness_status") == "FRESH"
-            and data.get("atr_confirmed") is True
             and int(data.get("touch_count", 0)) >= 1
             and timedelta(0) <= age <= timedelta(minutes=15)
         )

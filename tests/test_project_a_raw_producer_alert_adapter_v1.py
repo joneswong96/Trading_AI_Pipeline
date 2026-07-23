@@ -133,6 +133,17 @@ def test_unknown_and_legacy_inputs_preserve_the_legacy_route(tmp_path, monkeypat
     assert calls == [legacy, unknown]
 
 
+def test_liq_touch_without_payload_atr_requests_capture_for_local_bar_atr(tmp_path):
+    event = deepcopy(_events()[1])
+    event.pop("confirmed_5m_atr14", None)
+    event.pop("atr_confirmed", None)
+    event.pop("atr_freshness_status", None)
+    result = _adapter(tmp_path / "no-payload-atr.db").receive(_raw(event))
+    assert result.accepted is True
+    assert result.research_wake is True
+    assert result.evidence_acquisition_requested is True
+
+
 @pytest.mark.parametrize(
     ("change", "code"),
     [

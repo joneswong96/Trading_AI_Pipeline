@@ -92,15 +92,41 @@ class CompleteCapture:
             if request["read_kind"] == "CURRENT_FORMING_PRICE":
                 bid = 3399.95
                 ask = 3400.05
+                facts = capture_request["liquidity_event_facts"]
+                atr = 1.0
+                reference = ask if facts["side"] == "ASK" else bid
+                level_price = float(facts["level_price"])
+                distance = (
+                    level_price - reference
+                    if facts["side"] == "ASK"
+                    else reference - level_price
+                )
                 fields.update({
                     "market_price": 3400.0,
                     "bid": bid,
                     "ask": ask,
                     "spread": ask - bid,
+                    "normalized_spread": (ask - bid) / atr,
                     "quote_source": "TradingViewApi.mainSeries.quotes",
                     "quote_provider_id": "icmarkets",
                     "quote_source_symbol": "ICMARKETS:XAUUSD",
                     "quote_source_feed": "ICMARKETS",
+                    "atr": atr,
+                    "atr_period": 14,
+                    "atr_method": "SMA_TRUE_RANGE_14_CONFIRMED_5M_BARS",
+                    "atr_source_time": "2026-07-20T01:02:00.000Z",
+                    "liquidity_level_id": facts["level_id"],
+                    "liquidity_level_version": facts["level_version"],
+                    "liquidity_level_side": facts["side"],
+                    "liquidity_level_price": level_price,
+                    "liquidity_touch_count": facts["touch_count"],
+                    "liquidity_event_timestamp": facts["source_bar_time"],
+                    "liquidity_producer_id": facts["producer_id"],
+                    "liquidity_producer_revision": facts["producer_revision"],
+                    "distance_reference_price": reference,
+                    "distance_reference_side": facts["side"],
+                    "distance_to_level": distance,
+                    "distance_atr": distance / atr,
                 })
             if "confirmed" in fields:
                 fields["confirmed"] = True
@@ -283,6 +309,12 @@ def test_e1_delta_loads_previous_story_context_and_every_e1_is_analysed(tmp_path
     }
     assert len(second["image_manifest"]) == 2
     assert len(second["analyst_context"]["prior_analysis_summaries"]) == 2
+    liq_facts = [
+        json.loads(job["request_context_json"])["capture"]["liquidity_event_facts"]
+        for job in capture.calls
+    ]
+    assert len(liq_facts) == 3
+    assert liq_facts[1] == liq_facts[0] == liq_facts[2]
     assert store.active_story()["latest_materialised_state"]["e1_count"] == 2
 
 
@@ -625,7 +657,8 @@ def test_forged_mcp_completeness_cannot_reach_captured_state(tmp_path, mutation)
 
 @pytest.mark.parametrize("mutation", [
     "source", "provider", "symbol", "feed", "zero_bid", "crossed", "spread", "stale",
-    "future", "coupled_stale",
+    "future", "coupled_stale", "atr", "normalized_spread", "level_id", "touch_count",
+    "distance", "atr_time", "bool_touch_count",
 ])
 def test_forged_current_quote_cannot_cross_consumer_boundary(tmp_path, mutation):
     path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
@@ -653,6 +686,20 @@ def test_forged_current_quote_cannot_cross_consumer_boundary(tmp_path, mutation)
         fields["spread"] = fields["ask"] - fields["bid"]
     elif mutation == "spread":
         fields["spread"] = 0.5
+    elif mutation == "atr":
+        fields["atr"] = 0.0
+    elif mutation == "normalized_spread":
+        fields["normalized_spread"] = 99.0
+    elif mutation == "level_id":
+        fields["liquidity_level_id"] = "liq1_" + "0" * 64
+    elif mutation == "touch_count":
+        fields["liquidity_touch_count"] += 1
+    elif mutation == "bool_touch_count":
+        fields["liquidity_touch_count"] = True
+    elif mutation == "distance":
+        fields["distance_to_level"] += 1.0
+    elif mutation == "atr_time":
+        fields["atr_source_time"] = "2026-07-20T00:30:00.000Z"
     elif mutation == "stale":
         fields["source_time"] = "2026-07-20T00:57:00.000Z"
     elif mutation == "future":
@@ -671,6 +718,28 @@ def test_forged_current_quote_cannot_cross_consumer_boundary(tmp_path, mutation)
     assert len(store.inspect_jobs("PENDING_CAPTURE")) == 1 and provider.calls == []
 
 
+def test_boolean_cannot_masquerade_as_exact_zero_liq_distance(tmp_path):
+    path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
+    event = liq()
+    event["level_price"] = "3400.05"
+    ingest.receive(raw(event))
+    pending = claim_capture(store, clock)
+    good = capture.capture(pending)
+    structured = deepcopy(good.structured_evidence)
+    fields = next(
+        item["fields"] for item in structured["structured_read_results"]
+        if item["read_kind"] == "CURRENT_FORMING_PRICE"
+    )
+    assert fields["distance_to_level"] == 0.0
+    fields["distance_to_level"] = False
+    fields["distance_atr"] = False
+    with pytest.raises(ValueError):
+        record_claimed(
+            store, pending, CapturedEvidence(good.manifest, structured, good.images), clock
+        )
+    assert provider.calls == []
+
+
 def test_invalid_mcp_image_does_not_poison_corrected_retry(tmp_path):
     path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
     ingest.receive(raw(liq()))
@@ -684,9 +753,17 @@ def test_invalid_mcp_image_does_not_poison_corrected_retry(tmp_path):
                 "screenshots_complete", "capture_request_sha256", "captured_at",
             )
         },
+        "request_id": pending["job_id"],
+        "story_id": pending["story_id"],
+        "analysis_id": pending["analysis_id"],
+        "event_timestamp": json.loads(pending["request_context_json"])[
+            "canonical_event"
+        ]["source_bar_time"],
+        "script_id": "tradingview_read_state",
+        "script_version": "1.1",
         "structured_evidence": good.structured_evidence,
         "image_evidence_ids": [item["evidence_id"] for item in good.images],
-        "account": "Jonesy_Wong", "capture_plan_version": "project_a.capture_plan/1.2",
+        "account": "Jonesy_Wong", "capture_plan_version": "project_a.capture_plan/1.3",
         "capture_plan_sha256": hashlib.sha256(canonical_json({
             "structured_reads": json.loads(pending["request_context_json"])["capture"]["accepted_request"]["structured_reads"],
             "screenshot_requests": json.loads(pending["request_context_json"])["capture"]["accepted_request"]["screenshot_requests"],

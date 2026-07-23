@@ -106,6 +106,16 @@ def test_liq_touch_starts_research_and_compiles_complete_capture(sources):
     assert all(item.closed_bars_only is True for item in macd)
 
 
+def test_liq_touch_payload_atr_is_not_required_for_capture_trigger(sources):
+    request = build(
+        sources,
+        "LIQ_TOUCH",
+        trigger_changes={"atr_freshness_status": "MISSING", "atr_confirmed": False},
+    )
+    assert request.trigger.level is RequestLevel.LIQ_RESEARCH_CAPTURE
+    assert request.trigger.full_capture_requested is True
+
+
 @pytest.mark.parametrize(
     "change",
     [

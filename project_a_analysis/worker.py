@@ -25,7 +25,7 @@ import httpx
 
 from capture.base import ROOT
 from contracts import canonical_json
-from project_a_capture_service.cdp import SCRIPT_SHA256
+from project_a_capture_service.cdp import SCRIPT_ID, SCRIPT_SHA256, SCRIPT_VERSION
 from project_a_capture_service.schemas import (
     CAPTURE_INPUT_SCHEMA, CAPTURE_OUTPUT_SCHEMA, CAPTURE_PLAN_VERSION, CDP_ENDPOINT, TOOL_NAME,
 )
@@ -115,6 +115,7 @@ class McpToolCapture:
             "capture_scope": job["capture_scope"],
             "canonical_event_id": job["canonical_event_id"],
             "event_timestamp": canonical_event["source_bar_time"],
+            "liquidity_event_facts": capture_request["liquidity_event_facts"],
             "expected_account": "Jonesy_Wong", "expected_symbol": "ICMARKETS:XAUUSD",
             "required_capture_plan_version": CAPTURE_PLAN_VERSION,
             "capture_plan_sha256": capture_plan_sha256,
@@ -167,7 +168,17 @@ class McpToolCapture:
             raise ValueError("MCP capture tool omitted structuredContent")
         capture_request = json.loads(job["request_context_json"])["capture"]
         required = {
-            "status": "COMPLETED", "job_id": job["job_id"], "stage": job["stage"],
+            "status": "COMPLETED",
+            "request_id": job["job_id"],
+            "job_id": job["job_id"],
+            "story_id": job["story_id"],
+            "analysis_id": job["analysis_id"],
+            "event_timestamp": json.loads(job["request_context_json"])[
+                "canonical_event"
+            ]["source_bar_time"],
+            "script_id": SCRIPT_ID,
+            "script_version": SCRIPT_VERSION,
+            "stage": job["stage"],
             "capture_scope": job["capture_scope"], "source_event_id": job["canonical_event_id"],
             "symbol": "XAUUSD", "feed": "ICMARKETS", "evidence_freshness": "FRESH",
             "capture_request_sha256": hashlib.sha256(

@@ -133,7 +133,125 @@ def _source_result(request: dict[str, Any], view: ViewSnapshot) -> dict[str, Any
     return source
 
 
-def _fields_for(request: dict[str, Any], view: ViewSnapshot, observed_at: str) -> dict[str, Any]:
+def _confirmed_atr14(chart: dict[str, Any]) -> tuple[float, str]:
+    from .cdp import _epoch
+
+    raw_bars = chart.get("recent_closed_bars")
+    if not isinstance(raw_bars, list) or len(raw_bars) < 15:
+        raise CaptureFailure(
+            "STRUCTURED_READ_INCOMPLETE",
+            "ATR14 requires fifteen confirmed 5m bars",
+        )
+    bars = []
+    for index, raw in enumerate(raw_bars[:15]):
+        if not isinstance(raw, dict):
+            raise CaptureFailure("STRUCTURED_READ_INCOMPLETE", "ATR14 bar is missing")
+        high = _finite(raw.get("high"), f"atr_bar_{index}.high")
+        low = _finite(raw.get("low"), f"atr_bar_{index}.low")
+        close = _finite(raw.get("close"), f"atr_bar_{index}.close")
+        if high < low or not low <= close <= high:
+            raise CaptureFailure(
+                "STRUCTURED_READ_INCOMPLETE",
+                "ATR14 bar OHLC ordering is invalid",
+            )
+        bars.append({
+            "time": _epoch(raw.get("time")),
+            "high": high,
+            "low": low,
+            "close": close,
+        })
+    if any(
+        newer["time"] <= older["time"]
+        for newer, older in zip(bars, bars[1:])
+    ):
+        raise CaptureFailure(
+            "STRUCTURED_READ_INCOMPLETE",
+            "ATR14 bars are not strictly newest-to-oldest",
+        )
+    chronological = list(reversed(bars))
+    true_ranges = []
+    for previous, current in zip(chronological, chronological[1:]):
+        true_ranges.append(max(
+            current["high"] - current["low"],
+            abs(current["high"] - previous["close"]),
+            abs(current["low"] - previous["close"]),
+        ))
+    atr = sum(true_ranges) / 14.0
+    if not math.isfinite(atr) or atr <= 0:
+        raise CaptureFailure("STRUCTURED_READ_INCOMPLETE", "calculated ATR14 is not positive")
+    return atr, utc_z(bars[0]["time"])
+
+
+def _quote_and_atr_fields(
+    view: ViewSnapshot, chart: dict[str, Any], observed_at: str,
+) -> dict[str, Any]:
+    quote = chart.get("quote") if isinstance(chart.get("quote"), dict) else {}
+    if quote.get("source") != QUOTE_SOURCE:
+        raise CaptureFailure("STRUCTURED_READ_INCOMPLETE", "quote source identity is not approved")
+    expected_symbol = f"{view.plan.feed}:{view.plan.symbol}"
+    if str(quote.get("symbol") or "").upper() != expected_symbol:
+        raise CaptureFailure("SYMBOL_MISMATCH", "quote symbol identity does not match the view")
+    if str(quote.get("feed") or "").upper() != view.plan.feed:
+        raise CaptureFailure("SYMBOL_MISMATCH", "quote feed identity does not match the view")
+    if str(quote.get("provider_id") or "").lower() != QUOTE_PROVIDER_ID:
+        raise CaptureFailure("SYMBOL_MISMATCH", "quote provider identity is not approved")
+    from .cdp import _epoch
+    quote_at = _epoch(quote.get("source_time"))
+    if quote_at > view.observed_at + timedelta(seconds=5):
+        raise CaptureFailure("SOURCE_STALE", "quote timestamp is future-dated")
+    if view.observed_at - quote_at > timedelta(seconds=QUOTE_MAX_AGE_SECONDS):
+        raise CaptureFailure("SOURCE_STALE", "quote timestamp is stale")
+    market_price = _finite(quote.get("price"), "quote.price")
+    bid = _finite(quote.get("bid"), "quote.bid")
+    ask = _finite(quote.get("ask"), "quote.ask")
+    if market_price <= 0 or bid <= 0 or ask <= 0:
+        raise CaptureFailure(
+            "STRUCTURED_READ_INCOMPLETE",
+            "quote price, bid, and ask must be positive",
+        )
+    if ask < bid:
+        raise CaptureFailure("STRUCTURED_READ_INCOMPLETE", "quote ask is below bid")
+    atr, atr_source_time = _confirmed_atr14(chart)
+    atr_at = datetime.fromisoformat(atr_source_time[:-1] + "+00:00").astimezone(timezone.utc)
+    closed_at = _epoch((chart.get("closed_bar") or {}).get("time"))
+    if atr_at != closed_at:
+        raise CaptureFailure(
+            "STRUCTURED_READ_INCOMPLETE",
+            "ATR14 newest input is not the confirmed 5m closed bar",
+        )
+    if atr_at > view.observed_at + timedelta(seconds=5):
+        raise CaptureFailure("SOURCE_STALE", "ATR14 source is future-dated")
+    if view.observed_at - atr_at > timedelta(minutes=15):
+        raise CaptureFailure("SOURCE_STALE", "ATR14 source is stale")
+    spread = ask - bid
+    return {
+        "market_price": market_price,
+        "bid": bid,
+        "ask": ask,
+        "spread": spread,
+        "normalized_spread": spread / atr,
+        "symbol": view.plan.symbol,
+        "feed": view.plan.feed,
+        "timeframe": chart["timeframe"],
+        "quote_source": QUOTE_SOURCE,
+        "quote_provider_id": QUOTE_PROVIDER_ID,
+        "quote_source_symbol": expected_symbol,
+        "quote_source_feed": view.plan.feed,
+        "source_time": utc_z(quote_at),
+        "atr": atr,
+        "atr_period": 14,
+        "atr_method": "SMA_TRUE_RANGE_14_CONFIRMED_5M_BARS",
+        "atr_source_time": atr_source_time,
+        "observed_at": observed_at,
+    }
+
+
+def _fields_for(
+    request: dict[str, Any],
+    view: ViewSnapshot,
+    observed_at: str,
+    liquidity_event_facts: dict[str, Any],
+) -> dict[str, Any]:
     kind = request["read_kind"]
     timeframes = list(request["timeframes"])
     charts = {timeframe: _chart(view, timeframe) for timeframe in timeframes}
@@ -146,50 +264,41 @@ def _fields_for(request: dict[str, Any], view: ViewSnapshot, observed_at: str) -
     fields: dict[str, Any]
     if kind == "CURRENT_FORMING_PRICE":
         chart = charts[timeframes[0]]
-        quote = chart.get("quote") if isinstance(chart.get("quote"), dict) else {}
-        if quote.get("source") != QUOTE_SOURCE:
-            raise CaptureFailure("STRUCTURED_READ_INCOMPLETE", "quote source identity is not approved")
-        expected_symbol = f"{view.plan.feed}:{view.plan.symbol}"
-        if str(quote.get("symbol") or "").upper() != expected_symbol:
-            raise CaptureFailure("SYMBOL_MISMATCH", "quote symbol identity does not match the view")
-        if str(quote.get("feed") or "").upper() != view.plan.feed:
-            raise CaptureFailure("SYMBOL_MISMATCH", "quote feed identity does not match the view")
-        if str(quote.get("provider_id") or "").lower() != QUOTE_PROVIDER_ID:
-            raise CaptureFailure("SYMBOL_MISMATCH", "quote provider identity is not approved")
-        from .cdp import _epoch
-        quote_at = _epoch(quote.get("source_time"))
-        if quote_at > view.observed_at + timedelta(seconds=5):
-            raise CaptureFailure("SOURCE_STALE", "quote timestamp is future-dated")
-        if view.observed_at - quote_at > timedelta(seconds=QUOTE_MAX_AGE_SECONDS):
-            raise CaptureFailure("SOURCE_STALE", "quote timestamp is stale")
-        market_price = _finite(quote.get("price"), "quote.price")
-        bid = _finite(quote.get("bid"), "quote.bid")
-        ask = _finite(quote.get("ask"), "quote.ask")
-        if market_price <= 0 or bid <= 0 or ask <= 0:
+        fields = _quote_and_atr_fields(view, chart, observed_at)
+        if (
+            liquidity_event_facts.get("symbol") != view.plan.symbol
+            or liquidity_event_facts.get("feed") != view.plan.feed
+            or liquidity_event_facts.get("anchor_timeframe") != timeframes[0]
+        ):
             raise CaptureFailure(
-                "STRUCTURED_READ_INCOMPLETE",
-                "quote price, bid, and ask must be positive",
+                "SYMBOL_MISMATCH",
+                "LIQ event facts do not match the numeric chart authority",
             )
-        if ask < bid:
-            raise CaptureFailure("STRUCTURED_READ_INCOMPLETE", "quote ask is below bid")
-        liquidity = _study(chart, r"liquidity|\bliq\b")
-        liquidity_values = _plot_values(liquidity, "current")
-        level_price = min(liquidity_values.values(), key=lambda value: abs(value - market_price))
-        atr_study = _study(chart, r"average true range|\batr\b")
-        atr = abs(_named_value(_plot_values(atr_study, "closed"), r"atr|plot", 0))
-        if atr <= 0:
-            raise CaptureFailure("STRUCTURED_READ_INCOMPLETE", "ATR is not positive")
-        distance = market_price - level_price
-        fields = {
-            "market_price": market_price, "bid": bid, "ask": ask, "spread": ask - bid,
-            "symbol": view.plan.symbol, "feed": view.plan.feed, "timeframe": timeframes[0],
-            "quote_source": QUOTE_SOURCE, "quote_provider_id": QUOTE_PROVIDER_ID,
-            "quote_source_symbol": expected_symbol, "quote_source_feed": view.plan.feed,
-            "liquidity_level_id": liquidity.get("description"),
-            "liquidity_level_price": level_price, "distance_to_level": distance,
-            "distance_atr": distance / atr, "source_time": utc_z(quote_at),
-            "observed_at": observed_at,
-        }
+        level_price = _finite(
+            float(liquidity_event_facts["level_price"]),
+            "liquidity_event_facts.level_price",
+        )
+        side = liquidity_event_facts["side"]
+        reference_price = fields["ask"] if side == "ASK" else fields["bid"]
+        distance = (
+            level_price - reference_price
+            if side == "ASK"
+            else reference_price - level_price
+        )
+        fields.update({
+            "liquidity_level_id": liquidity_event_facts["level_id"],
+            "liquidity_level_version": liquidity_event_facts["level_version"],
+            "liquidity_level_side": side,
+            "liquidity_level_price": level_price,
+            "liquidity_touch_count": liquidity_event_facts["touch_count"],
+            "liquidity_event_timestamp": liquidity_event_facts["source_bar_time"],
+            "liquidity_producer_id": liquidity_event_facts["producer_id"],
+            "liquidity_producer_revision": liquidity_event_facts["producer_revision"],
+            "distance_reference_price": reference_price,
+            "distance_reference_side": side,
+            "distance_to_level": distance,
+            "distance_atr": distance / fields["atr"],
+        })
     elif kind in {"CLOSED_OHLC", "CLOSED_OHLC_AND_STRUCTURE", "SHORT_TERM_PRICE_ACTION"}:
         bars = {tf: _bar(chart, "closed_bar") for tf, chart in charts.items()}
         fields = {
@@ -238,7 +347,7 @@ def _fields_for(request: dict[str, Any], view: ViewSnapshot, observed_at: str) -
         for tf, chart in charts.items():
             bar = _bar(chart, "closed_bar")
             previous = _bar(chart, "previous_closed_bar")
-            atr = abs(_named_value(_plot_values(_study(chart, r"average true range|\batr\b"), "closed"), r"atr|plot", 0))
+            atr, _ = _confirmed_atr14(chart)
             displacement = bar["close"] - previous["close"]
             span = max(bar["high"] - bar["low"], 1e-9)
             fields["direction"][tf] = "UP" if displacement >= 0 else "DOWN"
@@ -418,6 +527,15 @@ class CaptureEngine:
         started = self.clock().astimezone(timezone.utc)
         deadline = self.monotonic() + self.timeout_seconds
         event_at = datetime.fromisoformat(request.event_timestamp[:-1] + "+00:00").astimezone(timezone.utc)
+        liq_event_at = datetime.fromisoformat(
+            request.liquidity_event_facts.source_bar_time[:-1] + "+00:00"
+        ).astimezone(timezone.utc)
+        if request.stage == "LIQ_BASELINE" and liq_event_at != event_at:
+            raise CaptureFailure(
+                "CAPTURE_PLAN_MISMATCH",
+                "LIQ baseline timestamp does not match immutable event facts",
+                retryable=False,
+            )
         event_age = started - event_at
         if event_age < timedelta(seconds=-5) or event_age > timedelta(minutes=30):
             raise CaptureFailure("REQUEST_EXPIRED", "event timestamp is future-dated or older than 30 minutes", retryable=False)
@@ -492,7 +610,12 @@ class CaptureEngine:
                     ))
                     continue
                 view = before[read["source"]["role"]]
-                fields = _fields_for(read, view, observed_at)
+                fields = _fields_for(
+                    read,
+                    view,
+                    observed_at,
+                    request.liquidity_event_facts.model_dump(mode="json"),
+                )
                 read_results.append({
                     "request_id": read["request_id"], "status": "COMPLETED",
                     "source": _source_result(read, view), "read_kind": read["read_kind"],
@@ -587,7 +710,14 @@ class CaptureEngine:
         structured_reads = []
         for read in quote_reads:
             view = before[read["source"]["role"]]
-            fields = _fields_for(read, view, observed_at)
+            chart = _chart(view, read["timeframes"][0])
+            if chart.get("chart_type_name") != "standard_candles":
+                raise CaptureFailure(
+                    "CAPTURE_PLAN_MISMATCH",
+                    "production quote preflight requires the standard-candle 5m pane",
+                    retryable=False,
+                )
+            fields = _quote_and_atr_fields(view, chart, observed_at)
             result = {
                 "request_id": read["request_id"],
                 "status": "COMPLETED",

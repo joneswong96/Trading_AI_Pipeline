@@ -412,11 +412,17 @@ class Port9333RequestAdapter:
             StructuredReadRequest(
                 "read_9333_xau_current", intraday, "CURRENT_FORMING_PRICE",
                 (
-                    "market_price", "bid", "ask", "spread", "symbol", "feed",
+                    "market_price", "bid", "ask", "spread", "normalized_spread",
+                    "symbol", "feed",
                     "quote_source", "quote_provider_id", "quote_source_symbol",
-                    "quote_source_feed",
-                    "timeframe", "liquidity_level_id", "liquidity_level_price",
-                    "distance_to_level", "distance_atr", "source_time", "observed_at",
+                    "quote_source_feed", "timeframe", "atr", "atr_period",
+                    "atr_method", "atr_source_time", "liquidity_level_id",
+                    "liquidity_level_version", "liquidity_level_side",
+                    "liquidity_level_price", "liquidity_touch_count",
+                    "liquidity_event_timestamp", "liquidity_producer_id",
+                    "liquidity_producer_revision", "distance_reference_price",
+                    "distance_reference_side", "distance_to_level", "distance_atr",
+                    "source_time", "observed_at",
                 ),
                 ("5m",),
             ),
@@ -575,8 +581,6 @@ def decide_trigger(
             and event.get("freshness_status") == "FRESH"
             and event.get("level_freshness_status") == "FRESH"
             and event.get("market_price_freshness_status") == "FRESH"
-            and event.get("atr_freshness_status") == "FRESH"
-            and event.get("atr_confirmed") is True
             and isinstance(touch_count, int)
             and not isinstance(touch_count, bool)
             and touch_count >= 1
