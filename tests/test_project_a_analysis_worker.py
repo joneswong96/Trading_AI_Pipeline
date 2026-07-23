@@ -89,6 +89,19 @@ class CompleteCapture:
         read_results = []
         for request in capture_request.get("accepted_request", {}).get("structured_reads", []):
             fields = {name: "verified" for name in request["fields"]}
+            if request["read_kind"] == "CURRENT_FORMING_PRICE":
+                bid = 3399.95
+                ask = 3400.05
+                fields.update({
+                    "market_price": 3400.0,
+                    "bid": bid,
+                    "ask": ask,
+                    "spread": ask - bid,
+                    "quote_source": "TradingViewApi.mainSeries.quotes",
+                    "quote_provider_id": "icmarkets",
+                    "quote_source_symbol": "ICMARKETS:XAUUSD",
+                    "quote_source_feed": "ICMARKETS",
+                })
             if "confirmed" in fields:
                 fields["confirmed"] = True
             for time_field in ("source_time", "source_bar_time"):
@@ -610,6 +623,54 @@ def test_forged_mcp_completeness_cannot_reach_captured_state(tmp_path, mutation)
     assert len(store.inspect_jobs("PENDING_CAPTURE")) == 1 and provider.calls == []
 
 
+@pytest.mark.parametrize("mutation", [
+    "source", "provider", "symbol", "feed", "zero_bid", "crossed", "spread", "stale",
+    "future", "coupled_stale",
+])
+def test_forged_current_quote_cannot_cross_consumer_boundary(tmp_path, mutation):
+    path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
+    ingest.receive(raw(liq()))
+    pending = claim_capture(store, clock)
+    good = capture.capture(pending)
+    structured = deepcopy(good.structured_evidence)
+    current = next(
+        item for item in structured["structured_read_results"]
+        if item["read_kind"] == "CURRENT_FORMING_PRICE"
+    )
+    fields = current["fields"]
+    if mutation == "source":
+        fields["quote_source"] = "TradingViewApi.mainSeries.lastValueData"
+    elif mutation == "provider":
+        fields["quote_provider_id"] = "other"
+    elif mutation == "symbol":
+        fields["quote_source_symbol"] = "ICMARKETS:XAGUSD"
+    elif mutation == "feed":
+        fields["quote_source_feed"] = "OANDA"
+    elif mutation == "zero_bid":
+        fields["bid"] = 0.0
+    elif mutation == "crossed":
+        fields["ask"] = fields["bid"] - 0.01
+        fields["spread"] = fields["ask"] - fields["bid"]
+    elif mutation == "spread":
+        fields["spread"] = 0.5
+    elif mutation == "stale":
+        fields["source_time"] = "2026-07-20T00:57:00.000Z"
+    elif mutation == "future":
+        fields["source_time"] = "2026-07-20T01:02:11.000Z"
+    else:
+        current["observed_at"] = "2026-07-20T00:57:05.000Z"
+        fields["source_time"] = "2026-07-20T00:53:05.000Z"
+    forged = CapturedEvidence(good.manifest, structured, good.images)
+    with pytest.raises(ValueError):
+        record_claimed(store, pending, forged, clock)
+    store.capture_failure(
+        pending["job_id"], at=clock(), worker_id="test-capture",
+        lease_token=pending["capture_lease_token"], code="CAPTURE_INTEGRITY_FAILURE",
+        detail="invalid quote authority",
+    )
+    assert len(store.inspect_jobs("PENDING_CAPTURE")) == 1 and provider.calls == []
+
+
 def test_invalid_mcp_image_does_not_poison_corrected_retry(tmp_path):
     path, clock, ingest, store, capture, provider, worker = make_system(tmp_path)
     ingest.receive(raw(liq()))
@@ -625,13 +686,13 @@ def test_invalid_mcp_image_does_not_poison_corrected_retry(tmp_path):
         },
         "structured_evidence": good.structured_evidence,
         "image_evidence_ids": [item["evidence_id"] for item in good.images],
-        "account": "Jonesy_Wong", "capture_plan_version": "project_a.capture_plan/1.1",
+        "account": "Jonesy_Wong", "capture_plan_version": "project_a.capture_plan/1.2",
         "capture_plan_sha256": hashlib.sha256(canonical_json({
             "structured_reads": json.loads(pending["request_context_json"])["capture"]["accepted_request"]["structured_reads"],
             "screenshot_requests": json.loads(pending["request_context_json"])["capture"]["accepted_request"]["screenshot_requests"],
         }).encode()).hexdigest(),
         "cdp_endpoint": "http://127.0.0.1:9333",
-        "script_sha256": "68c816ca2ca4d51b49c167c655e768c1419ce28ff79f168a05bdadc88f62e5d4",
+        "script_sha256": "226390af9f21c728b19a73fabcdb7edb9cdf0e5b3d0d24bf223bb5e29297aadd",
         "immutable_evidence_manifest_sha256": "e" * 64,
         "screenshot_artifacts": [{
             "evidence_id": item["evidence_id"], "sha256": item["sha256"],

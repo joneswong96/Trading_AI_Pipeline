@@ -80,7 +80,13 @@ def chart(interval: str, symbol: str, seconds: int):
         studies.append(study("Synthetic Renko Sniper E1", (7.0, 3.0, 1.0)))
     return {
         "index": 0, "interval": interval, "symbol": symbol, "chart_type": 1,
-        "last_index": 100, "quote": {"price": base, "bid": base - 0.05, "ask": base + 0.05},
+        "last_index": 100, "quote": {
+            "price": base, "bid": base - 0.05, "ask": base + 0.05,
+            "source_time": current_time, "symbol": symbol,
+            "feed": symbol.split(":", 1)[0],
+            "provider_id": "icmarkets" if symbol.startswith("ICMARKETS:") else "tvc",
+            "source": "TradingViewApi.mainSeries.quotes",
+        },
         "current_bar": {"time": current_time, "open": base - 0.1, "high": base + 0.2,
                         "low": base - 0.2, "close": base},
         "closed_bar": {"time": closed_time, "open": base - 0.2, "high": base + 0.4,
@@ -104,7 +110,7 @@ def raw_state(role: str):
     view = VIEWS[role]
     symbol = f"{view.feed}:{view.symbol}"
     return {
-        "script_id": "tradingview_read_state", "script_version": "1.0",
+        "script_id": "tradingview_read_state", "script_version": "1.1",
         "page_ready": True, "location_url": f"https://www.tradingview.com/chart/{view.layout_id}/",
         "title": "TradingView", "observed_epoch_ms": int(NOW.timestamp() * 1000),
         "account_markers": [{"href": "/u/Jonesy_Wong/", "username": "",
@@ -309,7 +315,7 @@ def test_fixed_script_contains_no_mutation_or_external_io_primitive():
     assert all(value not in script for value in forbidden)
     normalized = script.replace("\r\n", "\n").encode("utf-8")
     assert hashlib.sha256(normalized).hexdigest() == (
-        "68c816ca2ca4d51b49c167c655e768c1419ce28ff79f168a05bdadc88f62e5d4"
+        "226390af9f21c728b19a73fabcdb7edb9cdf0e5b3d0d24bf223bb5e29297aadd"
     )
 
 
@@ -364,6 +370,123 @@ def test_visual_context_only_volume_future_time_fails_closed():
     raw["charts"][0]["current_bar"]["time"] = (NOW + timedelta(minutes=1)).timestamp()
     with pytest.raises(CaptureFailure, match="future-dated"):
         validate_view(view, target, raw, now=NOW)
+
+
+def test_current_quote_persists_exact_bid_ask_spread_and_provenance(tmp_path):
+    capture, _ = engine(tmp_path)
+    result = capture.capture(request())
+    current = next(
+        item for item in result.structured["structured_evidence"]["structured_read_results"]
+        if item["request_id"] == "read_9333_xau_current"
+    )
+    fields = current["fields"]
+    assert fields["bid"] == 3399.95
+    assert fields["ask"] == 3400.05
+    assert fields["spread"] == pytest.approx(fields["ask"] - fields["bid"])
+    assert fields["source_time"] == "2026-07-22T02:59:59.000Z"
+    assert fields["quote_source"] == "TradingViewApi.mainSeries.quotes"
+    assert fields["quote_provider_id"] == "icmarkets"
+    assert fields["quote_source_symbol"] == "ICMARKETS:XAUUSD"
+    assert fields["quote_source_feed"] == "ICMARKETS"
+
+
+@pytest.mark.parametrize("field,value", [
+    ("bid", None),
+    ("bid", ""),
+    ("bid", "3399.95"),
+    ("bid", float("nan")),
+    ("ask", float("inf")),
+    ("price", float("-inf")),
+])
+def test_current_quote_rejects_missing_non_numeric_and_non_finite_values(tmp_path, field, value):
+    backend = FakeBackend()
+    backend.states["xau_intraday"]["charts"][1]["quote"][field] = value
+    capture, _ = engine(tmp_path, backend)
+    with pytest.raises(CaptureFailure, match="is not a finite number"):
+        capture.capture(request())
+
+
+def test_current_quote_rejects_crossed_market(tmp_path):
+    backend = FakeBackend()
+    quote = backend.states["xau_intraday"]["charts"][1]["quote"]
+    quote["ask"] = quote["bid"] - 0.01
+    capture, _ = engine(tmp_path, backend)
+    with pytest.raises(CaptureFailure, match="quote ask is below bid"):
+        capture.capture(request())
+
+
+@pytest.mark.parametrize("field,value", [
+    ("price", 0),
+    ("bid", 0),
+    ("ask", -1),
+])
+def test_current_quote_rejects_non_positive_values(tmp_path, field, value):
+    backend = FakeBackend()
+    backend.states["xau_intraday"]["charts"][1]["quote"][field] = value
+    capture, _ = engine(tmp_path, backend)
+    with pytest.raises(CaptureFailure, match="must be positive"):
+        capture.capture(request())
+
+
+@pytest.mark.parametrize("field,value,code", [
+    ("source", "TradingViewApi.mainSeries.lastValueData", "STRUCTURED_READ_INCOMPLETE"),
+    ("symbol", "ICMARKETS:XAGUSD", "SYMBOL_MISMATCH"),
+    ("feed", "OANDA", "SYMBOL_MISMATCH"),
+    ("provider_id", "other", "SYMBOL_MISMATCH"),
+    ("source_time", (NOW - timedelta(hours=1)).timestamp(), "SOURCE_STALE"),
+    ("source_time", (NOW + timedelta(minutes=1)).timestamp(), "SOURCE_STALE"),
+])
+def test_current_quote_rejects_unapproved_identity_and_stale_time(tmp_path, field, value, code):
+    backend = FakeBackend()
+    backend.states["xau_intraday"]["charts"][1]["quote"][field] = value
+    capture, _ = engine(tmp_path, backend)
+    with pytest.raises(CaptureFailure, match=code):
+        capture.capture(request())
+
+
+def test_current_quote_accepts_240_second_freshness_boundary(tmp_path):
+    backend = FakeBackend()
+    backend.states["xau_intraday"]["charts"][1]["quote"]["source_time"] = (
+        NOW - timedelta(seconds=240)
+    ).timestamp()
+    capture, _ = engine(tmp_path, backend)
+    assert capture.capture(request()).structured["status"] == "COMPLETED"
+
+
+def test_current_quote_rejects_beyond_240_second_freshness_boundary(tmp_path):
+    backend = FakeBackend()
+    backend.states["xau_intraday"]["charts"][1]["quote"]["source_time"] = (
+        NOW - timedelta(seconds=241)
+    ).timestamp()
+    capture, _ = engine(tmp_path, backend)
+    with pytest.raises(CaptureFailure, match="quote timestamp is stale"):
+        capture.capture(request())
+
+
+def test_preflight_requires_structured_quote_and_screenshot_success_cannot_bypass_it(tmp_path):
+    backend = FakeBackend()
+    backend.states["xau_intraday"]["charts"][1]["quote"]["bid"] = None
+    capture, _ = engine(tmp_path, backend)
+    with pytest.raises(CaptureFailure, match="quote.bid is not a finite number"):
+        capture.preflight()
+    assert backend.screenshot_calls == 0
+
+
+def test_preflight_records_quote_fields_and_fixed_source_hash(tmp_path):
+    capture, backend = engine(tmp_path)
+    result = capture.preflight()
+    current = next(
+        item for item in result["structured_reads"]
+        if item["request_id"] == "read_9333_xau_current"
+    )
+    assert current["fields"]["bid"] == 3399.95
+    assert current["fields"]["ask"] == 3400.05
+    assert len(current["sha256"]) == 64
+    assert result["script_version"] == "1.1"
+    assert result["script_sha256"] == (
+        "226390af9f21c728b19a73fabcdb7edb9cdf0e5b3d0d24bf223bb5e29297aadd"
+    )
+    assert backend.screenshot_calls == 5
 
 
 def test_baseline_capture_exact_manifest_audit_and_idempotent_replay(tmp_path):

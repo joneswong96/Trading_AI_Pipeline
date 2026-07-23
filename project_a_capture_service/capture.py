@@ -43,6 +43,9 @@ from .schemas import (
 
 MAX_STRUCTURED_BYTES = 262_144
 IMAGE_BUDGETS = {"LIQ_BASELINE": 20 * 1024 * 1024, "E1_DELTA": 8 * 1024 * 1024}
+QUOTE_SOURCE = "TradingViewApi.mainSeries.quotes"
+QUOTE_PROVIDER_ID = "icmarkets"
+QUOTE_MAX_AGE_SECONDS = 240
 
 
 @dataclass(frozen=True)
@@ -143,26 +146,48 @@ def _fields_for(request: dict[str, Any], view: ViewSnapshot, observed_at: str) -
     fields: dict[str, Any]
     if kind == "CURRENT_FORMING_PRICE":
         chart = charts[timeframes[0]]
-        current = _bar(chart, "current_bar")
         quote = chart.get("quote") if isinstance(chart.get("quote"), dict) else {}
+        if quote.get("source") != QUOTE_SOURCE:
+            raise CaptureFailure("STRUCTURED_READ_INCOMPLETE", "quote source identity is not approved")
+        expected_symbol = f"{view.plan.feed}:{view.plan.symbol}"
+        if str(quote.get("symbol") or "").upper() != expected_symbol:
+            raise CaptureFailure("SYMBOL_MISMATCH", "quote symbol identity does not match the view")
+        if str(quote.get("feed") or "").upper() != view.plan.feed:
+            raise CaptureFailure("SYMBOL_MISMATCH", "quote feed identity does not match the view")
+        if str(quote.get("provider_id") or "").lower() != QUOTE_PROVIDER_ID:
+            raise CaptureFailure("SYMBOL_MISMATCH", "quote provider identity is not approved")
+        from .cdp import _epoch
+        quote_at = _epoch(quote.get("source_time"))
+        if quote_at > view.observed_at + timedelta(seconds=5):
+            raise CaptureFailure("SOURCE_STALE", "quote timestamp is future-dated")
+        if view.observed_at - quote_at > timedelta(seconds=QUOTE_MAX_AGE_SECONDS):
+            raise CaptureFailure("SOURCE_STALE", "quote timestamp is stale")
+        market_price = _finite(quote.get("price"), "quote.price")
         bid = _finite(quote.get("bid"), "quote.bid")
         ask = _finite(quote.get("ask"), "quote.ask")
+        if market_price <= 0 or bid <= 0 or ask <= 0:
+            raise CaptureFailure(
+                "STRUCTURED_READ_INCOMPLETE",
+                "quote price, bid, and ask must be positive",
+            )
         if ask < bid:
             raise CaptureFailure("STRUCTURED_READ_INCOMPLETE", "quote ask is below bid")
         liquidity = _study(chart, r"liquidity|\bliq\b")
         liquidity_values = _plot_values(liquidity, "current")
-        level_price = min(liquidity_values.values(), key=lambda value: abs(value - current["close"]))
+        level_price = min(liquidity_values.values(), key=lambda value: abs(value - market_price))
         atr_study = _study(chart, r"average true range|\batr\b")
         atr = abs(_named_value(_plot_values(atr_study, "closed"), r"atr|plot", 0))
         if atr <= 0:
             raise CaptureFailure("STRUCTURED_READ_INCOMPLETE", "ATR is not positive")
-        distance = current["close"] - level_price
+        distance = market_price - level_price
         fields = {
-            "market_price": current["close"], "bid": bid, "ask": ask, "spread": ask - bid,
+            "market_price": market_price, "bid": bid, "ask": ask, "spread": ask - bid,
             "symbol": view.plan.symbol, "feed": view.plan.feed, "timeframe": timeframes[0],
+            "quote_source": QUOTE_SOURCE, "quote_provider_id": QUOTE_PROVIDER_ID,
+            "quote_source_symbol": expected_symbol, "quote_source_feed": view.plan.feed,
             "liquidity_level_id": liquidity.get("description"),
             "liquidity_level_price": level_price, "distance_to_level": distance,
-            "distance_atr": distance / atr, "source_time": _source_time(current),
+            "distance_atr": distance / atr, "source_time": utc_z(quote_at),
             "observed_at": observed_at,
         }
     elif kind in {"CLOSED_OHLC", "CLOSED_OHLC_AND_STRUCTURE", "SHORT_TERM_PRICE_ACTION"}:
@@ -548,6 +573,36 @@ class CaptureEngine:
         selected = select_targets(plan, targets)
         before = self._snapshots(plan, selected, deadline)
         before_hash = _state_fingerprint(before)
+        observed_at = utc_z(self.clock())
+        structured_reads = []
+        for read in plan.structured_reads:
+            if read["source"]["port"] != 9333:
+                if read.get("required") is not False:
+                    raise CaptureFailure(
+                        "CAPTURE_PLAN_MISMATCH",
+                        "required non-9333 preflight read is forbidden",
+                        retryable=False,
+                    )
+                structured_reads.append({
+                    "request_id": read["request_id"],
+                    "status": "UNAVAILABLE",
+                    "reason": "SOURCE_PORT_NOT_AUTHORIZED",
+                })
+                continue
+            view = before[read["source"]["role"]]
+            fields = _fields_for(read, view, observed_at)
+            result = {
+                "request_id": read["request_id"],
+                "status": "COMPLETED",
+                "source": _source_result(read, view),
+                "read_kind": read["read_kind"],
+                "timeframes": read["timeframes"],
+                "fields": fields,
+                "observed_at": observed_at,
+                "target_binding_verified": True,
+            }
+            result["sha256"] = hashlib.sha256(canonical_json(result).encode("utf-8")).hexdigest()
+            structured_reads.append(result)
         preflight_dir = (self.artifact_root / "preflight").resolve()
         preflight_dir.mkdir(parents=True, exist_ok=True)
         screenshots = []
@@ -579,6 +634,7 @@ class CaptureEngine:
                        "indicator_names": list(item.indicator_names),
                        "alert_inventory_count": item.alert_inventory_count}
                       for item in before.values()],
+            "structured_reads": structured_reads,
             "screenshots": screenshots, "mutation_detected": False,
             "script_id": SCRIPT_ID, "script_version": SCRIPT_VERSION, "script_sha256": SCRIPT_SHA256,
         }

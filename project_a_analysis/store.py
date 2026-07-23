@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sqlite3
 from dataclasses import dataclass
@@ -423,6 +424,41 @@ def _validate_capture_results(evidence: CapturedEvidence, capture_request: dict,
             raise ValueError(f"structured read {request_id} symbol mismatch")
         if "feed" in request.get("fields", []) and fields.get("feed") != request["source"]["feed"]:
             raise ValueError(f"structured read {request_id} feed mismatch")
+        if request.get("read_kind") == "CURRENT_FORMING_PRICE":
+            expected_quote_identity = {
+                "quote_source": "TradingViewApi.mainSeries.quotes",
+                "quote_provider_id": "icmarkets",
+                "quote_source_symbol": (
+                    f"{request['source']['feed']}:{request['source']['symbol']}"
+                ),
+                "quote_source_feed": request["source"]["feed"],
+            }
+            if any(fields.get(key) != value for key, value in expected_quote_identity.items()):
+                raise ValueError(f"structured read {request_id} quote authority mismatch")
+            quote_values = {
+                key: fields.get(key) for key in ("market_price", "bid", "ask", "spread")
+            }
+            if any(
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not math.isfinite(value)
+                for value in quote_values.values()
+            ):
+                raise ValueError(f"structured read {request_id} quote values are not finite")
+            if (
+                quote_values["market_price"] <= 0
+                or quote_values["bid"] <= 0
+                or quote_values["ask"] <= 0
+            ):
+                raise ValueError(f"structured read {request_id} quote values are not positive")
+            if quote_values["ask"] < quote_values["bid"]:
+                raise ValueError(f"structured read {request_id} quote ask is below bid")
+            if quote_values["spread"] != quote_values["ask"] - quote_values["bid"]:
+                raise ValueError(f"structured read {request_id} quote spread is not exact")
+            quote_at = _parse_capture_time(fields.get("source_time"), f"{request_id}.source_time")
+            quote_age = captured_at - quote_at
+            if not timedelta(seconds=-5) <= quote_age <= timedelta(seconds=240):
+                raise ValueError(f"structured read {request_id} quote timestamp is stale")
         if request.get("closed_bars_only") and result.get("closed_bars_only_verified") is not True:
             raise ValueError(f"structured read {request_id} did not attest closed bars")
     screenshot_requests = capture_request.get("accepted_request", {}).get("screenshot_requests", [])

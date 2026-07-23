@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 TOOL_NAME = "project_a_capture_snapshot"
-CAPTURE_PLAN_VERSION = "project_a.capture_plan/1.1"
+CAPTURE_PLAN_VERSION = "project_a.capture_plan/1.2"
 EXPECTED_ACCOUNT = "Jonesy_Wong"
 EXPECTED_SYMBOL = "ICMARKETS:XAUUSD"
 CDP_ENDPOINT = "http://127.0.0.1:9333"
@@ -28,7 +28,7 @@ class CaptureToolRequest(StrictModel):
     event_timestamp: str = Field(min_length=20, max_length=40)
     expected_account: Literal["Jonesy_Wong"]
     expected_symbol: Literal["ICMARKETS:XAUUSD"]
-    required_capture_plan_version: Literal["project_a.capture_plan/1.1"]
+    required_capture_plan_version: Literal["project_a.capture_plan/1.2"]
     capture_plan_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     capture_request_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
@@ -91,7 +91,7 @@ class CaptureToolResult(StrictModel):
     capture_scope: Literal["FULL_BASELINE", "BOUNDED_DELTA"]
     source_event_id: str
     event_timestamp: str
-    capture_plan_version: Literal["project_a.capture_plan/1.1"]
+    capture_plan_version: Literal["project_a.capture_plan/1.2"]
     capture_started_at: str
     capture_completed_at: str
     captured_at: str
@@ -107,7 +107,7 @@ class CaptureToolResult(StrictModel):
     image_evidence_ids: list[str]
     immutable_evidence_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     script_id: Literal["tradingview_read_state"]
-    script_version: Literal["1.0"]
+    script_version: Literal["1.1"]
     script_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     views: list[ViewIdentity]
     screenshot_artifacts: list[ScreenshotArtifact]

@@ -64,7 +64,7 @@
 
   var result = {
     script_id: "tradingview_read_state",
-    script_version: "1.0",
+    script_version: "1.1",
     page_ready: document.readyState === "complete",
     location_url: String(window.location.href),
     title: bounded(document.title, 240),
@@ -101,12 +101,17 @@
       } catch (_) {}
       var quote = null;
       try {
-        var lastValue = series.lastValueData && series.lastValueData(false);
-        if (lastValue) {
+        var quotes = series.quotes && series.quotes();
+        if (quotes) {
           quote = {
-            price: lastValue.price == null ? null : lastValue.price,
-            bid: lastValue.bid == null ? null : lastValue.bid,
-            ask: lastValue.ask == null ? null : lastValue.ask
+            price: quotes.last_price == null ? null : quotes.last_price,
+            bid: quotes.bid == null ? null : quotes.bid,
+            ask: quotes.ask == null ? null : quotes.ask,
+            source_time: quotes.lp_time == null ? null : quotes.lp_time,
+            symbol: bounded(quotes.pro_name || quotes.original_name, 100),
+            feed: bounded(quotes.source_id || quotes.listed_exchange, 40),
+            provider_id: bounded(quotes.provider_id, 40),
+            source: "TradingViewApi.mainSeries.quotes"
           };
         }
       } catch (_) {}

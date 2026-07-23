@@ -413,6 +413,8 @@ class Port9333RequestAdapter:
                 "read_9333_xau_current", intraday, "CURRENT_FORMING_PRICE",
                 (
                     "market_price", "bid", "ask", "spread", "symbol", "feed",
+                    "quote_source", "quote_provider_id", "quote_source_symbol",
+                    "quote_source_feed",
                     "timeframe", "liquidity_level_id", "liquidity_level_price",
                     "distance_to_level", "distance_atr", "source_time", "observed_at",
                 ),
