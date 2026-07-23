@@ -574,21 +574,18 @@ class CaptureEngine:
         before = self._snapshots(plan, selected, deadline)
         before_hash = _state_fingerprint(before)
         observed_at = utc_z(self.clock())
+        quote_reads = [
+            read for read in plan.structured_reads
+            if read["request_id"] == "read_9333_xau_current"
+        ]
+        if len(quote_reads) != 1:
+            raise CaptureFailure(
+                "CAPTURE_PLAN_MISMATCH",
+                "production quote preflight read is not unique",
+                retryable=False,
+            )
         structured_reads = []
-        for read in plan.structured_reads:
-            if read["source"]["port"] != 9333:
-                if read.get("required") is not False:
-                    raise CaptureFailure(
-                        "CAPTURE_PLAN_MISMATCH",
-                        "required non-9333 preflight read is forbidden",
-                        retryable=False,
-                    )
-                structured_reads.append({
-                    "request_id": read["request_id"],
-                    "status": "UNAVAILABLE",
-                    "reason": "SOURCE_PORT_NOT_AUTHORIZED",
-                })
-                continue
+        for read in quote_reads:
             view = before[read["source"]["role"]]
             fields = _fields_for(read, view, observed_at)
             result = {

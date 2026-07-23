@@ -475,6 +475,7 @@ def test_preflight_requires_structured_quote_and_screenshot_success_cannot_bypas
 def test_preflight_records_quote_fields_and_fixed_source_hash(tmp_path):
     capture, backend = engine(tmp_path)
     result = capture.preflight()
+    assert len(result["structured_reads"]) == 1
     current = next(
         item for item in result["structured_reads"]
         if item["request_id"] == "read_9333_xau_current"
